@@ -30,13 +30,22 @@ import java.lang.annotation.Annotation;
  */
 public final class Constructor<T> extends Executable {
 
-    private Class<T> clazz;
-    private Class<?>[] parameterTypes;
-    private Class<?>[] exceptionTypes;
-    private int modifiers;
-    private int slot;
+    private final Class<T> clazz;
+    private final Class<?>[] parameterTypes;
+    private final Class<?>[] exceptionTypes;
+    private final int modifiers;
+    private final int slot;
 
-    private Constructor() {
+    // Solo la VM construye estos objetos: aloca en crudo y escribe los campos por offset, sin
+    // pasar por aca. El constructor existe para que los campos puedan ser `final` --que es como
+    // los declara el JDK-- y no lo llama nadie (#203).
+    private Constructor(Class<T> clazz, Class<?>[] parameterTypes,
+            Class<?>[] exceptionTypes, int modifiers, int slot) {
+        this.clazz = clazz;
+        this.parameterTypes = parameterTypes;
+        this.exceptionTypes = exceptionTypes;
+        this.modifiers = modifiers;
+        this.slot = slot;
     }
 
     /**

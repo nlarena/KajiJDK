@@ -12,14 +12,21 @@ import java.util.Set;
 // its wrapper, and the wrong-type access raises `IllegalArgumentException` -- all in this file.
 public final class Field extends AccessibleObject implements Member {
 
-    private Class<?> clazz;
-    private String name;
-    private Class<?> type;
-    private int modifiers;
-    private int slot;
+    private final Class<?> clazz;
+    private final String name;
+    private final Class<?> type;
+    private final int modifiers;
+    private final int slot;
 
-    // Only the VM constructs Field objects (populating the fields from native code).
-    private Field() {
+    // Solo la VM construye estos objetos: aloca en crudo y escribe los campos por offset, sin
+    // pasar por aca. El constructor existe para que los campos puedan ser `final` --que es como
+    // los declara el JDK-- y no lo llama nadie (#203).
+    private Field(Class<?> clazz, String name, Class<?> type, int modifiers, int slot) {
+        this.clazz = clazz;
+        this.name = name;
+        this.type = type;
+        this.modifiers = modifiers;
+        this.slot = slot;
     }
 
     public Class<?> getDeclaringClass() {

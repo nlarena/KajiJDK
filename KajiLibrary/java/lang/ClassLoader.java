@@ -57,8 +57,9 @@ public class ClassLoader {
 
     /** A loader with no parent and no name. */
     protected ClassLoader() {
-        this.parent = null;
-        this.name = null;
+        // Los casts son por la sobrecarga: con dos `null` pelados, `this(...)` no sabe si va al
+        // `(ClassLoader, String)` o al `(String, ClassLoader)`. El JDK dice lo mismo.
+        this((ClassLoader) null, (String) null);
     }
 
     /**
@@ -67,8 +68,7 @@ public class ClassLoader {
      * @param parent the loader to ask first
      */
     protected ClassLoader(ClassLoader parent) {
-        this.parent = parent;
-        this.name = null;
+        this(parent, null);
     }
 
     /**
@@ -81,13 +81,16 @@ public class ClassLoader {
      * @param parent the loader to ask first
      */
     protected ClassLoader(String name, ClassLoader parent) {
-        this.parent = parent;
-        this.name = name;
+        this(parent, name);
     }
 
+    // El unico que asigna: los otros tres delegan aca. El modulo sin nombre se minta **en el
+    // constructor** y no perezosamente, que es lo que deja al campo `final` como en el JDK (#203).
+    // `Module(ClassLoader)` solo guarda el loader, asi que no hay recursion.
     private ClassLoader(ClassLoader parent, String name) {
         this.parent = parent;
         this.name = name;
+        this.unnamedModule = new Module(this);
     }
 
     /** The loader this one asks first, or {@code null} for the bootstrap loader. */
@@ -120,13 +123,10 @@ public class ClassLoader {
 
     // This loader's unnamed module, minted once. Every class this loader defines belongs to it,
     // which is what {@link Class#getModule()} reports for a class with no named module.
-    private Module unnamedModule;
+    private final Module unnamedModule;
 
     /** The unnamed {@link Module} of this loader — the module every class it defines belongs to. */
     public final Module getUnnamedModule() {
-        if (this.unnamedModule == null) {
-            this.unnamedModule = new Module(this);
-        }
         return this.unnamedModule;
     }
 

@@ -187,9 +187,10 @@ public final class ClassHierarchyImpl {
             while (it.hasNext()) {
                 this.table.put(it.next(), Info.INTERFACE);
             }
-            Iterator<Map.Entry<ClassDesc, ClassDesc>> it = classToSuperClass.entrySet().iterator();
-            while (it.hasNext()) {
-                Map.Entry<ClassDesc, ClassDesc> e = it.next();
+            Iterator<Map.Entry<ClassDesc, ClassDesc>> entries =
+                    classToSuperClass.entrySet().iterator();
+            while (entries.hasNext()) {
+                Map.Entry<ClassDesc, ClassDesc> e = entries.next();
                 this.table.put(e.getKey(), new Info(e.getValue(), false));
             }
         }

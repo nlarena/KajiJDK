@@ -32,15 +32,26 @@ import java.lang.annotation.Annotation;
  */
 public final class Method extends Executable {
 
-    private Class<?> clazz;
-    private String name;
-    private Class<?> returnType;
-    private Class<?>[] parameterTypes;
-    private Class<?>[] exceptionTypes;
-    private int modifiers;
-    private int slot;
+    private final Class<?> clazz;
+    private final String name;
+    private final Class<?> returnType;
+    private final Class<?>[] parameterTypes;
+    private final Class<?>[] exceptionTypes;
+    private final int modifiers;
+    private final int slot;
 
-    private Method() {
+    // Solo la VM construye estos objetos: aloca en crudo y escribe los campos por offset, sin
+    // pasar por aca. El constructor existe para que los campos puedan ser `final` --que es como
+    // los declara el JDK-- y no lo llama nadie (#203).
+    private Method(Class<?> clazz, String name, Class<?> returnType,
+            Class<?>[] parameterTypes, Class<?>[] exceptionTypes, int modifiers, int slot) {
+        this.clazz = clazz;
+        this.name = name;
+        this.returnType = returnType;
+        this.parameterTypes = parameterTypes;
+        this.exceptionTypes = exceptionTypes;
+        this.modifiers = modifiers;
+        this.slot = slot;
     }
 
     /**

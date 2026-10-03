@@ -19,7 +19,7 @@ import java.util.Enumeration;
 public class SequenceInputStream extends InputStream {
 
     // The streams still to come.
-    private Enumeration<? extends InputStream> e;
+    private final Enumeration<? extends InputStream> e;
 
     // The one currently being read, or null once the whole sequence is exhausted.
     private InputStream in;
@@ -112,7 +112,6 @@ public class SequenceInputStream extends InputStream {
         while (this.in != null) {
             this.nextStream();
         }
-        this.e = null;
     }
 
     public long transferTo(OutputStream out) throws IOException {

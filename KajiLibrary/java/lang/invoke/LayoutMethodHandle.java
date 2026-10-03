@@ -24,8 +24,12 @@ import java.lang.foreign.MemorySegment;
  * the only thing the call site says. Which of the three computations to do is decided by
  * {@link #mode}, which is a datum of the object and not of the site.
  *
- * <p>Those two helper names stay in Spanish for the same reason as `SegmentVarHandle`'s: the VM
- * names them as string literals in `invokevirtual.rs`, so they move when the Rust side moves.
+ * <p><strong>The VM names these two as string literals in `invokevirtual.rs`</strong> (same as
+ * `SegmentVarHandle`'s `read*`/`write*`), so renaming either side alone breaks the pair **silently**:
+ * the vtable lookup misses, the intrinsic falls back to the direct-handle path, and that one reads
+ * `owner`/`name`/`descriptor`/`kind` -- fields these do not have -- so the VM panics with
+ * `field_offset: 'owner' ...`. It happened once, when the library went to English and the Rust side
+ * stayed in Spanish; `MhLayoutTest` and `VhTest` were dead until 2026-10-03. Rename both or neither.
  *
  * <p>The `MethodHandle` intrinsic the VM already had was no good: it reads off the instance the
  * fields of a **direct** handle (`owner`/`name`/`descriptor`/`kind`), and these point at no method

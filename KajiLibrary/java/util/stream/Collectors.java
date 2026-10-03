@@ -218,12 +218,12 @@ public final class Collectors {
 
     // Map each element to a Stream and hand every element of it to `downstream`.
     //
-    // The `? extends Stream<? extends U>` is the JDK's own spelling and it is LOAD-BEARING: with
-    // the invariant `Function<T, Stream<U>>` the declaration still compiles, but every CALL to it
-    // is silently dropped by this javac — `Collectors.flatMapping(m, down)` emits `aload m;
-    // aload down; astore <target>` with no invokestatic, so the caller silently gets `down`
-    // instead of the flat-mapping collector, and the mapper is left dangling on the operand
-    // stack. Wildcarding the nested type argument makes the call resolve. Repro in the notes.
+    // The `? extends Stream<? extends U>` is the JDK's own spelling, so it stays. It USED TO BE
+    // load-bearing for a second reason: with the invariant `Function<T, Stream<U>>` the declaration
+    // compiled but every CALL to it was dropped, and the caller silently got `downstream` instead
+    // of the flat-mapping collector. That was finding #248, fixed on 2026-09-21 — the invariant
+    // form now resolves and emits its `invokestatic` too. Keep the wildcards because the JDK has
+    // them, not because the compiler needs them.
     public static <T, U, A, R> Collector<T, A, R> flatMapping(Function<T, ? extends Stream<? extends U>> mapper,
                                                               Collector<U, A, R> downstream) {
         Supplier<A> sup = downstream.supplier();

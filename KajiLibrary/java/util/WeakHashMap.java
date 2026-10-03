@@ -56,20 +56,18 @@ public class WeakHashMap<K, V> extends AbstractMap<K, V> implements Map<K, V> {
 
     private int threshold;
 
-    private float loadFactor;
+    private final float loadFactor;
 
     // Where the collector deposits entries whose key has died. Final, and shared by every
     // entry of this map: it is the map's inbox.
     private final ReferenceQueue queue;
 
     public WeakHashMap() {
-        queue = new ReferenceQueue();
-        init(16, 0.75f);
+        this(16, 0.75f);
     }
 
     public WeakHashMap(int initialCapacity) {
-        queue = new ReferenceQueue();
-        init(initialCapacity, 0.75f);
+        this(initialCapacity, 0.75f);
     }
 
     // It copies another map's pairs. The keys come in as **weak** references, so the copy does not
@@ -90,6 +88,7 @@ public class WeakHashMap<K, V> extends AbstractMap<K, V> implements Map<K, V> {
     public WeakHashMap(int initialCapacity, float loadFactor) {
         queue = new ReferenceQueue();
         init(initialCapacity, loadFactor);
+        this.loadFactor = loadFactor;
     }
 
     private void init(int initialCapacity, float loadFactor) {
@@ -103,7 +102,6 @@ public class WeakHashMap<K, V> extends AbstractMap<K, V> implements Map<K, V> {
         while (cap < initialCapacity) {
             cap = cap * 2;
         }
-        this.loadFactor = loadFactor;
         this.table = new WhmEntry[cap];
         this.threshold = (int) ((float) cap * loadFactor);
     }

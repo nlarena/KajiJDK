@@ -4,7 +4,6 @@ import java.io.IOException;
 import java.io.OutputStream;
 import java.util.ArrayList;
 import java.util.HashMap;
-import java.util.Iterator;
 import java.util.Map;
 import java.util.StringTokenizer;
 import java.util.TreeSet;
@@ -460,16 +459,23 @@ public abstract class AbstractPreferences extends Preferences {
                     kidCache.put(names[i], childSpi(names[i]));
                 }
             }
-            for (Iterator<AbstractPreferences> i = kidCache.values().iterator(); i.hasNext();) {
-                AbstractPreferences child = i.next();
+            // Over a **snapshot**, and the cache emptied at the end. The JDK walks this with the
+            // iterator of `kidCache.values()` and calls `i.remove()` on it, which works there
+            // because that `values()` is a *view* backed by the map. This library's `values()` is a
+            // **copy** -- a divergence `AbstractMap` declares -- so `i.remove()` would at best drop
+            // an element of the copy and leave the cache untouched. It did not even get that far:
+            // the copy's iterator does not support `remove`, so removing any node threw
+            // `UnsupportedOperationException: remove`. The whole of `removeNode()` was dead.
+            AbstractPreferences[] kids = kidCache.values().toArray(NO_NODES);
+            for (int i = 0; i < kids.length; i++) {
                 try {
-                    child.removeNode2(removals);
+                    kids[i].removeNode2(removals);
                 } catch (BackingStoreException x) {
                     // A child that could not be removed cannot abort the parent's removal: the tree
                     // would be left half way with no way of finishing it.
                 }
-                i.remove();
             }
+            kidCache.clear();
             removeNodeSpi();
             removed = true;
             removals.add(this);
