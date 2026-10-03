@@ -758,16 +758,15 @@ public final class String
         return len1 - len2;
     }
 
-    // Case folding for COMPARISON only, over ASCII. It is not a case conversion and does not
-    // pretend to be one: `toLowerCase` is absent from this class precisely because doing it
-    // properly needs Unicode tables that java.lang.Character does not have yet. Comparing is
-    // the weaker job, and ASCII covers what the library itself compares -- names, descriptors,
-    // encodings.
+    // Case folding for COMPARISON only: upper first, then lower, in that order, which is what
+    // `compareToIgnoreCase` is specified to do. The order matters, because going straight to
+    // lower case misses the pairs whose two cases do not differ by a constant. Folding only
+    // A-Z -- which is what this did until fuzzing caught it -- made every letter outside ASCII
+    // compare as if it had no case at all, so `"ÉCOLE".equalsIgnoreCase("école")` was false.
+    // It is still not a case CONVERSION: it works one code unit at a time, so the mappings that
+    // change length (see `recase`) are out of its reach and surrogate pairs fold to themselves.
     private static char fold(char c) {
-        if (c >= 'A' && c <= 'Z') {
-            return (char) (c + 32);
-        }
-        return c;
+        return Character.toLowerCase(Character.toUpperCase(c));
     }
 
     public boolean equalsIgnoreCase(String other) {
@@ -905,9 +904,13 @@ public final class String
         int n = this.length();
         int m = str.length();
         int from = fromIndex < 0 ? 0 : fromIndex;
-        int to = endIndex > n ? n : endIndex;
+        int to = endIndex > n ? n : (endIndex < 0 ? 0 : endIndex);
         if (m == 0) {
-            return from > to ? -1 : from;
+            // The empty string sits between every pair of characters and also AFTER the last
+            // one, so a start past the end finds it at the end rather than not at all:
+            // `"hola".indexOf("", 99)` is 4, not -1. This was the one place where a start out
+            // of range did not simply clamp.
+            return from > to ? to : from;
         }
         for (int i = from; i + m <= to; i++) {
             if (this.matchesRegion(i, str, 0, m, false)) {
@@ -1388,6 +1391,9 @@ public final class String
      * lower case and a hundred in upper case, and getting them wrong is not a rounding error:
      * {@code "ß".toUpperCase()} has to be {@code "SS"}, two characters where there was one.
      *
+     * <p>One mapping is not even character by character: Greek capital sigma lowers to a
+     * different letter at the end of a word than in the middle of one. See {@code finalSigma}.
+     *
      * @implNote Locale-INSENSITIVE, always. The locale-taking overloads below delegate here, so
      *           the Turkish dotless-i rule is not applied; that needs per-locale tables this
      *           library does not have. Every other language agrees with the root locale.
@@ -1419,8 +1425,17 @@ public final class String
         int put = 0;
         int i = 0;
         while (i < n) {
+            int start = i;
             int cp = this.codePointAt(i);
             i = i + (cp > 0xffff ? 2 : 1);
+            if (!upper && cp == 0x3a3 && this.finalSigma(start, i)) {
+                if (put == buf.length) {
+                    buf = String.grow(buf);
+                }
+                buf[put] = (char) 0x3c2;
+                put = put + 1;
+                continue;
+            }
             int[] special = String.specialFor(cp, upper);
             if (special != null) {
                 for (int k = 0; k < special.length; k++) {
@@ -1449,6 +1464,23 @@ public final class String
             put = put + 1;
         }
         return String.valueOf(buf, 0, put);
+    }
+
+    // Whether the capital sigma occupying [start, end) ends a word. This is the only place in
+    // the whole class where lowering a character depends on its NEIGHBOURS: Greek writes the
+    // same letter as U+03C2 word-finally and U+03C3 everywhere else, so lowering "ΟΔΟΣ" has to
+    // give "οδος" while "ΣΟΦΟΣ" gets a final sigma only at the end. Without this, both sigmas
+    // came out as U+03C3 and the word was misspelt.
+    //
+    // Unicode states the condition over "cased" and "case-ignorable" characters; this library
+    // has a table for neither, so it reads `isLetter` instead. That agrees with the real rule
+    // on ordinary text and can differ where a sigma sits next to marks or punctuation that
+    // Unicode would look through -- an apostrophe after the sigma, for instance.
+    private boolean finalSigma(int start, int end) {
+        if (start == 0 || !Character.isLetter(this.charAt(start - 1))) {
+            return false;
+        }
+        return end >= this.length() || !Character.isLetter(this.charAt(end));
     }
 
     private static char[] grow(char[] buf) {

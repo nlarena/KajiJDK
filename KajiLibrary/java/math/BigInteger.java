@@ -296,6 +296,20 @@ public final class BigInteger extends Number implements Comparable<BigInteger> {
         return BigInteger.strip(out);
     }
 
+    // Whether any of bits 0..n-1 of the magnitude is set. It is what tells a shift that lost
+    // something from one that divided exactly, which is the whole difference between truncating
+    // and flooring a negative.
+    private static boolean anyBitBelow(int[] m, int n) {
+        int bit = 0;
+        while (bit < n) {
+            if (BigInteger.testBitMag(m, bit)) {
+                return true;
+            }
+            bit = bit + 1;
+        }
+        return false;
+    }
+
     private static int[] shiftRightMag(int[] m, int n) {
         int len = BigInteger.bitLengthMag(m);
         if (n >= len) {
@@ -505,11 +519,31 @@ public final class BigInteger extends Number implements Comparable<BigInteger> {
         return len;
     }
 
+    /**
+     * Whether bit {@code n} is set, <strong>in two's complement</strong>.
+     *
+     * <p>That is what the specification asks, and it is not the same as asking the magnitude: a
+     * negative has infinitely many 1 bits to the left, so {@code new BigInteger("-1").testBit(63)}
+     * is {@code true}. Since {@code -m} is {@code ~(m-1)}, the bits below the magnitude's lowest
+     * set bit stay 0, that bit stays 1, and every bit above it is inverted.
+     *
+     * @throws ArithmeticException if {@code n} is negative
+     */
     public boolean testBit(int n) {
         if (n < 0) {
             throw new ArithmeticException("Negative bit address");
         }
-        return BigInteger.testBitMag(this.mag, n);
+        if (this.signum >= 0) {
+            return BigInteger.testBitMag(this.mag, n);
+        }
+        int low = this.getLowestSetBit();
+        if (n < low) {
+            return false;
+        }
+        if (n == low) {
+            return true;
+        }
+        return !BigInteger.testBitMag(this.mag, n);
     }
 
     public BigInteger shiftLeft(int n) {
@@ -519,11 +553,25 @@ public final class BigInteger extends Number implements Comparable<BigInteger> {
         return BigInteger.make(this.signum, BigInteger.shiftLeftMag(this.mag, n));
     }
 
+    /**
+     * This shifted right {@code n} places, rounding towards <strong>minus infinity</strong>.
+     *
+     * <p>The specification defines it as {@code floor(this * 2^-n)}, the same as {@code >>} over
+     * an {@code int}. Shifting a sign-magnitude number truncates towards zero instead, which is a
+     * different number for every negative that loses a bit: {@code -1 >> 1} is {@code -1}, not
+     * {@code 0}. So when the value is negative and some 1 bit fell off the end, one is added to
+     * the magnitude -- which in two's complement is exactly stepping one integer down. The JDK
+     * does the same.
+     */
     public BigInteger shiftRight(int n) {
         if (n < 0) {
             return this.shiftLeft(-n);
         }
-        return BigInteger.make(this.signum, BigInteger.shiftRightMag(this.mag, n));
+        int[] shifted = BigInteger.shiftRightMag(this.mag, n);
+        if (this.signum < 0 && BigInteger.anyBitBelow(this.mag, n)) {
+            shifted = BigInteger.addMag(shifted, new int[] {1});
+        }
+        return BigInteger.make(this.signum, shifted);
     }
 
     public int compareTo(BigInteger val) {
