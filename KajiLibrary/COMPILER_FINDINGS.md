@@ -19,18 +19,21 @@ file reached 17 thousand lines. Nothing is in both.
 
 ## Status (2026-10-03)
 
-**278 findings, #1-#559. Open: #307, #505, #559, plus #288 with no working reproducer.**
+**281 findings, #1-#562. Open: #307, #559, #560, #561, #562, plus #288 with no working reproducer.**
 
 | # | where | what | how it is checked |
 |---|---|---|---|
 | **#307** | javac | inference does not look at the lambda body (JLS §18.2.1) | `Optional.of("perro").map(x -> x.toUpperCase()).orElseThrow().length()` does not compile: *no se encuentra el metodo: length / ubicacion: clase Object* |
-| **#505** | VM/library | `Field.getAnnotations()` always returns empty | with a `@Retention(RUNTIME)` annotation on a field: ours gives 0 / `null` / `false`, JDK 25 gives 1 / `@Mk505("campo")` / `true` |
+| **#560** | javac | `AnnotationDefault` is not emitted when the default is a **reference to a constant** | `String value() default BYTES;` emits a `value()` with descriptor and flags and nothing else; with `default "BYTES"` --- the same compile-time constant --- the attribute is there |
+| **#561** | javac | `e instanceof T v` evaluates the operand **twice** | `Dup` prints 2 where the JDK prints 1: `bind_pattern` re-runs the operand to do the cast |
+| **#562** | javac | a pattern variable's scope is **the `if`**, not where the condition holds | `if (!(o instanceof String s)) return -1; return s.length();` --- which the real `javac` accepts --- fails with *no se encuentra el simbolo: s* |
 | **#559** | javac | a handler's frame carries the type of a **dead** local | `SmProbe` runs and answers 2 on our VM; HotSpot refuses the class with `VerifyError: Stack map does not match the one at exception handler 55` |
 | **#288** | VM/GC | a stale reference reaching the GC in green mode | no reproducer fires today (see the `os-parallel` note); stays open until somebody looks at it with ThreadSanitizer |
 
-The first three were **reproduced on 2026-10-03** with the frozen javac --- #505 against JDK 25 as
-the oracle, #559 against HotSpot. The six the entries still called open and that were not ---
-#113, #127, #474, #500, #502, #509 --- were measured the same day and are closed.
+All four were **reproduced on 2026-10-03** with the frozen javac --- #560 against the JDK's own
+`javap`, #559 against HotSpot. The six the entries still called open and that were not --- #113, #127,
+#474, #500, #502, #509 --- were measured the same day and are closed, and **#505 was closed** that day
+too: it is what uncovered #560.
 
 > **Do not trust the title.** Three of those six carried their own *Cerrado el...* note **inside**
 > the `Open` section, and **#113 had no marker at all**, so no marker-based scan can see it. And the
@@ -302,7 +305,7 @@ that were reproduced that day --- about the rest, all that is known is what the 
 | #502 | ✅ | `--emit` rechaza una inferencia que el chequeo acepta (javac) | Tanda: `jdk.javadoc.doclet` (sesion de bibl… ·medido 2026-10-03 |
 | #503 | ✅ | un `case` con una constante leida de un `.class` no se pliega (javac) -- CERRADO | Tanda: `javax.sql.rowset` y `javax.sql.rows… |
 | #504 | ✅ | `--emit` no le pone a un `@interface` su supertipo implicito `Annotation` (javac) -- CERRADO | Tanda: `jdk.dynalink.support`, `jdk.dynalin… |
-| #505 | ⬜ | `Field.getAnnotations()` devuelve vacio siempre (VM/biblioteca) | Tanda: `jdk.dynalink.support`, `jdk.dynalin… ·medido 2026-10-03 |
+| #505 | ✅ | `Field.getAnnotations()` devuelve vacio siempre (VM/biblioteca) | Tanda: `jdk.dynalink.support`, `jdk.dynalin… ·medido 2026-10-03 |
 | #506 | ✅ | los modificadores de acceso de un miembro leido de un `.class` no se chequean | Tanda: `javax.swing` visual -- cajas y desp… |
 | #507 | ✅ | `--emit` no soporta un `new` calificado por una instancia (`e.new Interna()`) | Tanda: `javax.swing` visual -- cajas y desp… |
 | #508 | ✅ | una clase interna de una clase de nivel superior no puede crear a una hermana | Tanda: `javax.swing` visual -- cajas y desp… |
@@ -357,6 +360,7 @@ that were reproduced that day --- about the rest, all that is known is what the 
 | #557 | ✅ | una creacion calificada de una interna de segundo nivel no resuelve | Tandas 2026-09-18 a 2026-10-03 (#539-#559) |
 | #558 | ✅ | `collect(Collector<? super T, A, R>)` no infiere su `R` del argumento en linea | Tandas 2026-09-18 a 2026-10-03 (#539-#559) |
 | #559 | ⬜ | el frame de un *handler* arrastra el tipo de un local MUERTO, y una JVM real rechaza la clase | Tandas 2026-09-18 a 2026-10-03 (#539-#559) ·medido 2026-10-03 |
+| #560 | ⬜ | el `AnnotationDefault` no se emite cuando el default es una REFERENCIA A UNA CONSTANTE | Tanda 2026-10-03 (b): el #505 cerrado, y e… ·medido 2026-10-03 |
 
 ## Index by section
 
@@ -446,6 +450,7 @@ in: the method notes (*lo que esta tanda deja*) belong to the batch, not to the 
 - Dos huecos de biblioteca que el censo no ve (2026-09-07)
 - Los que quedan abiertos, agrupados por causa (2026-09-09) *(historico)* --- los once estan cerrados
 - Tandas 2026-09-18 a 2026-10-03 (#539-#559)
+- Tanda 2026-10-03 (b): el #505 cerrado, y el #560 que destapo
 
 ## The method rules the record leaves behind
 
@@ -522,6 +527,6 @@ numbers had more than one entry, and in fourteen of them they were different fin
 ## Where the detail is
 
 The full record --- every entry with its reproducer, its measurement and its closing note --- is in
-**[`findings-details.md`](findings-details.md)**, 16937 lines in chronological order. To reach an
+**[`findings-details.md`](findings-details.md)**, 17035 lines in chronological order. To reach an
 entry: locate the `#NNN` in the index above, open the detail and search for `#NNN`; the **first**
 appearance is the canonical one.

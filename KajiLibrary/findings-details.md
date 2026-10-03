@@ -13155,7 +13155,59 @@ todo el paquete pasa por este caso.
 Repro: `repros/finding_504/` -- `Anot504.java` mas `Uso504.java`, con dos casos que fallan y dos
 controles que compilan.
 
-### #505 -- `Field.getAnnotations()` devuelve vacio siempre (VM/biblioteca) -- ABIERTO
+### #505 ⬜→✅ -- `Field.getAnnotations()` devuelve vacio siempre (VM/biblioteca)
+
+> **Cerrado el 2026-10-03.** Eran **tres** cosas, y solo la primera estaba en la ficha.
+>
+> **1. El nativo que faltaba** (`src/jvm/interpreter/natives.rs`): `Field.declaredAnnotations0()`,
+> gemelo del de `Method`, leyendo el `RuntimeVisibleAnnotations` del `field_info`. Un campo se
+> identifica por su nombre nada mas --no hay sobrecarga de campos-- asi que no hace falta armar el
+> descriptor que el de `Method` tiene que armar.
+>
+> **2. `getAnnotations()` de CUALQUIER miembro devolvia vacio, y eso no estaba medido.**
+> `AccessibleObject.getAnnotations()` devolvia `new Annotation[0]` **escrito a mano** en vez de
+> contestar sobre `getDeclaredAnnotations()`, asi que el arreglo del campo no se habria visto igual
+> --y `Method`, que lee sus anotaciones desde el #467, tambien daba 0--:
+>
+> | | antes | el JDK 25 |
+> |---|---|---|
+> | `campo.getAnnotations()` | 0 | 1 |
+> | `campo.getDeclaredAnnotations()` | 0 | 1 |
+> | `metodo.getAnnotations()` | **0** | 1 |
+> | `metodo.getDeclaredAnnotations()` | 1 | 1 |
+>
+> En un **miembro** `getAnnotations()` *es* `getDeclaredAnnotations()`: `@Inherited` aplica solo a una
+> clase (JLS 9.6.4.3), asi que no hay nada que subir. La busqueda quedo **una sola vez** en
+> `AccessibleObject` --contestando sobre `getDeclaredAnnotations()`, que es el que una subclase
+> sobreescribe con un nativo-- y los `override` que el JDK declara en `Field`, `Executable` y `Method`
+> se quedan (el censo los mira) delegando. Antes habia **tres** copias de la misma respuesta
+> equivocada, y es la regla de siempre: cuando dos funciones contestan la misma pregunta, una esta al
+> dia y la otra no.
+>
+> De paso quedo `getAnnotationsByType` contestando de verdad en vez de vacio siempre, con el
+> subconjunto declarado: no desenvuelve el contenedor de una `@Repeatable`, que esta biblioteca no
+> modela.
+>
+> **3. Arreglarlo destapo un panic de la VM, porque JFR recibio anotaciones de campo por primera vez.**
+> `annotation_elements` **salteaba** el elemento que no tenia valor en el uso ni `AnnotationDefault`,
+> con lo cual la clase sintetica no implementaba ese accesor; la llamada se iba entonces al metodo
+> **abstracto** de la `@interface` --sin cuerpo-- y el interprete panicaba con
+> *index out of bounds: the len is 0 but the index is 0* leyendo `current_code()[pc]`. Ahora el accesor
+> se emite igual y tira `IncompleteAnnotationException`, que es lo que el JDK contesta para un elemento
+> que falta; `Method.invoke` lo envuelve en `InvocationTargetException` y el que llama puede atraparlo.
+> Regresion: `annotation_factory::tests::a_valueless_element_still_gets_an_accessor_and_it_throws`.
+>
+> **El elemento sin valor existia por un bug del compilador, que queda abierto como #560**: `@DataAmount`
+> se usa sin valor y su `value()` declara `default BYTES` --una referencia a una constante--, y nuestro
+> javac no emite el `AnnotationDefault` de esa forma. Rodeo aplicado en la biblioteca: el literal en vez
+> de la constante, en los tres `@interface` de `jdk.jfr` que la usaban (`DataAmount`, `Timespan`,
+> `Timestamp`), con el motivo escrito al lado.
+>
+> **Medido.** `java/RefAnn.java` da **1, 2, 1, 2558992, 27641377**, identico al JDK 25 en las cinco
+> --el `hashCode()` de las etiquetas incluido--; antes la primera daba 0. Y el diferencial de
+> `jdk.jfr.EventType` de `java/JFX.java` pasa de **7 dimensiones distintas de 40** a **0**: es lo que la
+> ficha pedia, con la cuenta hecha de nuevo porque la que decia ("1 de 14") era de otra forma de medir.
+
 
 `java.lang.reflect.Field` no lee las anotaciones del campo. `Method` y `Class` si.
 
@@ -16935,3 +16987,113 @@ antes de que se emita un frame adentro del scope nuevo.
 **Lo que hay que rehacer si se arregla:** cambia la `StackMapTable` que se emite, o sea **todos** los
 `.class` de la biblioteca con mas de un `catch` en un metodo. Vale juntarlo con la deuda de
 recompilacion que el refresco del 2026-09-21 dejo abierta.
+
+## Tanda 2026-10-03 (b): el #505 cerrado, y el #560 que destapo
+
+### #560 ⬜ -- el `AnnotationDefault` no se emite cuando el default es una REFERENCIA A UNA CONSTANTE
+
+**Severidad: media, y silenciosa.** Compila sin decir nada y el `.class` sale sin el atributo, asi que
+la anotacion queda **incompleta** y el error aparece lejos, al reflexionarla.
+
+```java
+public @interface DataAmount {
+    String BYTES = "BYTES";
+    String value() default BYTES;      // <- no se emite el AnnotationDefault
+}
+```
+
+`javap -p -v` sobre nuestro `.class`: el `value()` sale con `descriptor` y `flags` **y nada mas**. Con
+`default "BYTES"` --el mismo constante de compilacion, escrito como literal-- el atributo sale bien:
+
+| forma del default | `AnnotationDefault` |
+|---|---|
+| `default "BYTES"` (literal) | **si** |
+| `default BYTES` (constante del mismo `@interface`) | **no** |
+| `default FetchType.EAGER` (constante de enum) | si |
+| `default 255` / `default true` / `default {}` | si |
+
+**Es el tercer hermano del #127**, que tenia las otras dos formas que el emisor se callaba: el menos
+unario (`default -1`) y el valor de anotacion (`default @ForeignKey(...)`). Los dos estan cerrados; esta
+no se habia probado. La familia tiene una forma sola: **cuando el valor no se puede representar, se
+emite silencio en vez de un error.**
+
+**Como salio:** cerrando el #505. Con las anotaciones de campo andando, `jdk.jfr.EventType` recibio por
+primera vez un `@DataAmount` y lo rechazo con *the value of the member value of interface
+jdk.jfr.DataAmount is missing* --que es lo correcto de su parte--. Antes del #505 nadie podia verlo,
+porque la anotacion del campo no llegaba.
+
+**El gate no puede verlo**: un `default` no esta en el descriptor, asi que la clase pasa con
+`0 mismatch` mientras el valor desaparece. Es el mismo punto ciego que anoto el #127.
+
+**Rodeo en la biblioteca, ya aplicado:** el literal en vez de la constante en los tres `@interface` de
+`jdk.jfr` que la usaban --`DataAmount` (`BYTES`), `Timespan` (`NANOSECONDS`) y `Timestamp`
+(`MILLISECONDS_SINCE_EPOCH`)--, con el motivo escrito al lado de cada uno. Son los tres casos del arbol:
+los otros 32 `default` con un nombre son constantes de **enum**, que si se emiten.
+
+**Repro:** `@interface A { String K = "k"; String value() default K; }` y mirar si el `value()` sale con
+`AnnotationDefault`. Cuando se cierre, los tres rodeos vuelven a la constante.
+
+### #561 ⬜ -- `e instanceof T v` evalua el operando DOS veces
+
+**Severidad: alta**, porque la respuesta sale mal **en silencio**: no hay error ni clase invalida,
+solo un efecto que ocurre de mas.
+
+**Reproductor.** Imprime `x 2` con nuestro javac y `x 1` con el del JDK 25:
+
+```java
+public class Dup {
+    static int llamadas = 0;
+    static Object f() { Dup.llamadas = Dup.llamadas + 1; return "x"; }
+    public static void main(String[] a) {
+        if (Dup.f() instanceof String s) { System.out.println(s); }
+        System.out.println(Dup.llamadas);
+    }
+}
+```
+
+**La causa.** `codegen::bind_pattern` hace `self.expr(operand)` para rehacer el cast: emite el
+operando una vez para el `instanceof` y **otra** para el `checkcast`/`astore`. Con un local no se
+nota --`aload_0` dos veces es lo que emite el javac real, y es gratis-- y con una llamada se nota.
+
+**Lo que hace el real, medido.** Distingue por la forma del operando:
+
+| operando | `javac` real |
+|---|---|
+| un local (`o`) | `aload_0; instanceof; ifeq; aload_0; checkcast; astore_1` -- lo reevalua |
+| una llamada (`f()`) | `invokestatic f; astore_2; aload_2; instanceof; ifeq; aload_2; checkcast; astore_1` -- lo guarda en un temporal |
+
+O sea que el arreglo no es "usar siempre un temporal" --eso divergiria de la emision del real en el
+caso comun y cambiaria `.class` de la biblioteca-- sino **materializar solo cuando el operando no es
+reevaluable**: un local o `this` se reevaluan, cualquier otra cosa va a un temporal.
+
+**Como aparecio.** Leyendo `bind_pattern` para escribir la deconstruccion de records del Hito B8. Ese
+bajado **no** tiene el bug: hoistea el operando a un local sintetico antes del test, y por eso
+`java/IofTest.java` incluye `unaVez()`, que da 1.
+
+### #562 ⬜ -- el alcance de una variable de patron es EL `if`, no donde la condicion vale
+
+**Severidad: media.** No emite nada mal: **rechaza** un programa que el `javac` real acepta.
+
+**Reproductor**, que el real compila y nosotros no:
+
+```java
+static int f(Object o) {
+    if (!(o instanceof String s)) return -1;
+    return s.length();            // error: no se encuentra el simbolo: s
+}
+```
+
+Es el *idiom de guarda*, y es una de las formas mas usadas del pattern matching.
+
+**La causa.** `attribute::attrib_stmt` abre un ambito alrededor del `if` --a proposito, y esta
+comentado: para que el slot de la variable de patron se **libere** al salir y el proximo `if` lo
+reuse, que es como numera javac--. El efecto lateral es que la variable deja de ser visible despues
+del `if`.
+
+La regla de la JLS es mas fina: el alcance de una variable de patron es **donde la condicion es
+definitivamente verdadera** (§6.3.1). Con `if (!(cond)) return;`, despues del `if` la condicion vale,
+asi que la variable esta en alcance. Modelarlo pide separar las dos cosas que hoy estan juntas --la
+**visibilidad** del nombre y la **vida** del slot--, porque el ambito de hoy resuelve la segunda.
+
+**Alcanza a la forma simple y a la deconstruccion por igual**, asi que no es del Hito B8: se verifico
+que falla identico con el javac congelado, anterior a ese trabajo.
