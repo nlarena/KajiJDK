@@ -16978,3 +16978,75 @@ creacion **calificada** (`expr.new Clase()`, §15.9.1) de una interna de segundo
 A favor: **corta la compilacion**, no emite nada dudoso.
 
 Salio midiendo el #553, escribiendo el caso de dos niveles de internas.
+
+### #559 ⬜ -- el frame de un *handler* arrastra el tipo de un local MUERTO, y una JVM real rechaza la clase
+
+**Severidad: alta.** No es una divergencia de estilo: el `.class` **no se puede cargar** en una JVM
+real. Es lo que hace que `KajiLibrary/java/IoTest.class` sea inusable fuera de nuestra VM.
+
+**Reproductor, veinte lineas.** `a`, `b` y `c` comparten el slot 2:
+
+```java
+public class SmProbe {
+    public static int f(byte[] data) {
+        int i = 0;
+        try {
+            if (data.length == 0) throw new IllegalStateException();
+            return 1;
+        } catch (IllegalStateException a) { i++; }
+        try {
+            StringBuilder b = new StringBuilder();
+            b.append(i);
+            if (b.length() > 0) throw new NumberFormatException();
+            return 2;
+        } catch (NumberFormatException c) { i++; }
+        return i;
+    }
+    public static void main(String[] x) { System.out.println(f(new byte[0])); }
+}
+```
+
+`java -cp . SmProbe` sobre el JDK 25:
+
+```
+VerifyError: Stack map does not match the one at exception handler 55
+  Location: SmProbe.f([B)I @55: astore_2
+  Reason: Type 'java/lang/StringBuilder' (current frame, locals[2]) is not assignable to
+          'java/lang/IllegalStateException' (stack map, locals[2])
+```
+
+**Lo que emitimos contra lo que emite el real**, en el frame del segundo handler:
+
+| | locals del frame @55 |
+|---|---|
+| nuestro `javac` | `[B, int, IllegalStateException]` |
+| `javac` real | `[B, int]` |
+
+El tipo que declaramos en el slot 2 es el de la variable del **primer** `catch`, que ya no existe. El
+real **da de baja** el slot y emite un frame mas corto.
+
+**La causa, localizada.** `codegen.rs::close_scope` restaura `next_free` para que el proximo local
+reuse los slots del scope que cierra, pero **nunca limpia `locals_t`**, que es de donde sale el tipo
+de cada slot. El frame de un handler se captura con `entry_locals = self.locals_t.clone()` al entrar
+al `try` (`codegen.rs`, en el emisor de `try`/`catch`) --que es lo correcto, porque a un handler se
+llega desde cualquier punto del rango protegido-- y en ese momento el slot todavia figura con el tipo
+del local muerto. Los frames normales no se ven afectados porque una declaracion nueva pisa el slot
+antes de que se emita un frame adentro del scope nuevo.
+
+**Por que no lo encontro nada de lo que tenemos, que es la mitad que importa.**
+
+- **`tools/emitdiff` no puede verlo**: desensambla con `javap -p -c`, que **no imprime stack maps**.
+  Mide el codigo y no los atributos, asi que la unica divergencia que invalida una clase le queda
+  fuera del alcance por construccion. Hace falta un modo `-v` acotado a `StackMapTable`.
+- **Nuestro verificador lo acepta**: el reproductor corre en `run-headless` y contesta bien. El cruce
+  `cross_check_stackmap` existe, pero es flojo justo aca por dos razones que se suman: la in-state
+  inferida de un handler es el **join sobre todo el rango protegido** --asi que `IllegalStateException`
+  y `StringBuilder` se fusionan en su supertipo comun-- y `compatible` acepta asignabilidad en
+  **cualquiera de las dos direcciones**, con lo cual un tipo declarado que es *subtipo* del join pasa.
+  Una JVM real pide lo contrario: que el frame declarado sea supertipo de **cada** estado entrante.
+- **La biblioteca no lo delata**: los 4822 archivos compilan igual. La forma necesita dos `catch`
+  consecutivos reusando un slot con tipos incompatibles, y aparece en `IoTest`, que es una prueba.
+
+**Lo que hay que rehacer si se arregla:** cambia la `StackMapTable` que se emite, o sea **todos** los
+`.class` de la biblioteca con mas de un `catch` en un metodo. Vale juntarlo con la deuda de
+recompilacion que el refresco del 2026-09-21 dejo abierta.

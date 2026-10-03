@@ -309,7 +309,8 @@ El motor base: un frame y un puñado de opcodes aritméticos.
 > bridge methods)** están **hechos** — el `javac` propio compila objetos/bucles/
 > excepciones/genéricos y el `.class` corre en la JVM (`fib(10)=55`, `fact(5)=120`) y pasa
 > el verificador JVMS-estricto. En curso **B6 (fidelidad de `javac`)**: esquinas de
-> lenguaje, `-Xlint`, APT y el diferencial de emisión (ver abajo). El detalle por hito está
+> lenguaje, `-Xlint`, APT **completo** (las cuatro fases, round loop incluido), `javadoc` y el
+> diferencial de emisión (ver abajo). El detalle por hito está
 > en `Roadmap_JDK.pdf`. Las casillas de abajo son el plan original.
 
 ### Hito B0 · Lexer 🟢
@@ -346,9 +347,11 @@ El motor base: un frame y un puñado de opcodes aritméticos.
 ### Hito B6 · Fidelidad de `javac` 🟣 — 🚧 en progreso
 - [x] **Esquinas de lenguaje (A/B/C/D)** — expresiones constantes a `ConstantValue` (§15.28/§15.29), *bridges* en interfaz (§9.4.1.3 + defaults de superinterfaz en la vtable), exhaustividad con record patterns anidados (JEP 440/441) y asignación definitiva de un `switch` exhaustivo sin `default` (§16.2.9)
 - [x] **`-Xlint`** (§9.6.4.5) — pase de lint con **nueve categorías** (`empty`, `cast`, `fallthrough`, `deprecation`, `rawtypes`, `unchecked`, `finally`, `serial`, `this-escape`), severidad en el diagnóstico, `@SuppressWarnings` y render estilo `javac`
-- [x] **APT — fase 1** — la API de `javax.annotation.processing` / `javax.lang.model`, con resolución de tipos anidados de clases externas (atributo `InnerClasses`, p. ej. `Diagnostic.Kind`)
+- [x] **APT — las cuatro fases** — la API de `javax.annotation.processing` / `javax.lang.model` (fase 1, con resolución de tipos anidados de clases externas vía `InnerClasses`, p. ej. `Diagnostic.Kind`); el ***round loop*** (fase 2, `src/jvm/interpreter/apt.rs`, descubrimiento por `META-INF/services`, ronda normal + ronda final, `MAX_ROUNDS = 100`) **con el re-enganche**: los fuentes que el Filer produce se parsean, entran a la `SymbolTable` y se compilan, y la vuelta siguiente los ve; la **reificación del modelo** (fase 3, `SymElement` sobre la tabla viva del compilador) y el **Filer** (fase 4). Nueve pruebas, incluida `a_processor_generates_a_source_that_is_recompiled_and_runs`
+- [x] **`javadoc`** — cuatro etapas y binario propio: el lexer retiene el comentario crudo (1), [`doc.rs`](../src/javac/doc.rs) lo estructura en descripción + block tags + inline tags (2), y [`src/bin/javadoc.rs`](../src/bin/javadoc.rs) recolecta la superficie pública/protegida y emite una página por clase más el `index.html` (3 y 4). **Alcance declarado:** sin índice global de miembros, sin frames y sin herencia de doc
 - [x] **Diferencial de emisión** (`tools/emitdiff`) — compila cada `.java` con nuestro `javac` y con el real, desensambla ambos con `javap -p -c` y compara **normalizado**; cerró un lote de divergencias (ACC_PUBLIC del `default` de interfaz, `iinc`, comparaciones contra 0, literales negativos, `ACC_STATIC` de clase anidada, `Signature` de enum + `values()` vía `array.clone()`, switch-expr sobre `String`)
-- [ ] **Falta:** el *round loop* de APT y `javadoc`
+- [ ] **Lo que falta, medido el 2026-10-03** sobre el corpus de 25 archivos de `emitdiff`: **23 de los 30 `.class` difieren sólo en el ORDEN de los miembros** (el constructor por defecto sale último y el real lo pone primero), que es cosmético y barato. Las **7 divergencias de contenido** son: `valueOf(String)` de un `enum` desplegado como cadena de `String.equals` en vez de un `Enum.valueOf(Class, String)`; el desugar de try-with-resources, mucho más verboso; los constructores de clase anónima emitidos `public` en vez de de paquete, sin el `requireNonNull` de la instancia envolvente y capturando de más; y un `checkcast` redundante en el for-each sobre un genérico
+- [ ] **El agujero que `emitdiff` no puede ver, y es el único que invalida clases** — la `StackMapTable` que emitimos la **rechaza una JVM real** cuando un slot de local se reusa entre scopes de `catch`: el frame del handler arrastra el tipo del local **muerto** (finding #559). `emitdiff` desensambla con `javap -p -c`, que no imprime stack maps, así que jamás lo iba a encontrar — medir B6 con él **no cubre los atributos**, sólo el código
 - **✅ Éxito (parcial):** el `.class` emitido y los diagnósticos son indistinguibles de los de `javac` para el núcleo del lenguaje.
 
 ---

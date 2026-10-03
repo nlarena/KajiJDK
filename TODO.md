@@ -31,6 +31,16 @@ Pendientes y mejoras conocidas. Lo marcado `[x]` es registro de lo ya hecho.
   (`cross_check_stackmap`: tras el chequeo lineal, corre el punto fijo y exige que cada
   frame declarado no contradiga lo inferido — misma altura de pila, slots compatibles)
   y modela `tableswitch`/`lookupswitch`.
+- ⚠️ **El cruce es flojo justo en los frames de *handler*, y está medido (2026-10-03).**
+  Acepta una clase que una JVM real rechaza: el frame declarado del handler puede traer el
+  tipo de un local **muerto** y pasar igual. Son dos cosas que se suman. La in-state inferida
+  de un handler es el **join sobre todo el rango protegido**, así que dos tipos que se
+  contradicen se fusionan en su supertipo común; y `compatible` acepta asignabilidad en
+  **cualquiera de las dos direcciones** (`verifier.rs`, junto a `cross_check_stackmap`), así
+  que un tipo declarado que es *subtipo* del join pasa. Una JVM real exige lo contrario: que
+  el frame declarado sea supertipo de **cada** estado entrante. El reproductor son veinte
+  líneas y vive en el finding #559 de `KajiLibrary/COMPILER_FINDINGS.md`, que es el mismo
+  bug visto del lado del compilador.
 
 ## Verificador — endurecimiento hacia JVMS-estricto
 

@@ -2048,7 +2048,24 @@ mod tests {
     fn an_external_class_ancestor_still_exempts() {
         // De una **clase** externa (`Thread`) podríamos no ver sus implementaciones concretas
         // heredadas: se sigue eximiendo el chequeo, para no inventar errores.
-        ok("abstract class Base extends Thread { abstract void extra(); } class B extends Base { }");
+        //
+        // El caso de abajo pedía `ok` sobre una jerarquía que declara `abstract void extra()` **en
+        // el fuente**, y eso nunca estuvo bien: ahí no hay nada que no veamos, y el `javac` real
+        // dice "B is not abstract and does not override abstract method extra() in Base". El test
+        // se escribió cuando el chequeo eximia en bloque toda jerarquía que tocara un tipo del
+        // classpath; al volverse preciso, el `ok` quedó siendo la mentira. Ese caso vive ahora en
+        // `a_source_abstract_is_reported_even_under_an_external_ancestor`, pidiendo el error.
+        ok("abstract class Base extends Thread { } class B extends Base { }");
+    }
+
+    #[test]
+    fn a_source_abstract_is_reported_even_under_an_external_ancestor() {
+        // La exención es por lo que **no se ve**, no por tocar el classpath: un abstracto
+        // declarado en el fuente se reclama igual, con `Thread` en medio o sin él.
+        one(
+            "abstract class Base extends Thread { abstract void extra(); } class B extends Base { }",
+            "no implementa",
+        );
     }
 
     #[test]
