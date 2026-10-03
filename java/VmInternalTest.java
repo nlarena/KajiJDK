@@ -64,6 +64,20 @@ public class VmInternalTest {
         protected boolean tryClose() { this.cerrado = true; return true; }
     }
 
+    // La cabeza de la pila, observada por la API PUBLICA.
+    //
+    // El `head()` de `StackableScope` es de paquete --el JDK real tambien lo declara asi-- y esta
+    // prueba vive en el paquete por defecto, o sea que no puede llamarlo: llamarlo igual es lo que
+    // el finding #506 dejaba pasar. Empujar un ambito sonda y preguntar por el que lo encierra da
+    // exactamente la misma respuesta, y `tryPop` no cierra nada, asi que la sonda no deja rastro.
+    static StackableScope cabeza() {
+        Ambito sonda = new Ambito();
+        sonda.push();
+        StackableScope h = sonda.enclosingScope();
+        sonda.tryPop();
+        return h;
+    }
+
     // Un ambito que anota EN QUE ORDEN se fue cerrando, para poder afirmar que el desarme va de
     // arriba hacia abajo y no al reves. Con un booleano por ambito eso no se puede distinguir.
     static final StringBuilder ordenCierre = new StringBuilder();
@@ -391,7 +405,7 @@ public class VmInternalTest {
         ok("el cuerpo tiro", tiroCuerpo);
         ok("cerro de arriba hacia abajo y solo lo de encima", "32".equals(ordenCierre.toString()));
         ok("y el que forzo NO se cierra a si mismo", ordenCierre.indexOf("1") < 0);
-        ok("la pila quedo vacia", StackableScope.head() == null);
+        ok("la pila quedo vacia", cabeza() == null);
         ok("popForcefully sobre uno que ya salio da false", !o1.popForcefully());
 
         // tryPop que falla tiene que dejar la pila INTACTA, no a medio desarmar.
@@ -401,7 +415,7 @@ public class VmInternalTest {
         p2.push();
         ok("tryPop del de abajo falla", !p1.tryPop());
         ok("y no cerro nada", ordenCierre.indexOf("a") < 0 && ordenCierre.indexOf("b") < 0);
-        ok("la cabeza sigue siendo la misma", StackableScope.head() == p2);
+        ok("la cabeza sigue siendo la misma", cabeza() == p2);
         ok("y el de abajo sigue siendo su envolvente", p2.enclosingScope() == p1);
         ok("despues del fallo, la cabeza si sale", p2.tryPop());
         ok("y el de abajo tambien", p1.tryPop());
@@ -415,7 +429,7 @@ public class VmInternalTest {
         q2.push();
         StackableScope.popAll();
         ok("popAll cierra todo, de arriba hacia abajo", "yx".equals(ordenCierre.toString()));
-        ok("y deja la pila vacia", StackableScope.head() == null);
+        ok("y deja la pila vacia", cabeza() == null);
 
         // ---- el arbol de contenedores, anidado de verdad
         ContFalso padre = new ContFalso("padre");

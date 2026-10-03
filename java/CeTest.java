@@ -1,3 +1,4 @@
+import java.util.concurrent.ExecutionException;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ThreadPoolExecutor;
 import java.util.function.Function;
@@ -39,7 +40,7 @@ public class CeTest {
         try {
             CeBox b = recovered.get(); // failure captured on the pool, recovered to 99
             result = b.v;
-        } catch (InterruptedException e) {
+        } catch (InterruptedException | ExecutionException e) {
         }
         pool.shutdown();
         try {

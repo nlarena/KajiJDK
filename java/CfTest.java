@@ -1,3 +1,4 @@
+import java.util.concurrent.ExecutionException;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ThreadPoolExecutor;
 import java.util.function.Function;
@@ -39,7 +40,7 @@ public class CfTest {
         try {
             CfBox b = cf2.get(); // blocks until supply + thenApply ran on the pool
             result = b.v;      // 42
-        } catch (InterruptedException e) {
+        } catch (InterruptedException | ExecutionException e) {
         }
         pool.shutdown();
         try {

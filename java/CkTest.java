@@ -1,3 +1,4 @@
+import java.util.concurrent.ExecutionException;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ThreadPoolExecutor;
 import java.util.function.BiFunction;
@@ -46,7 +47,7 @@ public class CkTest {
         try {
             CkBox r = both.get(); // blocks until both futures completed and were merged
             result = r.v; // 42
-        } catch (InterruptedException e) {
+        } catch (InterruptedException | ExecutionException e) {
         }
         pool.shutdown();
         try {

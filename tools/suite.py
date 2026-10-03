@@ -10,6 +10,12 @@ Dos decisiones que valen la explicacion:
 esta al lado. La mitad del valor de esta herramienta es que un test que dejo de compilar aparece como
 lo que es --roto-- y no como un resultado raro en tiempo de ejecucion.
 
+**Una prueba que tira es una prueba rota.** La VM sale con un codigo != 0 cuando una excepcion
+escapa del hilo principal, y hasta que esta herramienta lo miro una prueba que tiraba se reportaba
+como buena: no devolvia valor, no imprimia su `TOTAL`, y eso se leia como "esta prueba no tiene
+veredicto". `VhTest` --y con ella todo el camino de `VarHandle`-- y `PrefsTreeTest` estuvieron
+caidas asi, con la suite en verde, que es peor que no tenerla.
+
 **El punto de entrada se deduce, no se supone.** Las pruebas de esta casa usan tres formas: `run()`
 devolviendo un entero (la mayoria), `main` imprimiendo su propio resumen, y unas pocas con varios
 metodos estaticos con nombre propio. Suponer `run` hacia que las de las otras dos formas se
@@ -69,13 +75,28 @@ def correr(vm, clase, metodo, timeout):
                 motivo = "panic: " + salida.splitlines()[salida.splitlines().index(l) + 1].strip()
                 break
         return motivo, None
+    # **Una excepcion que escapa es una prueba rota**, y hasta el 2026-10-03 esta herramienta no lo
+    # miraba. `run-headless` sale con 1 cuando el hilo principal muere con una excepcion --igual que
+    # `java` real-- y con 0 cuando el programa termino, devuelva valor o no. Sin leer ese codigo, una
+    # prueba que tiraba imprimia `-> None`, no tenia linea `TOTAL`, y caia en el `(sin valor)` de mas
+    # abajo: se reportaba **como buena** y no entraba en la cuenta de rotas. Asi estuvieron caidas
+    # `VhTest` --y con ella toda la familia `VarHandle`-- y `PrefsTreeTest`, con la suite en verde.
+    if p.returncode != 0:
+        escapo = [l.strip() for l in salida.splitlines()
+                  if l.startswith("Exception in thread")]
+        return "EXCEPCION: " + (escapo[-1] if escapo else "salio con %d" % p.returncode), None
     m = RE_VALOR.search(salida)
     if m:
         return "ok", int(m.group(1))
     if "-> None" in salida:
         # `main` no devuelve nada: el veredicto lo imprime la prueba misma.
         resumen = [l.strip() for l in salida.splitlines() if l.strip().startswith("TOTAL")]
-        return "ok", (resumen[-1] if resumen else "(sin valor)")
+        if resumen:
+            return "ok", resumen[-1]
+        # Ni valor de retorno ni linea `TOTAL`: nadie puede leer el veredicto, asi que la prueba no
+        # prueba nada. Antes esto imprimia `(sin valor)` y contaba como buena -- la otra mitad del
+        # mismo punto ciego.
+        return "SIN VEREDICTO", None
     return "sin resultado", None
 
 
@@ -90,6 +111,11 @@ def main():
     ap.add_argument("--sin-compilar", action="store_true",
                     help="usa los .class que ya estan (mas rapido, menos honesto)")
     args = ap.parse_args()
+    # Absolutas y con los separadores de la plataforma. `CreateProcess` **no** encuentra una ruta
+    # relativa con `/` --`--vm target/release/run-headless.exe` moria con un `FileNotFoundError` de
+    # Python-- y esa es justamente la forma en que se escribe a mano para medir un arreglo sin congelar.
+    args.javac = os.path.abspath(args.javac)
+    args.vm = os.path.abspath(args.vm)
 
     fuentes = sorted(glob.glob(os.path.join(JAVA, "*Test.java")))
     if args.filtros:
@@ -126,7 +152,9 @@ def main():
                 print("%-22s %s" % (etiqueta, valor))
             else:
                 rotas.append((etiqueta, estado, ""))
-                print("%-22s %s" % (etiqueta, estado.upper()))
+                # Los estados que ya traen un detalle --el panic, la excepcion-- se imprimen tal
+                # cual: en mayusculas el nombre de la clase que tiro se vuelve ilegible.
+                print("%-22s %s" % (etiqueta, estado if ":" in estado else estado.upper()))
 
     print("\n%d invocaciones, %d rotas" % (corridas, len(rotas)))
     for n, e, d in rotas:

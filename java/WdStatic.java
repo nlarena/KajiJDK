@@ -14,12 +14,13 @@
 //     between the calls; a mirror that moved, or a heap that reallocated, would make the baked-in
 //     address point at rubbish. (It does not: mirrors are `malloc_old`-allocated and in
 //     `gc::compact`'s pinned set, and the heap's byte region is pre-reserved.)
-//   * is a **non-`int`** static refused? `notAnInt` reads a `String` static, so it must never
-//     compile — and must still compute the same answer, interpreted, in both arms.
+//   * a **non-`int`** static: `notAnInt` reads a `String` static and calls `length()` on it. This
+//     used to say it must never compile; reference statics have been in the subset since, and it
+//     compiles, with `String.length` emitted as a real call. It must still compute the same answer.
 //
-// Nothing here writes a static from compiled code: `putstatic` is deliberately outside the subset
-// (see `burst::compile`'s module docs). Every write below happens in `run`, which is full of
-// invokes and is never compiled.
+// (Only comments were changed after this file was compiled: the `.class` next to it is left as it
+// was, so the bytecode the tests measure did not move. `run` used to be described here as never
+// compiled; it compiles now, and it does write `MUTABLE` from compiled code.)
 public class WdStatic extends WdStaticBase {
     static int OWN = 3;
     static int NEIGHBOUR = 1000;   // sits next to OWN in the mirror: catches an off-by-one slot
@@ -52,8 +53,8 @@ public class WdStatic extends WdStaticBase {
         return acc;
     }
 
-    // Outside the subset: `TEXT` is a `String`, so the resolver refuses to give the JIT an address
-    // and the whole method is ineligible. It must still compute the same thing in both arms.
+    // `TEXT` is a `String` static. This comment used to call the method ineligible for that; the
+    // resolver answers reference statics now, and the method compiles.
     static int notAnInt(int x) {
         return x + WdStaticOther.TEXT.length();
     }

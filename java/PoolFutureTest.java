@@ -1,3 +1,4 @@
+import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
@@ -24,7 +25,7 @@ public class PoolFutureTest {
         Future<?> f = pool.submit(t);
         try {
             f.get(); // block until the task ran
-        } catch (InterruptedException e) {
+        } catch (InterruptedException | ExecutionException e) {
         }
         pool.shutdown();
         try {
