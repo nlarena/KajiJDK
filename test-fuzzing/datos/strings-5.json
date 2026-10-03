@@ -1,0 +1,1000 @@
+{
+  "estado": "terminada",
+  "meta": {
+    "prueba": "java.lang.String",
+    "fecha": "2026-09-21T14:43:45",
+    "referencia": "Oracle Corporation 25.0.1",
+    "referencia_ruta": "C:/Program Files/Java/jdk-25",
+    "bajo_prueba": "KajiJDK (run-headless) con KajiLibrary",
+    "binario_kaji_fecha": "2026-09-21T14:31:21",
+    "semilla": 5,
+    "lotes": 20,
+    "por_lote": 200
+  },
+  "stats": {
+    "expresiones": 4000,
+    "coinciden": 3968,
+    "divergen": 32,
+    "por_tipo": {
+      "otro valor": 32
+    },
+    "por_vista": {
+      "indexOfChar": 1,
+      "compareToIgnoreCase": 28,
+      "indexOfFrom": 1,
+      "enc": 2
+    },
+    "ops_total": {
+      "startsWith": 138,
+      "getBytes": 435,
+      "strip": 504,
+      "concat": 1153,
+      "replace": 1325,
+      "stripTrailing": 467,
+      "substring": 1248,
+      "trim": 476,
+      "indexOf": 449,
+      "repeat": 433,
+      "toLowerCase": 474,
+      "toUpperCase": 488,
+      "codePointCount": 125,
+      "length": 276,
+      "lastIndexOf": 132,
+      "stripLeading": 492,
+      "codePointAt": 138,
+      "endsWith": 141,
+      "hashCode": 121,
+      "isEmpty": 128,
+      "charAt": 138,
+      "contains": 127,
+      "equalsIgnoreCase": 95,
+      "equals": 163,
+      "compareTo": 136,
+      "isBlank": 127,
+      "compareToIgnoreCase": 129
+    },
+    "ops_divergentes": {
+      "indexOf": 2,
+      "compareToIgnoreCase": 28,
+      "concat": 12,
+      "repeat": 4,
+      "replace": 14,
+      "strip": 6,
+      "stripLeading": 4,
+      "trim": 5,
+      "toUpperCase": 5,
+      "toLowerCase": 8,
+      "substring": 4,
+      "stripTrailing": 2
+    },
+    "segundos_jdk": 2.0,
+    "segundos_kaji": 4.4,
+    "segundos_total": 94.2
+  },
+  "lotes": [
+    {
+      "lote": 0,
+      "salida_kaji": 0,
+      "stderr_kaji": "",
+      "segundos_jdk": 0.09,
+      "segundos_kaji": 0.19
+    },
+    {
+      "lote": 1,
+      "salida_kaji": 0,
+      "stderr_kaji": "",
+      "segundos_jdk": 0.1,
+      "segundos_kaji": 0.17
+    },
+    {
+      "lote": 2,
+      "salida_kaji": 0,
+      "stderr_kaji": "",
+      "segundos_jdk": 0.09,
+      "segundos_kaji": 0.19
+    },
+    {
+      "lote": 3,
+      "salida_kaji": 0,
+      "stderr_kaji": "",
+      "segundos_jdk": 0.1,
+      "segundos_kaji": 0.17
+    },
+    {
+      "lote": 4,
+      "salida_kaji": 0,
+      "stderr_kaji": "",
+      "segundos_jdk": 0.1,
+      "segundos_kaji": 0.42
+    },
+    {
+      "lote": 5,
+      "salida_kaji": 0,
+      "stderr_kaji": "",
+      "segundos_jdk": 0.09,
+      "segundos_kaji": 0.45
+    },
+    {
+      "lote": 6,
+      "salida_kaji": 0,
+      "stderr_kaji": "",
+      "segundos_jdk": 0.1,
+      "segundos_kaji": 0.18
+    },
+    {
+      "lote": 7,
+      "salida_kaji": 0,
+      "stderr_kaji": "",
+      "segundos_jdk": 0.1,
+      "segundos_kaji": 0.22
+    },
+    {
+      "lote": 8,
+      "salida_kaji": 0,
+      "stderr_kaji": "",
+      "segundos_jdk": 0.1,
+      "segundos_kaji": 0.2
+    },
+    {
+      "lote": 9,
+      "salida_kaji": 0,
+      "stderr_kaji": "",
+      "segundos_jdk": 0.1,
+      "segundos_kaji": 0.17
+    },
+    {
+      "lote": 10,
+      "salida_kaji": 0,
+      "stderr_kaji": "",
+      "segundos_jdk": 0.1,
+      "segundos_kaji": 0.19
+    },
+    {
+      "lote": 11,
+      "salida_kaji": 0,
+      "stderr_kaji": "",
+      "segundos_jdk": 0.1,
+      "segundos_kaji": 0.2
+    },
+    {
+      "lote": 12,
+      "salida_kaji": 0,
+      "stderr_kaji": "",
+      "segundos_jdk": 0.1,
+      "segundos_kaji": 0.23
+    },
+    {
+      "lote": 13,
+      "salida_kaji": 0,
+      "stderr_kaji": "",
+      "segundos_jdk": 0.1,
+      "segundos_kaji": 0.19
+    },
+    {
+      "lote": 14,
+      "salida_kaji": 0,
+      "stderr_kaji": "",
+      "segundos_jdk": 0.1,
+      "segundos_kaji": 0.23
+    },
+    {
+      "lote": 15,
+      "salida_kaji": 0,
+      "stderr_kaji": "",
+      "segundos_jdk": 0.11,
+      "segundos_kaji": 0.17
+    },
+    {
+      "lote": 16,
+      "salida_kaji": 0,
+      "stderr_kaji": "",
+      "segundos_jdk": 0.1,
+      "segundos_kaji": 0.2
+    },
+    {
+      "lote": 17,
+      "salida_kaji": 0,
+      "stderr_kaji": "",
+      "segundos_jdk": 0.11,
+      "segundos_kaji": 0.23
+    },
+    {
+      "lote": 18,
+      "salida_kaji": 0,
+      "stderr_kaji": "",
+      "segundos_jdk": 0.1,
+      "segundos_kaji": 0.2
+    },
+    {
+      "lote": 19,
+      "salida_kaji": 0,
+      "stderr_kaji": "",
+      "segundos_jdk": 0.11,
+      "segundos_kaji": 0.2
+    }
+  ],
+  "divergencias": [
+    {
+      "lote": 1,
+      "k": 45,
+      "tipo": "otro valor",
+      "vista": "indexOfChar",
+      "ops": [
+        "indexOf"
+      ],
+      "java": "String.valueOf(s(60, 114, 61, 65535, 769, 55961, 56382, 962).indexOf(-1))",
+      "jdk": "-1",
+      "kaji": "3"
+    },
+    {
+      "lote": 1,
+      "k": 180,
+      "tipo": "otro valor",
+      "vista": "compareToIgnoreCase",
+      "ops": [
+        "compareToIgnoreCase",
+        "concat",
+        "repeat",
+        "replace",
+        "strip",
+        "stripLeading",
+        "trim"
+      ],
+      "java": "String.valueOf(s(81, 108, 55758, 56522, 32460, 233, 45, 108, 32).concat(s(90, 931, 7838, 53250, 55, 32, 47, 55305, 57049, 931).repeat(5)).replace(s(65).trim(), s(97, 46, 12288, 84, 65, 47).strip()).compareToIgnoreCase(s(305, 14974, 126, 46, 82, 79, 55357, 56832, 48, 931).stripLeading().trim()))",
+      "jdk": "8",
+      "kaji": "-192"
+    },
+    {
+      "lote": 3,
+      "k": 43,
+      "tipo": "otro valor",
+      "vista": "compareToIgnoreCase",
+      "ops": [
+        "compareToIgnoreCase",
+        "concat",
+        "toUpperCase"
+      ],
+      "java": "String.valueOf(s(55844, 57104, 70, 55297, 56360).toUpperCase(Locale.ROOT).compareToIgnoreCase(s(223, 90, 59659, 55860, 57329, 55297, 56320, 122, 4504, 79, 44, 962).concat(s().toUpperCase(Locale.ROOT))))",
+      "jdk": "627249",
+      "kaji": "55621"
+    },
+    {
+      "lote": 3,
+      "k": 61,
+      "tipo": "otro valor",
+      "vista": "compareToIgnoreCase",
+      "ops": [
+        "compareToIgnoreCase",
+        "concat",
+        "replace",
+        "toLowerCase"
+      ],
+      "java": "String.valueOf(s(305, 118, 56320, 97, 59073, 0, 32, 64259, 103, 160).toLowerCase(Locale.ROOT).concat(s(233, 55806, 56905, 12288, 48389, 37, 65, 41).replace(s(112, 36, 83, 117, 9, 9, 62, 111), s(931, 122, 85, 90, 97, 116, 48, 0, 52))).replace((char) 223, (char) 97).compareToIgnoreCase(s(7938)))",
+      "jdk": "-7833",
+      "kaji": "-7633"
+    },
+    {
+      "lote": 3,
+      "k": 105,
+      "tipo": "otro valor",
+      "vista": "compareToIgnoreCase",
+      "ops": [
+        "compareToIgnoreCase",
+        "replace",
+        "substring",
+        "toLowerCase"
+      ],
+      "java": "String.valueOf(s(71, 46, 8486, 8486, 33513, 931, 95, 45).substring(5).replace((char) 65, (char) 223).toLowerCase(Locale.ROOT).compareToIgnoreCase(s(55854, 56574, 963, 931, 53, 8195, 108)))",
+      "jdk": "-636219",
+      "kaji": "-54891"
+    },
+    {
+      "lote": 3,
+      "k": 111,
+      "tipo": "otro valor",
+      "vista": "compareToIgnoreCase",
+      "ops": [
+        "compareToIgnoreCase",
+        "concat",
+        "replace"
+      ],
+      "java": "String.valueOf(s(21713).compareToIgnoreCase(s(56268, 57330, 305, 963, 65406, 92, 59, 305).concat(s(9, 56320, 8721, 453)).replace((char) 55296, (char) 769)))",
+      "jdk": "-1040161",
+      "kaji": "-34555"
+    },
+    {
+      "lote": 4,
+      "k": 47,
+      "tipo": "otro valor",
+      "vista": "compareToIgnoreCase",
+      "ops": [
+        "compareToIgnoreCase",
+        "replace",
+        "trim"
+      ],
+      "java": "String.valueOf(s(122, 24431, 38, 56112, 56422, 125).compareToIgnoreCase(s(305, 115, 233, 304).replace(s(91, 55297, 56360, 56320, 27771, 77, 502, 7838), s()).trim()))",
+      "jdk": "17",
+      "kaji": "-183"
+    },
+    {
+      "lote": 5,
+      "k": 14,
+      "tipo": "otro valor",
+      "vista": "compareToIgnoreCase",
+      "ops": [
+        "compareToIgnoreCase",
+        "replace"
+      ],
+      "java": "String.valueOf(s(56146, 57107, 55618, 57079).replace((char) 32, (char) 65).compareToIgnoreCase(s(9, 66, 12739, 88, 48, 223, 55296)))",
+      "jdk": "936714",
+      "kaji": "56137"
+    },
+    {
+      "lote": 5,
+      "k": 131,
+      "tipo": "otro valor",
+      "vista": "compareToIgnoreCase",
+      "ops": [
+        "compareToIgnoreCase",
+        "toLowerCase"
+      ],
+      "java": "String.valueOf(s(30016).compareToIgnoreCase(s(55776, 56407, 56030, 57258, 55774, 56407, 73, 55357, 56832).toLowerCase(Locale.ROOT)))",
+      "jdk": "-527127",
+      "kaji": "-25760"
+    },
+    {
+      "lote": 6,
+      "k": 170,
+      "tipo": "otro valor",
+      "vista": "compareToIgnoreCase",
+      "ops": [
+        "compareToIgnoreCase",
+        "concat",
+        "replace",
+        "strip",
+        "toLowerCase"
+      ],
+      "java": "String.valueOf(s(56261, 57308, 59, 122, 65, 80, 9).replace((char) 769, (char) 223).toLowerCase(Locale.ROOT).replace((char) 55296, (char) 32).compareToIgnoreCase(s(9, 223, 55296).concat(s()).strip()))",
+      "jdk": "1054461",
+      "kaji": "56038"
+    },
+    {
+      "lote": 7,
+      "k": 49,
+      "tipo": "otro valor",
+      "vista": "compareToIgnoreCase",
+      "ops": [
+        "compareToIgnoreCase"
+      ],
+      "java": "String.valueOf(s(65535, 55722, 56668, 65535, 77, 64).compareToIgnoreCase(s(962)))",
+      "jdk": "64572",
+      "kaji": "64573"
+    },
+    {
+      "lote": 7,
+      "k": 92,
+      "tipo": "otro valor",
+      "vista": "indexOfFrom",
+      "ops": [
+        "indexOf",
+        "repeat",
+        "replace"
+      ],
+      "java": "String.valueOf(s(18963).replace((char) 55296, (char) 223).indexOf(s().repeat(0), 2))",
+      "jdk": "1",
+      "kaji": "-1"
+    },
+    {
+      "lote": 7,
+      "k": 179,
+      "tipo": "otro valor",
+      "vista": "compareToIgnoreCase",
+      "ops": [
+        "compareToIgnoreCase",
+        "concat",
+        "replace",
+        "toLowerCase",
+        "toUpperCase"
+      ],
+      "java": "String.valueOf(s(7838, 35351, 65279, 26185).concat(s(90).replace(s(86, 12288, 94), s(68, 55296, 7838, 55297, 56320, 120, 160, 12288, 48, 56280, 56723).concat(s(962, 55296, 75, 160, 223, 56154, 57192, 56930, 37982)))).compareToIgnoreCase(s(74, 42).toUpperCase(Locale.ROOT).concat(s(107, 0, 83, 50592).toLowerCase(Locale.ROOT))))",
+      "jdk": "117",
+      "kaji": "7732"
+    },
+    {
+      "lote": 7,
+      "k": 186,
+      "tipo": "otro valor",
+      "vista": "compareToIgnoreCase",
+      "ops": [
+        "compareToIgnoreCase",
+        "stripLeading"
+      ],
+      "java": "String.valueOf(s(55297, 56360).compareToIgnoreCase(s(53, 0, 10, 54065).stripLeading()))",
+      "jdk": "66547",
+      "kaji": "55244"
+    },
+    {
+      "lote": 8,
+      "k": 118,
+      "tipo": "otro valor",
+      "vista": "compareToIgnoreCase",
+      "ops": [
+        "compareToIgnoreCase",
+        "strip"
+      ],
+      "java": "String.valueOf(s(12288, 106, 50, 0, 90, 963, 95).compareToIgnoreCase(s(55297, 56360).strip()))",
+      "jdk": "-54312",
+      "kaji": "-43009"
+    },
+    {
+      "lote": 8,
+      "k": 186,
+      "tipo": "otro valor",
+      "vista": "enc",
+      "ops": [
+        "toLowerCase"
+      ],
+      "java": "enc(s(111, 931, 12288, 86, 98, 769, 55297, 56360).toLowerCase(Locale.ROOT))",
+      "jdk": "[111,962,12288,118,98,769,55297,56360]",
+      "kaji": "[111,963,12288,118,98,769,55297,56360]"
+    },
+    {
+      "lote": 9,
+      "k": 130,
+      "tipo": "otro valor",
+      "vista": "compareToIgnoreCase",
+      "ops": [
+        "compareToIgnoreCase",
+        "strip",
+        "stripLeading",
+        "trim"
+      ],
+      "java": "String.valueOf(s(304, 121, 95, 55296, 82, 43, 105, 223).strip().stripLeading().trim().compareToIgnoreCase(s(40155)))",
+      "jdk": "-40050",
+      "kaji": "-39851"
+    },
+    {
+      "lote": 10,
+      "k": 57,
+      "tipo": "otro valor",
+      "vista": "compareToIgnoreCase",
+      "ops": [
+        "compareToIgnoreCase",
+        "replace"
+      ],
+      "java": "String.valueOf(s(78, 67, 34, 56052, 57089, 55297, 56320, 65).replace((char) 97, (char) 65).compareToIgnoreCase(s(55297, 56360, 47)))",
+      "jdk": "-66490",
+      "kaji": "-55187"
+    },
+    {
+      "lote": 11,
+      "k": 24,
+      "tipo": "otro valor",
+      "vista": "compareToIgnoreCase",
+      "ops": [
+        "compareToIgnoreCase",
+        "concat",
+        "replace",
+        "trim"
+      ],
+      "java": "String.valueOf(s(55798, 57050, 71, 55357, 56832, 56175, 56920, 109, 27553, 97).concat(s()).trim().concat(s(40486)).compareToIgnoreCase(s(123, 15965).replace(s().concat(s()), s(34, 4665, 57160, 55955, 56943, 52989, 963))))",
+      "jdk": "580280",
+      "kaji": "55764"
+    },
+    {
+      "lote": 11,
+      "k": 125,
+      "tipo": "otro valor",
+      "vista": "compareToIgnoreCase",
+      "ops": [
+        "compareToIgnoreCase",
+        "substring"
+      ],
+      "java": "String.valueOf(s(55296).compareToIgnoreCase(s(48, 7838, 305, 304, 963, 963, 160, 67, 65535).substring(3)))",
+      "jdk": "55191",
+      "kaji": "54992"
+    },
+    {
+      "lote": 12,
+      "k": 32,
+      "tipo": "otro valor",
+      "vista": "compareToIgnoreCase",
+      "ops": [
+        "compareToIgnoreCase",
+        "repeat",
+        "replace",
+        "stripLeading"
+      ],
+      "java": "String.valueOf(s(65, 1038, 13741, 59792).replace(s(962, 10, 769, 9, 79), s(70, 33623, 931, 87, 66, 56016, 57069)).repeat(100).stripLeading().compareToIgnoreCase(s(962, 56320)))",
+      "jdk": "-866",
+      "kaji": "-865"
+    },
+    {
+      "lote": 12,
+      "k": 41,
+      "tipo": "otro valor",
+      "vista": "compareToIgnoreCase",
+      "ops": [
+        "compareToIgnoreCase",
+        "concat",
+        "replace",
+        "stripTrailing"
+      ],
+      "java": "String.valueOf(s(8486, 52).stripTrailing().concat(s(104, 48, 12288, 88, 8195, 99)).replace(s(304, 90, 55, 55297, 56320, 55714, 57269), s(55612, 56562, 33)).compareToIgnoreCase(s(1341, 48)))",
+      "jdk": "-420",
+      "kaji": "7145"
+    },
+    {
+      "lote": 12,
+      "k": 187,
+      "tipo": "otro valor",
+      "vista": "compareToIgnoreCase",
+      "ops": [
+        "compareToIgnoreCase",
+        "toUpperCase"
+      ],
+      "java": "String.valueOf(s(160, 96, 65279, 111, 121, 55296, 55357, 56832, 20189, 55357, 56832).compareToIgnoreCase(s(55297, 56320).toUpperCase(Locale.ROOT)))",
+      "jdk": "-66440",
+      "kaji": "-55137"
+    },
+    {
+      "lote": 13,
+      "k": 17,
+      "tipo": "otro valor",
+      "vista": "compareToIgnoreCase",
+      "ops": [
+        "compareToIgnoreCase",
+        "replace",
+        "toLowerCase",
+        "toUpperCase"
+      ],
+      "java": "String.valueOf(s(453, 36457, 931, 0, 97, 96, 99, 111, 55296).toUpperCase(Locale.ROOT).compareToIgnoreCase(s(55789, 56975, 111).replace((char) 32, (char) 97).toLowerCase(Locale.ROOT)))",
+      "jdk": "-570569",
+      "kaji": "-55337"
+    },
+    {
+      "lote": 13,
+      "k": 142,
+      "tipo": "otro valor",
+      "vista": "compareToIgnoreCase",
+      "ops": [
+        "compareToIgnoreCase",
+        "concat"
+      ],
+      "java": "String.valueOf(s(32).concat(s(45612, 56202, 56873, 65535, 12288, 113, 64)).compareToIgnoreCase(s(55839, 56688, 44535, 55296, 233, 453, 36)))",
+      "jdk": "-621904",
+      "kaji": "-55807"
+    },
+    {
+      "lote": 14,
+      "k": 81,
+      "tipo": "otro valor",
+      "vista": "compareToIgnoreCase",
+      "ops": [
+        "compareToIgnoreCase",
+        "repeat",
+        "strip",
+        "toUpperCase"
+      ],
+      "java": "String.valueOf(s(64, 55783, 56990, 8486, 55993, 57165).toUpperCase(Locale.ROOT).strip().compareToIgnoreCase(s(8486, 769, 453).repeat(5)))",
+      "jdk": "-905",
+      "kaji": "-8422"
+    },
+    {
+      "lote": 14,
+      "k": 148,
+      "tipo": "otro valor",
+      "vista": "compareToIgnoreCase",
+      "ops": [
+        "compareToIgnoreCase",
+        "concat",
+        "substring"
+      ],
+      "java": "String.valueOf(s(94, 304).compareToIgnoreCase(s(56311, 56762, 160, 55908, 56359, 90, 7838, 102).concat(s(74, 116, 98).substring(0, 2))))",
+      "jdk": "-1105244",
+      "kaji": "-56217"
+    },
+    {
+      "lote": 15,
+      "k": 12,
+      "tipo": "otro valor",
+      "vista": "compareToIgnoreCase",
+      "ops": [
+        "compareToIgnoreCase",
+        "stripTrailing",
+        "substring"
+      ],
+      "java": "String.valueOf(s(56071, 56718, 89, 769, 65279, 55297, 56320).substring(0).stripTrailing().stripTrailing().compareToIgnoreCase(s(56320, 223, 48, 50034)))",
+      "jdk": "803214",
+      "kaji": "-249"
+    },
+    {
+      "lote": 17,
+      "k": 5,
+      "tipo": "otro valor",
+      "vista": "compareToIgnoreCase",
+      "ops": [
+        "compareToIgnoreCase"
+      ],
+      "java": "String.valueOf(s(56084, 33, 126, 65279, 35983).compareToIgnoreCase(s(55297, 56320)))",
+      "jdk": "-10516",
+      "kaji": "787"
+    },
+    {
+      "lote": 17,
+      "k": 110,
+      "tipo": "otro valor",
+      "vista": "compareToIgnoreCase",
+      "ops": [
+        "compareToIgnoreCase"
+      ],
+      "java": "String.valueOf(s(304, 233, 91, 122, 160, 55568, 56870).compareToIgnoreCase(s(9, 931, 42538, 17208, 123, 28317, 233, 55357, 56832)))",
+      "jdk": "96",
+      "kaji": "295"
+    },
+    {
+      "lote": 18,
+      "k": 177,
+      "tipo": "otro valor",
+      "vista": "compareToIgnoreCase",
+      "ops": [
+        "compareToIgnoreCase",
+        "concat",
+        "strip"
+      ],
+      "java": "String.valueOf(s(126, 97, 769).strip().compareToIgnoreCase(s(56166, 57023, 931, 13549, 223, 0, 64259, 47).concat(s(124, 16589, 48, 115, 55297, 56360))))",
+      "jdk": "-956993",
+      "kaji": "-56040"
+    },
+    {
+      "lote": 19,
+      "k": 119,
+      "tipo": "otro valor",
+      "vista": "enc",
+      "ops": [
+        "concat",
+        "toLowerCase",
+        "trim"
+      ],
+      "java": "enc(s(65).concat(s(65535, 32, 56320, 49764, 124, 32, 122, 41045, 931)).trim().toLowerCase(Locale.ROOT))",
+      "jdk": "[97,65535,32,56320,49764,124,32,122,41045,962]",
+      "kaji": "[97,65535,32,56320,49764,124,32,122,41045,963]"
+    }
+  ],
+  "reducidas": [
+    {
+      "divergencia": 0,
+      "tipo": "otro valor",
+      "original": "String.valueOf(s(60, 114, 61, 65535, 769, 55961, 56382, 962).indexOf(-1))",
+      "original_jdk": "-1",
+      "original_kaji": "3",
+      "minimo": "String.valueOf(s(65535).indexOf(-1))",
+      "minimo_jdk": "-1",
+      "minimo_kaji": "0",
+      "pasos": [
+        {
+          "java": "String.valueOf(s(60, 114, 61, 65535).indexOf(-1))",
+          "jdk": "-1",
+          "ours": "3"
+        },
+        {
+          "java": "String.valueOf(s(61, 65535).indexOf(-1))",
+          "jdk": "-1",
+          "ours": "1"
+        },
+        {
+          "java": "String.valueOf(s(65535).indexOf(-1))",
+          "jdk": "-1",
+          "ours": "0"
+        }
+      ],
+      "segundos": 4.9
+    },
+    {
+      "divergencia": 1,
+      "tipo": "otro valor",
+      "original": "String.valueOf(s(81, 108, 55758, 56522, 32460, 233, 45, 108, 32).concat(s(90, 931, 7838, 53250, 55, 32, 47, 55305, 57049, 931).repeat(5)).replace(s(65).trim(), s(97, 46, 12288, 84, 65, 47).strip()).compareToIgnoreCase(s(305, 14974, 126, 46, 82, 79, 55357, 56832, 48, 931).stripLeading().trim()))",
+      "original_jdk": "8",
+      "original_kaji": "-192",
+      "minimo": "String.valueOf(s(65).compareToIgnoreCase(s(305)))",
+      "minimo_jdk": "-8",
+      "minimo_kaji": "-208",
+      "pasos": [
+        {
+          "java": "String.valueOf(s(65).trim().compareToIgnoreCase(s(305, 14974, 126, 46, 82, 79, 55357, 56832, 48, 931).stripLeading().trim()))",
+          "jdk": "-8",
+          "ours": "-208"
+        },
+        {
+          "java": "String.valueOf(s(65).trim().compareToIgnoreCase(s(305, 14974, 126, 46, 82, 79, 55357, 56832, 48, 931).trim()))",
+          "jdk": "-8",
+          "ours": "-208"
+        },
+        {
+          "java": "String.valueOf(s(65).trim().compareToIgnoreCase(s(305, 14974, 126, 46, 82, 79, 55357, 56832, 48, 931)))",
+          "jdk": "-8",
+          "ours": "-208"
+        },
+        {
+          "java": "String.valueOf(s(65).compareToIgnoreCase(s(305, 14974, 126, 46, 82, 79, 55357, 56832, 48, 931)))",
+          "jdk": "-8",
+          "ours": "-208"
+        },
+        {
+          "java": "String.valueOf(s(65).compareToIgnoreCase(s(305, 14974, 126, 46, 82)))",
+          "jdk": "-8",
+          "ours": "-208"
+        },
+        {
+          "java": "String.valueOf(s(65).compareToIgnoreCase(s(305, 14974)))",
+          "jdk": "-8",
+          "ours": "-208"
+        },
+        {
+          "java": "String.valueOf(s(65).compareToIgnoreCase(s(305)))",
+          "jdk": "-8",
+          "ours": "-208"
+        }
+      ],
+      "segundos": 9.2
+    },
+    {
+      "divergencia": 2,
+      "tipo": "otro valor",
+      "original": "String.valueOf(s(55844, 57104, 70, 55297, 56360).toUpperCase(Locale.ROOT).compareToIgnoreCase(s(223, 90, 59659, 55860, 57329, 55297, 56320, 122, 4504, 79, 44, 962).concat(s().toUpperCase(Locale.ROOT))))",
+      "original_jdk": "627249",
+      "original_kaji": "55621",
+      "minimo": "String.valueOf(s(55844).compareToIgnoreCase(s(962)))",
+      "minimo_jdk": "54881",
+      "minimo_kaji": "54882",
+      "pasos": [
+        {
+          "java": "String.valueOf(s(55844, 57104, 70, 55297, 56360).toUpperCase(Locale.ROOT).compareToIgnoreCase(s(223, 90, 59659, 55860, 57329, 55297, 56320, 122, 4504, 79, 44, 962)))",
+          "jdk": "627249",
+          "ours": "55621"
+        },
+        {
+          "java": "String.valueOf(s(55844, 57104, 70, 55297, 56360).compareToIgnoreCase(s(223, 90, 59659, 55860, 57329, 55297, 56320, 122, 4504, 79, 44, 962)))",
+          "jdk": "627249",
+          "ours": "55621"
+        },
+        {
+          "java": "String.valueOf(s(55844, 57104, 70, 55297, 56360).compareToIgnoreCase(s(56320, 122, 4504, 79, 44, 962)))",
+          "jdk": "571152",
+          "ours": "-476"
+        },
+        {
+          "java": "String.valueOf(s(55844, 57104, 70, 55297, 56360).compareToIgnoreCase(s(79, 44, 962)))",
+          "jdk": "627361",
+          "ours": "55733"
+        },
+        {
+          "java": "String.valueOf(s(55844, 57104).compareToIgnoreCase(s(79, 44, 962)))",
+          "jdk": "627361",
+          "ours": "55733"
+        },
+        {
+          "java": "String.valueOf(s(55844, 57104).compareToIgnoreCase(s(79, 962)))",
+          "jdk": "627361",
+          "ours": "55733"
+        },
+        {
+          "java": "String.valueOf(s(55844, 57104).compareToIgnoreCase(s(962)))",
+          "jdk": "626509",
+          "ours": "54882"
+        },
+        {
+          "java": "String.valueOf(s(55844).compareToIgnoreCase(s(962)))",
+          "jdk": "54881",
+          "ours": "54882"
+        }
+      ],
+      "segundos": 9.8
+    },
+    {
+      "divergencia": 3,
+      "tipo": "otro valor",
+      "original": "String.valueOf(s(305, 118, 56320, 97, 59073, 0, 32, 64259, 103, 160).toLowerCase(Locale.ROOT).concat(s(233, 55806, 56905, 12288, 48389, 37, 65, 41).replace(s(112, 36, 83, 117, 9, 9, 62, 111), s(931, 122, 85, 90, 97, 116, 48, 0, 52))).replace((char) 223, (char) 97).compareToIgnoreCase(s(7938)))",
+      "original_jdk": "-7833",
+      "original_kaji": "-7633",
+      "minimo": "String.valueOf(s(305).compareToIgnoreCase(s(7938)))",
+      "minimo_jdk": "-7833",
+      "minimo_kaji": "-7633",
+      "pasos": [
+        {
+          "java": "String.valueOf(s(305, 118, 56320, 97, 59073, 0, 32, 64259, 103, 160).toLowerCase(Locale.ROOT).replace((char) 223, (char) 97).compareToIgnoreCase(s(7938)))",
+          "jdk": "-7833",
+          "ours": "-7633"
+        },
+        {
+          "java": "String.valueOf(s(305, 118, 56320, 97, 59073, 0, 32, 64259, 103, 160).toLowerCase(Locale.ROOT).compareToIgnoreCase(s(7938)))",
+          "jdk": "-7833",
+          "ours": "-7633"
+        },
+        {
+          "java": "String.valueOf(s(305, 118, 56320, 97, 59073, 0, 32, 64259, 103, 160).compareToIgnoreCase(s(7938)))",
+          "jdk": "-7833",
+          "ours": "-7633"
+        },
+        {
+          "java": "String.valueOf(s(305, 118, 56320, 97, 59073).compareToIgnoreCase(s(7938)))",
+          "jdk": "-7833",
+          "ours": "-7633"
+        },
+        {
+          "java": "String.valueOf(s(305, 118).compareToIgnoreCase(s(7938)))",
+          "jdk": "-7833",
+          "ours": "-7633"
+        },
+        {
+          "java": "String.valueOf(s(305).compareToIgnoreCase(s(7938)))",
+          "jdk": "-7833",
+          "ours": "-7633"
+        }
+      ],
+      "segundos": 8.2
+    },
+    {
+      "divergencia": 4,
+      "tipo": "otro valor",
+      "original": "String.valueOf(s(71, 46, 8486, 8486, 33513, 931, 95, 45).substring(5).replace((char) 65, (char) 223).toLowerCase(Locale.ROOT).compareToIgnoreCase(s(55854, 56574, 963, 931, 53, 8195, 108)))",
+      "original_jdk": "-636219",
+      "original_kaji": "-54891",
+      "minimo": "String.valueOf(s(33513).compareToIgnoreCase(s(55854, 56574)))",
+      "minimo_jdk": "-603669",
+      "minimo_kaji": "-22341",
+      "pasos": [
+        {
+          "java": "String.valueOf(s(71, 46, 8486, 8486, 33513, 931, 95, 45).substring(5).toLowerCase(Locale.ROOT).compareToIgnoreCase(s(55854, 56574, 963, 931, 53, 8195, 108)))",
+          "jdk": "-636219",
+          "ours": "-54891"
+        },
+        {
+          "java": "String.valueOf(s(71, 46, 8486, 8486, 33513, 931, 95, 45).toLowerCase(Locale.ROOT).compareToIgnoreCase(s(55854, 56574, 963, 931, 53, 8195, 108)))",
+          "jdk": "-637079",
+          "ours": "-55751"
+        },
+        {
+          "java": "String.valueOf(s(71, 46, 8486, 8486, 33513, 931, 95, 45).compareToIgnoreCase(s(55854, 56574, 963, 931, 53, 8195, 108)))",
+          "jdk": "-637079",
+          "ours": "-55751"
+        },
+        {
+          "java": "String.valueOf(s(71, 46, 8486, 8486, 33513, 931, 95, 45).compareToIgnoreCase(s(55854, 56574, 963)))",
+          "jdk": "-637079",
+          "ours": "-55751"
+        },
+        {
+          "java": "String.valueOf(s(33513, 931, 95, 45).compareToIgnoreCase(s(55854, 56574, 963)))",
+          "jdk": "-603669",
+          "ours": "-22341"
+        },
+        {
+          "java": "String.valueOf(s(33513, 931).compareToIgnoreCase(s(55854, 56574, 963)))",
+          "jdk": "-603669",
+          "ours": "-22341"
+        },
+        {
+          "java": "String.valueOf(s(33513).compareToIgnoreCase(s(55854, 56574, 963)))",
+          "jdk": "-603669",
+          "ours": "-22341"
+        },
+        {
+          "java": "String.valueOf(s(33513).compareToIgnoreCase(s(55854, 56574)))",
+          "jdk": "-603669",
+          "ours": "-22341"
+        }
+      ],
+      "segundos": 9.8
+    },
+    {
+      "divergencia": 5,
+      "tipo": "otro valor",
+      "original": "String.valueOf(s(21713).compareToIgnoreCase(s(56268, 57330, 305, 963, 65406, 92, 59, 305).concat(s(9, 56320, 8721, 453)).replace((char) 55296, (char) 769)))",
+      "original_jdk": "-1040161",
+      "original_kaji": "-34555",
+      "minimo": "String.valueOf(s(21713).compareToIgnoreCase(s(56268, 57330)))",
+      "minimo_jdk": "-1040161",
+      "minimo_kaji": "-34555",
+      "pasos": [
+        {
+          "java": "String.valueOf(s(21713).compareToIgnoreCase(s(56268, 57330, 305, 963, 65406, 92, 59, 305).concat(s(9, 56320, 8721, 453))))",
+          "jdk": "-1040161",
+          "ours": "-34555"
+        },
+        {
+          "java": "String.valueOf(s(21713).compareToIgnoreCase(s(56268, 57330, 305, 963, 65406, 92, 59, 305)))",
+          "jdk": "-1040161",
+          "ours": "-34555"
+        },
+        {
+          "java": "String.valueOf(s(21713).compareToIgnoreCase(s(56268, 57330, 305, 963)))",
+          "jdk": "-1040161",
+          "ours": "-34555"
+        },
+        {
+          "java": "String.valueOf(s(21713).compareToIgnoreCase(s(56268, 57330)))",
+          "jdk": "-1040161",
+          "ours": "-34555"
+        }
+      ],
+      "segundos": 5.8
+    },
+    {
+      "divergencia": 11,
+      "tipo": "otro valor",
+      "original": "String.valueOf(s(18963).replace((char) 55296, (char) 223).indexOf(s().repeat(0), 2))",
+      "original_jdk": "1",
+      "original_kaji": "-1",
+      "minimo": "String.valueOf(s().indexOf(s(), 1))",
+      "minimo_jdk": "0",
+      "minimo_kaji": "-1",
+      "pasos": [
+        {
+          "java": "String.valueOf(s(18963).indexOf(s().repeat(0), 2))",
+          "jdk": "1",
+          "ours": "-1"
+        },
+        {
+          "java": "String.valueOf(s(18963).indexOf(s(), 2))",
+          "jdk": "1",
+          "ours": "-1"
+        },
+        {
+          "java": "String.valueOf(s().indexOf(s(), 2))",
+          "jdk": "0",
+          "ours": "-1"
+        },
+        {
+          "java": "String.valueOf(s().indexOf(s(), 1))",
+          "jdk": "0",
+          "ours": "-1"
+        }
+      ],
+      "segundos": 5.5
+    },
+    {
+      "divergencia": 12,
+      "tipo": "otro valor",
+      "original": "String.valueOf(s(7838, 35351, 65279, 26185).concat(s(90).replace(s(86, 12288, 94), s(68, 55296, 7838, 55297, 56320, 120, 160, 12288, 48, 56280, 56723).concat(s(962, 55296, 75, 160, 223, 56154, 57192, 56930, 37982)))).compareToIgnoreCase(s(74, 42).toUpperCase(Locale.ROOT).concat(s(107, 0, 83, 50592).toLowerCase(Locale.ROOT))))",
+      "original_jdk": "117",
+      "original_kaji": "7732",
+      "minimo": "String.valueOf(s(7838).compareToIgnoreCase(s(74)))",
+      "minimo_jdk": "117",
+      "minimo_kaji": "7732",
+      "pasos": [
+        {
+          "java": "String.valueOf(s(7838, 35351, 65279, 26185).compareToIgnoreCase(s(74, 42).toUpperCase(Locale.ROOT).concat(s(107, 0, 83, 50592).toLowerCase(Locale.ROOT))))",
+          "jdk": "117",
+          "ours": "7732"
+        },
+        {
+          "java": "String.valueOf(s(7838, 35351, 65279, 26185).compareToIgnoreCase(s(74, 42).toUpperCase(Locale.ROOT)))",
+          "jdk": "117",
+          "ours": "7732"
+        },
+        {
+          "java": "String.valueOf(s(7838, 35351, 65279, 26185).compareToIgnoreCase(s(74, 42)))",
+          "jdk": "117",
+          "ours": "7732"
+        },
+        {
+          "java": "String.valueOf(s(7838, 35351).compareToIgnoreCase(s(74, 42)))",
+          "jdk": "117",
+          "ours": "7732"
+        },
+        {
+          "java": "String.valueOf(s(7838, 35351).compareToIgnoreCase(s(74)))",
+          "jdk": "117",
+          "ours": "7732"
+        },
+        {
+          "java": "String.valueOf(s(7838).compareToIgnoreCase(s(74)))",
+          "jdk": "117",
+          "ours": "7732"
+        }
+      ],
+      "segundos": 8.1
+    }
+  ]
+}

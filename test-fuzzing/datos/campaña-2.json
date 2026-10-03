@@ -1,0 +1,549 @@
+{
+  "estado": "terminada",
+  "meta": {
+    "fecha": "2026-09-21T14:31:44",
+    "referencia": "Oracle Corporation 25.0.1",
+    "referencia_ruta": "C:/Program Files/Java/jdk-25",
+    "bajo_prueba": "KajiJDK (run-headless) con KajiLibrary",
+    "binario_kaji_fecha": "2026-09-21T14:31:21",
+    "semilla": 2,
+    "lotes": 6,
+    "por_lote": 120
+  },
+  "stats": {
+    "expresiones": 720,
+    "coinciden": 705,
+    "divergen": 15,
+    "por_tipo": {
+      "otro valor": 15
+    },
+    "por_vista": {
+      "getLowestSetBit": 4,
+      "testBit": 5,
+      "signum": 1,
+      "bitCount": 1,
+      "parse": 1,
+      "str": 2,
+      "divRem": 1
+    },
+    "ops_total": {
+      "abs": 102,
+      "add": 56,
+      "and": 54,
+      "modPow": 124,
+      "negate": 83,
+      "shiftRight": 86,
+      "divide": 57,
+      "or": 63,
+      "shiftLeft": 73,
+      "xor": 58,
+      "flipBit": 75,
+      "not": 79,
+      "max": 43,
+      "andNot": 61,
+      "clearBit": 67,
+      "subtract": 50,
+      "remainder": 64,
+      "setBit": 79,
+      "sqrt": 90,
+      "mod": 63,
+      "pow": 74,
+      "gcd": 52,
+      "min": 58,
+      "modInverse": 45,
+      "multiply": 53
+    },
+    "ops_divergentes": {
+      "flipBit": 3,
+      "not": 5,
+      "shiftRight": 10,
+      "add": 1,
+      "setBit": 1,
+      "min": 3,
+      "shiftLeft": 3,
+      "negate": 1,
+      "clearBit": 1,
+      "max": 1,
+      "or": 3,
+      "remainder": 1,
+      "modPow": 1,
+      "multiply": 2,
+      "abs": 1,
+      "subtract": 1,
+      "xor": 1
+    },
+    "segundos_jdk": 0.5,
+    "segundos_kaji": 130.5,
+    "segundos_total": 167.6
+  },
+  "lotes": [
+    {
+      "lote": 0,
+      "salida_kaji": 0,
+      "stderr_kaji": "",
+      "segundos_jdk": 0.07,
+      "segundos_kaji": 21.49
+    },
+    {
+      "lote": 1,
+      "salida_kaji": 0,
+      "stderr_kaji": "",
+      "segundos_jdk": 0.07,
+      "segundos_kaji": 6.45
+    },
+    {
+      "lote": 2,
+      "salida_kaji": 0,
+      "stderr_kaji": "",
+      "segundos_jdk": 0.08,
+      "segundos_kaji": 9.72
+    },
+    {
+      "lote": 3,
+      "salida_kaji": 0,
+      "stderr_kaji": "",
+      "segundos_jdk": 0.08,
+      "segundos_kaji": 53.79
+    },
+    {
+      "lote": 4,
+      "salida_kaji": 0,
+      "stderr_kaji": "",
+      "segundos_jdk": 0.08,
+      "segundos_kaji": 13.06
+    },
+    {
+      "lote": 5,
+      "salida_kaji": 0,
+      "stderr_kaji": "",
+      "segundos_jdk": 0.07,
+      "segundos_kaji": 25.95
+    }
+  ],
+  "divergencias": [
+    {
+      "lote": 0,
+      "k": 3,
+      "tipo": "otro valor",
+      "vista": "getLowestSetBit",
+      "ops": [
+        "flipBit",
+        "not",
+        "shiftRight"
+      ],
+      "java": "String.valueOf(new BigInteger(\"21528261102463572841286158384227365927\").flipBit(0).not().shiftRight(100).getLowestSetBit())",
+      "jdk": "2",
+      "kaji": "0"
+    },
+    {
+      "lote": 0,
+      "k": 98,
+      "tipo": "otro valor",
+      "vista": "testBit",
+      "ops": [
+        "add",
+        "setBit",
+        "shiftRight"
+      ],
+      "java": "String.valueOf(new BigInteger(\"8009068261830190868044582681250\").shiftRight(65).add(new BigInteger(\"-21794443159237\")).setBit(32).testBit(1))",
+      "jdk": "false",
+      "kaji": "true"
+    },
+    {
+      "lote": 1,
+      "k": 74,
+      "tipo": "otro valor",
+      "vista": "getLowestSetBit",
+      "ops": [
+        "min",
+        "not",
+        "shiftLeft"
+      ],
+      "java": "String.valueOf(new BigInteger(\"9223372036854775808\").min(new BigInteger(\"255\").not().shiftLeft(-33)).getLowestSetBit())",
+      "jdk": "0",
+      "kaji": "-1"
+    },
+    {
+      "lote": 1,
+      "k": 115,
+      "tipo": "otro valor",
+      "vista": "testBit",
+      "ops": [
+        "negate",
+        "not",
+        "shiftRight"
+      ],
+      "java": "String.valueOf(new BigInteger(\"-4294967296\").negate().not().shiftRight(63).testBit(32))",
+      "jdk": "true",
+      "kaji": "false"
+    },
+    {
+      "lote": 2,
+      "k": 4,
+      "tipo": "otro valor",
+      "vista": "testBit",
+      "ops": [],
+      "java": "String.valueOf(new BigInteger(\"-98765432109876543210987654321\").testBit(1))",
+      "jdk": "true",
+      "kaji": "false"
+    },
+    {
+      "lote": 2,
+      "k": 68,
+      "tipo": "otro valor",
+      "vista": "getLowestSetBit",
+      "ops": [
+        "shiftRight"
+      ],
+      "java": "String.valueOf(new BigInteger(\"-558416623161882816027201955062984835034852357968\").shiftRight(64).getLowestSetBit())",
+      "jdk": "1",
+      "kaji": "0"
+    },
+    {
+      "lote": 2,
+      "k": 113,
+      "tipo": "otro valor",
+      "vista": "signum",
+      "ops": [
+        "shiftRight"
+      ],
+      "java": "String.valueOf(new BigInteger(\"-2\").shiftRight(64).signum())",
+      "jdk": "-1",
+      "kaji": "0"
+    },
+    {
+      "lote": 3,
+      "k": 25,
+      "tipo": "otro valor",
+      "vista": "testBit",
+      "ops": [
+        "clearBit",
+        "max",
+        "or",
+        "remainder"
+      ],
+      "java": "String.valueOf(new BigInteger(\"-6414624081729431153887676016713142\").remainder(new BigInteger(\"484383311876773594974263836697502548734376724288198984382097\").max(new BigInteger(\"-2147483648\"))).or(new BigInteger(\"321322014539429643059265363205383937688087108924644124799293\").clearBit(64)).testBit(63))",
+      "jdk": "true",
+      "kaji": "false"
+    },
+    {
+      "lote": 3,
+      "k": 46,
+      "tipo": "otro valor",
+      "vista": "bitCount",
+      "ops": [
+        "flipBit",
+        "min",
+        "or",
+        "shiftRight"
+      ],
+      "java": "String.valueOf(new BigInteger(\"-1\").shiftRight(63).or(new BigInteger(\"69028137122597559128061542361286963549630945245783\").min(new BigInteger(\"-256\"))).flipBit(31).bitCount())",
+      "jdk": "1",
+      "kaji": "9"
+    },
+    {
+      "lote": 3,
+      "k": 112,
+      "tipo": "otro valor",
+      "vista": "parse",
+      "ops": [
+        "shiftRight"
+      ],
+      "java": "new BigInteger(new BigInteger(\"-1\").shiftRight(1).toString(10), 10).toString()",
+      "jdk": "-1",
+      "kaji": "0"
+    },
+    {
+      "lote": 4,
+      "k": 49,
+      "tipo": "otro valor",
+      "vista": "testBit",
+      "ops": [
+        "min",
+        "modPow",
+        "multiply",
+        "not"
+      ],
+      "java": "String.valueOf(new BigInteger(\"8440\").not().modPow(new BigInteger(\"-501209700072071561190274306\").min(new BigInteger(\"-2147483648\")), new BigInteger(\"-8198845097758369392\").not()).multiply(new BigInteger(\"-91009306653788248401223372278911097\")).testBit(32))",
+      "jdk": "true",
+      "kaji": "false"
+    },
+    {
+      "lote": 4,
+      "k": 70,
+      "tipo": "otro valor",
+      "vista": "str",
+      "ops": [
+        "multiply",
+        "or",
+        "shiftLeft"
+      ],
+      "java": "new BigInteger(\"7942009251008921722181226540296756420204545357279438982\").multiply(new BigInteger(\"-2147483648\")).or(new BigInteger(\"93964570861897137990194796432808165109392490771291682267\")).shiftLeft(-33).toString()",
+      "jdk": "-1985502303285215602031130205716996435635272822466683394",
+      "kaji": "-1985502303285215602031130205716996435635272822466683393"
+    },
+    {
+      "lote": 4,
+      "k": 71,
+      "tipo": "otro valor",
+      "vista": "divRem",
+      "ops": [
+        "flipBit",
+        "shiftLeft",
+        "shiftRight"
+      ],
+      "java": "java.util.Arrays.toString(new BigInteger(\"-571124574224681970949040472271857\").shiftLeft(-33).shiftRight(33).flipBit(100).divideAndRemainder(new BigInteger(\"340282366920938463463374607431768211456\")))",
+      "jdk": "[0, -1267650600228229409236884507055]",
+      "kaji": "[0, -1267650600228229409236884507054]"
+    },
+    {
+      "lote": 5,
+      "k": 60,
+      "tipo": "otro valor",
+      "vista": "getLowestSetBit",
+      "ops": [
+        "abs",
+        "shiftRight",
+        "subtract",
+        "xor"
+      ],
+      "java": "String.valueOf(new BigInteger(\"17167527967870808787400729348089252257\").abs().xor(new BigInteger(\"1853108762148\").subtract(new BigInteger(\"-72155635555969477762285217739482199175596186717\").shiftRight(100))).getLowestSetBit())",
+      "jdk": "0",
+      "kaji": "1"
+    },
+    {
+      "lote": 5,
+      "k": 104,
+      "tipo": "otro valor",
+      "vista": "str",
+      "ops": [
+        "not",
+        "shiftRight"
+      ],
+      "java": "new BigInteger(\"-304397965490698572934088283\").shiftRight(32).not().toString()",
+      "jdk": "70873174232127743",
+      "kaji": "70873174232127742"
+    }
+  ],
+  "reducidas": [
+    {
+      "divergencia": 0,
+      "tipo": "otro valor",
+      "original": "String.valueOf(new BigInteger(\"21528261102463572841286158384227365927\").flipBit(0).not().shiftRight(100).getLowestSetBit())",
+      "original_jdk": "2",
+      "original_kaji": "0",
+      "minimo": "new BigInteger(\"2\").not().shiftRight(1).toString()",
+      "minimo_jdk": "-2",
+      "minimo_kaji": "-1",
+      "pasos": [
+        {
+          "java": "String.valueOf(new BigInteger(\"21528261102463572841286158384227365927\").not().shiftRight(100).getLowestSetBit())",
+          "jdk": "2",
+          "ours": "0"
+        },
+        {
+          "java": "new BigInteger(\"21528261102463572841286158384227365927\").not().shiftRight(100).toString()",
+          "jdk": "-16982804",
+          "ours": "-16982803"
+        },
+        {
+          "java": "new BigInteger(\"2\").not().shiftRight(100).toString()",
+          "jdk": "-1",
+          "ours": "0"
+        },
+        {
+          "java": "new BigInteger(\"2\").not().shiftRight(1).toString()",
+          "jdk": "-2",
+          "ours": "-1"
+        }
+      ],
+      "segundos": 4.6
+    },
+    {
+      "divergencia": 1,
+      "tipo": "otro valor",
+      "original": "String.valueOf(new BigInteger(\"8009068261830190868044582681250\").shiftRight(65).add(new BigInteger(\"-21794443159237\")).setBit(32).testBit(1))",
+      "original_jdk": "false",
+      "original_kaji": "true",
+      "minimo": "String.valueOf(new BigInteger(\"-1\").testBit(1))",
+      "minimo_jdk": "true",
+      "minimo_kaji": "false",
+      "pasos": [
+        {
+          "java": "String.valueOf(new BigInteger(\"-21794443159237\").setBit(32).testBit(1))",
+          "jdk": "true",
+          "ours": "false"
+        },
+        {
+          "java": "String.valueOf(new BigInteger(\"-21794443159237\").testBit(1))",
+          "jdk": "true",
+          "ours": "false"
+        },
+        {
+          "java": "String.valueOf(new BigInteger(\"-1\").testBit(1))",
+          "jdk": "true",
+          "ours": "false"
+        }
+      ],
+      "segundos": 3.9
+    },
+    {
+      "divergencia": 2,
+      "tipo": "otro valor",
+      "original": "String.valueOf(new BigInteger(\"9223372036854775808\").min(new BigInteger(\"255\").not().shiftLeft(-33)).getLowestSetBit())",
+      "original_jdk": "0",
+      "original_kaji": "-1",
+      "minimo": "new BigInteger(\"1\").not().shiftLeft(-33).toString()",
+      "minimo_jdk": "-1",
+      "minimo_kaji": "0",
+      "pasos": [
+        {
+          "java": "String.valueOf(new BigInteger(\"255\").not().shiftLeft(-33).getLowestSetBit())",
+          "jdk": "0",
+          "ours": "-1"
+        },
+        {
+          "java": "new BigInteger(\"255\").not().shiftLeft(-33).toString()",
+          "jdk": "-1",
+          "ours": "0"
+        },
+        {
+          "java": "new BigInteger(\"1\").not().shiftLeft(-33).toString()",
+          "jdk": "-1",
+          "ours": "0"
+        }
+      ],
+      "segundos": 3.8
+    },
+    {
+      "divergencia": 3,
+      "tipo": "otro valor",
+      "original": "String.valueOf(new BigInteger(\"-4294967296\").negate().not().shiftRight(63).testBit(32))",
+      "original_jdk": "true",
+      "original_kaji": "false",
+      "minimo": "String.valueOf(new BigInteger(\"0\").not().testBit(32))",
+      "minimo_jdk": "true",
+      "minimo_kaji": "false",
+      "pasos": [
+        {
+          "java": "String.valueOf(new BigInteger(\"-4294967296\").negate().not().testBit(32))",
+          "jdk": "false",
+          "ours": "true"
+        },
+        {
+          "java": "String.valueOf(new BigInteger(\"0\").negate().not().testBit(32))",
+          "jdk": "true",
+          "ours": "false"
+        },
+        {
+          "java": "String.valueOf(new BigInteger(\"0\").not().testBit(32))",
+          "jdk": "true",
+          "ours": "false"
+        }
+      ],
+      "segundos": 3.8
+    },
+    {
+      "divergencia": 4,
+      "tipo": "otro valor",
+      "original": "String.valueOf(new BigInteger(\"-98765432109876543210987654321\").testBit(1))",
+      "original_jdk": "true",
+      "original_kaji": "false",
+      "minimo": "String.valueOf(new BigInteger(\"-1\").testBit(1))",
+      "minimo_jdk": "true",
+      "minimo_kaji": "false",
+      "pasos": [
+        {
+          "java": "String.valueOf(new BigInteger(\"-1\").testBit(1))",
+          "jdk": "true",
+          "ours": "false"
+        }
+      ],
+      "segundos": 2.3
+    },
+    {
+      "divergencia": 6,
+      "tipo": "otro valor",
+      "original": "String.valueOf(new BigInteger(\"-2\").shiftRight(64).signum())",
+      "original_jdk": "-1",
+      "original_kaji": "0",
+      "minimo": "new BigInteger(\"-2\").shiftRight(64).toString()",
+      "minimo_jdk": "-1",
+      "minimo_kaji": "0",
+      "pasos": [
+        {
+          "java": "new BigInteger(\"-2\").shiftRight(64).toString()",
+          "jdk": "-1",
+          "ours": "0"
+        }
+      ],
+      "segundos": 2.3
+    },
+    {
+      "divergencia": 7,
+      "tipo": "otro valor",
+      "original": "String.valueOf(new BigInteger(\"-6414624081729431153887676016713142\").remainder(new BigInteger(\"484383311876773594974263836697502548734376724288198984382097\").max(new BigInteger(\"-2147483648\"))).or(new BigInteger(\"321322014539429643059265363205383937688087108924644124799293\").clearBit(64)).testBit(63))",
+      "original_jdk": "true",
+      "original_kaji": "false",
+      "minimo": "String.valueOf(new BigInteger(\"-1\").testBit(63))",
+      "minimo_jdk": "true",
+      "minimo_kaji": "false",
+      "pasos": [
+        {
+          "java": "String.valueOf(new BigInteger(\"-6414624081729431153887676016713142\").or(new BigInteger(\"321322014539429643059265363205383937688087108924644124799293\").clearBit(64)).testBit(63))",
+          "jdk": "true",
+          "ours": "false"
+        },
+        {
+          "java": "String.valueOf(new BigInteger(\"-6414624081729431153887676016713142\").testBit(63))",
+          "jdk": "true",
+          "ours": "false"
+        },
+        {
+          "java": "String.valueOf(new BigInteger(\"-1\").testBit(63))",
+          "jdk": "true",
+          "ours": "false"
+        }
+      ],
+      "segundos": 4.2
+    },
+    {
+      "divergencia": 8,
+      "tipo": "otro valor",
+      "original": "String.valueOf(new BigInteger(\"-1\").shiftRight(63).or(new BigInteger(\"69028137122597559128061542361286963549630945245783\").min(new BigInteger(\"-256\"))).flipBit(31).bitCount())",
+      "original_jdk": "1",
+      "original_kaji": "9",
+      "minimo": "new BigInteger(\"-1\").shiftRight(1).toString()",
+      "minimo_jdk": "-1",
+      "minimo_kaji": "0",
+      "pasos": [
+        {
+          "java": "String.valueOf(new BigInteger(\"-1\").shiftRight(63).or(new BigInteger(\"-256\")).flipBit(31).bitCount())",
+          "jdk": "1",
+          "ours": "9"
+        },
+        {
+          "java": "String.valueOf(new BigInteger(\"-1\").shiftRight(63).or(new BigInteger(\"-256\")).bitCount())",
+          "jdk": "0",
+          "ours": "8"
+        },
+        {
+          "java": "new BigInteger(\"-1\").shiftRight(63).or(new BigInteger(\"-256\")).toString()",
+          "jdk": "-1",
+          "ours": "-256"
+        },
+        {
+          "java": "new BigInteger(\"-1\").shiftRight(63).toString()",
+          "jdk": "-1",
+          "ours": "0"
+        },
+        {
+          "java": "new BigInteger(\"-1\").shiftRight(1).toString()",
+          "jdk": "-1",
+          "ours": "0"
+        }
+      ],
+      "segundos": 5.6
+    }
+  ]
+}

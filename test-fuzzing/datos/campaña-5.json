@@ -1,0 +1,125 @@
+{
+  "estado": "terminada",
+  "meta": {
+    "fecha": "2026-09-21T15:56:01",
+    "referencia": "Oracle Corporation 25.0.1",
+    "referencia_ruta": "C:/Program Files/Java/jdk-25",
+    "bajo_prueba": "KajiJDK (run-headless) con KajiLibrary",
+    "binario_kaji_fecha": "2026-09-21T14:31:21",
+    "semilla": 5,
+    "lotes": 10,
+    "por_lote": 200
+  },
+  "stats": {
+    "expresiones": 2000,
+    "coinciden": 2000,
+    "divergen": 0,
+    "por_tipo": {},
+    "por_vista": {},
+    "ops_total": {
+      "add": 147,
+      "and": 155,
+      "min": 121,
+      "modInverse": 178,
+      "modPow": 331,
+      "not": 217,
+      "pow": 198,
+      "shiftRight": 222,
+      "xor": 148,
+      "abs": 230,
+      "sqrt": 241,
+      "flipBit": 204,
+      "mod": 144,
+      "remainder": 138,
+      "divide": 159,
+      "shiftLeft": 207,
+      "clearBit": 235,
+      "max": 140,
+      "negate": 247,
+      "setBit": 204,
+      "andNot": 153,
+      "multiply": 140,
+      "or": 161,
+      "subtract": 157,
+      "gcd": 147
+    },
+    "ops_divergentes": {},
+    "segundos_jdk": 1.0,
+    "segundos_kaji": 975.0,
+    "segundos_total": 991.8
+  },
+  "lotes": [
+    {
+      "lote": 0,
+      "salida_kaji": 0,
+      "stderr_kaji": "",
+      "segundos_jdk": 0.09,
+      "segundos_kaji": 18.8
+    },
+    {
+      "lote": 1,
+      "salida_kaji": 0,
+      "stderr_kaji": "",
+      "segundos_jdk": 0.1,
+      "segundos_kaji": 222.76
+    },
+    {
+      "lote": 2,
+      "salida_kaji": 0,
+      "stderr_kaji": "",
+      "segundos_jdk": 0.1,
+      "segundos_kaji": 37.66
+    },
+    {
+      "lote": 3,
+      "salida_kaji": 0,
+      "stderr_kaji": "",
+      "segundos_jdk": 0.1,
+      "segundos_kaji": 69.37
+    },
+    {
+      "lote": 4,
+      "salida_kaji": 0,
+      "stderr_kaji": "",
+      "segundos_jdk": 0.09,
+      "segundos_kaji": 142.88
+    },
+    {
+      "lote": 5,
+      "salida_kaji": 0,
+      "stderr_kaji": "",
+      "segundos_jdk": 0.1,
+      "segundos_kaji": 63.88
+    },
+    {
+      "lote": 6,
+      "salida_kaji": 0,
+      "stderr_kaji": "",
+      "segundos_jdk": 0.1,
+      "segundos_kaji": 109.72
+    },
+    {
+      "lote": 7,
+      "salida_kaji": 0,
+      "stderr_kaji": "",
+      "segundos_jdk": 0.1,
+      "segundos_kaji": 59.68
+    },
+    {
+      "lote": 8,
+      "salida_kaji": 0,
+      "stderr_kaji": "",
+      "segundos_jdk": 0.09,
+      "segundos_kaji": 42.84
+    },
+    {
+      "lote": 9,
+      "salida_kaji": 0,
+      "stderr_kaji": "",
+      "segundos_jdk": 0.1,
+      "segundos_kaji": 207.36
+    }
+  ],
+  "divergencias": [],
+  "reducidas": []
+}

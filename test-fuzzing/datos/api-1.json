@@ -1,0 +1,4144 @@
+{
+  "estado": "generando",
+  "meta": {
+    "prueba": "API de KajiLibrary",
+    "fecha": "2026-10-02T21:48:21",
+    "referencia": "Oracle Corporation 25.0.1",
+    "bajo_prueba": "KajiJDK (run-headless) con KajiLibrary",
+    "semilla": 1,
+    "clases": 300,
+    "por_clase": 40,
+    "paquete": "todos"
+  },
+  "stats": {
+    "expresiones": 3115,
+    "no_deterministas": 11,
+    "con_direccion": 17,
+    "expresiones_descartadas": 255,
+    "sin_forma_observable": 421,
+    "no_medidas_tras_crash": 695,
+    "coinciden": 2542,
+    "divergen": 573,
+    "lotes_sin_compilar": 6,
+    "clases_probadas": 113,
+    "por_tipo": {
+      "otro valor": 248,
+      "otra excepción": 192,
+      "sin salida (crash o cuelgue)": 17,
+      "excepción contra valor": 116
+    },
+    "por_clase": {
+      "java.lang.classfile.instruction.ThrowInstruction": 7,
+      "jdk.jshell.execution.LocalExecutionControl": 1,
+      "java.util.MissingFormatWidthException": 1,
+      "java.util.IllegalFormatFlagsException": 25,
+      "java.util.Date": 16,
+      "java.lang.classfile.attribute.NestMembersAttribute": 4,
+      "java.lang.classfile.attribute.StackMapTableAttribute": 1,
+      "jdk.dynalink.NoSuchDynamicMethodException": 1,
+      "java.util.Set": 2,
+      "java.lang.Short": 1,
+      "java.lang.classfile.attribute.ModuleRequireInfo": 31,
+      "java.nio.LongBuffer": 23,
+      "java.util.MissingFormatArgumentException": 1,
+      "java.sql.SQLPermission": 1,
+      "java.lang.management.ManagementFactory": 17,
+      "java.text.FieldPosition": 17,
+      "java.util.stream.Collectors": 3,
+      "java.lang.classfile.attribute.RuntimeVisibleParameterAnnotationsAttribute": 6,
+      "java.security.spec.ECFieldF2m": 5,
+      "java.lang.classfile.instruction.NewPrimitiveArrayInstruction": 1,
+      "java.util.ResourceBundle": 1,
+      "java.lang.classfile.attribute.ModulePackagesAttribute": 2,
+      "java.lang.classfile.Attributes": 18,
+      "java.lang.classfile.attribute.RuntimeVisibleTypeAnnotationsAttribute": 3,
+      "java.lang.foreign.SymbolLookup": 24,
+      "java.lang.classfile.attribute.ModuleOpenInfo": 7,
+      "java.lang.InstantiationError": 2,
+      "org.xml.sax.SAXException": 1,
+      "java.util.zip.Inflater": 5,
+      "java.lang.classfile.attribute.DeprecatedAttribute": 24,
+      "java.lang.classfile.Opcode": 1,
+      "java.time.temporal.TemporalAdjusters": 5,
+      "jdk.swing.interop.SwingInterOpUtils": 2,
+      "java.lang.invoke.VolatileCallSite": 25,
+      "java.security.KeyPairGenerator": 1,
+      "java.lang.foreign.SegmentAllocator": 3,
+      "java.security.spec.RSAPrivateKeySpec": 10,
+      "java.util.zip.Deflater": 1,
+      "jdk.jfr.consumer.RecordingStream": 24,
+      "java.lang.ExceptionInInitializerError": 1,
+      "java.util.LinkedHashMap": 3,
+      "java.time.Year": 13,
+      "java.security.cert.X509CRLSelector": 2,
+      "org.w3c.dom.bootstrap.DOMImplementationRegistry": 2,
+      "java.security.CryptoPrimitive": 1,
+      "java.nio.CharBuffer": 12,
+      "java.lang.String": 1,
+      "java.time.temporal.ChronoField": 1,
+      "java.time.format.TextStyle": 1,
+      "java.lang.invoke.LambdaConversionException": 1,
+      "java.time.LocalDate": 22,
+      "jdk.swing.interop.LightweightFrameWrapper": 27,
+      "java.sql.Time": 14,
+      "org.w3c.dom.xpath.XPathException": 1,
+      "java.time.chrono.JapaneseDate": 18,
+      "java.lang.classfile.MethodSignature": 17,
+      "java.sql.SQLException": 5,
+      "java.time.Duration": 10,
+      "java.math.BigDecimal": 6,
+      "java.time.temporal.ChronoUnit": 1,
+      "org.ietf.jgss.ChannelBinding": 1,
+      "java.lang.ClassCastException": 1,
+      "java.nio.IntBuffer": 25,
+      "java.util.HashMap": 1,
+      "java.lang.foreign.MemoryLayout": 5,
+      "java.time.MonthDay": 27,
+      "java.security.cert.CertPathBuilder": 1,
+      "java.lang.classfile.attribute.NestHostAttribute": 30
+    },
+    "segundos_jdk": 29.5,
+    "segundos_kaji": 628.2,
+    "segundos_total": 823.9
+  },
+  "sin_compilar": [
+    {
+      "clase": "java.lang.annotation.IncompleteAnnotationException",
+      "javac": "> cannot be converted to Class<? extends Annotation>\n  static String e34() { try { return enc(new java.lang.annotation.IncompleteAnnotationException(java.lang.Class.forPrimitiveName(\"abc\"), \"ABC abc\").initCause(new java.lang.Throwable()).toString()); } catch (Throwable t) { return \"EXC:\" + t.getClas"
+    },
+    {
+      "clase": "jdk.jfr.AnnotationElement",
+      "javac": "t.AnnotationElement(Class<? extends Annotation>,Object) is not applicable\n      (argument mismatch; Class<CAP#2> cannot be converted to Class<? extends Annotation>)\n  where CAP#1,CAP#2 are fresh type-variables:\n    CAP#1 extends Object from capture of ?\n    CAP#2 extends Object from capture of ?\nC:\\"
+    },
+    {
+      "clase": "java.util.EnumSet",
+      "javac": "                ^\n  required: Class<E#1>\n  found:    Class<CAP#1>\n  reason: inference variable E#1 has incompatible bounds\n    equality constraints: CAP#2\n    upper bounds: Enum<E#1>\n  where E#1,E#2 are type-variables:\n    E#1 extends Enum<E#1> declared in method <E#1>allOf(Class<E#1>)\n    E#2 exten"
+    },
+    {
+      "clase": "java.lang.StableValue",
+      "javac": "ang.StableValue.of(new java.lang.Object()).equals(new java.lang.Object())); } catch (Throwable t) { return \"EXC:\" + t.getClass().getName(); } }\n                                                  ^\n  (use --enable-preview to enable preview APIs)\nC:\\Users\\nicol\\Sources\\Larena\\KajiJVM\\KajiJDK\\repo\\test-"
+    },
+    {
+      "clase": "java.lang.Enum",
+      "javac": "   ^\n  required: Class<T>,String\n  found:    Class<CAP#1>,String\n  reason: inference variable T has incompatible bounds\n    equality constraints: CAP#2\n    upper bounds: Enum<T>\n  where T,E are type-variables:\n    T extends Enum<T> declared in method <T>valueOf(Class<T>,String)\n    E extends Enum<E>"
+    },
+    {
+      "clase": "java.security.PEMRecord",
+      "javac": " (Throwable t) { return \"EXC:\" + t.getClass().getName(); } }\n                                                          ^\n  (use --enable-preview to enable preview APIs)\nC:\\Users\\nicol\\Sources\\Larena\\KajiJVM\\KajiJDK\\repo\\test-fuzzing\\fuzzer\\runs\\A1x124\\A1x124.java:88: error: PEMRecord is a preview AP"
+    }
+  ],
+  "divergencias": [
+    {
+      "clase": "java.lang.classfile.instruction.ThrowInstruction",
+      "tipo": "otro valor",
+      "java": "java.lang.classfile.instruction.ThrowInstruction.of()",
+      "jdk": "Throw[OP=ATHROW]",
+      "kaji": "ATHROW"
+    },
+    {
+      "clase": "java.lang.classfile.instruction.ThrowInstruction",
+      "tipo": "otro valor",
+      "java": "java.lang.classfile.instruction.ThrowInstruction.of()",
+      "jdk": "Throw[OP=ATHROW]",
+      "kaji": "ATHROW"
+    },
+    {
+      "clase": "java.lang.classfile.instruction.ThrowInstruction",
+      "tipo": "otro valor",
+      "java": "java.lang.classfile.instruction.ThrowInstruction.of()",
+      "jdk": "Throw[OP=ATHROW]",
+      "kaji": "ATHROW"
+    },
+    {
+      "clase": "java.lang.classfile.instruction.ThrowInstruction",
+      "tipo": "otro valor",
+      "java": "java.lang.classfile.instruction.ThrowInstruction.of().opcode().hashCode()",
+      "jdk": "1482968390",
+      "kaji": "1979993595"
+    },
+    {
+      "clase": "java.lang.classfile.instruction.ThrowInstruction",
+      "tipo": "otro valor",
+      "java": "java.lang.classfile.instruction.ThrowInstruction.of()",
+      "jdk": "Throw[OP=ATHROW]",
+      "kaji": "ATHROW"
+    },
+    {
+      "clase": "java.lang.classfile.instruction.ThrowInstruction",
+      "tipo": "otro valor",
+      "java": "java.lang.classfile.instruction.ThrowInstruction.of()",
+      "jdk": "Throw[OP=ATHROW]",
+      "kaji": "ATHROW"
+    },
+    {
+      "clase": "java.lang.classfile.instruction.ThrowInstruction",
+      "tipo": "otro valor",
+      "java": "java.lang.classfile.instruction.ThrowInstruction.of()",
+      "jdk": "Throw[OP=ATHROW]",
+      "kaji": "ATHROW"
+    },
+    {
+      "clase": "jdk.jshell.execution.LocalExecutionControl",
+      "tipo": "otra excepción",
+      "java": "new jdk.jshell.execution.LocalExecutionControl().extensionCommand(java.lang.String.valueOf(new char[] {'a', 'b'}, 255, 2), \" \").equals(\"\\u00df\")",
+      "jdk": "EXC:java.lang.StringIndexOutOfBoundsException",
+      "kaji": "EXC:jdk.jshell.spi.ExecutionControl$NotImplementedException"
+    },
+    {
+      "clase": "java.util.MissingFormatWidthException",
+      "tipo": "sin salida (crash o cuelgue)",
+      "java": "new java.util.MissingFormatWidthException(\"hola mundo\").getCause()",
+      "jdk": "null",
+      "kaji": null
+    },
+    {
+      "clase": "java.util.IllegalFormatFlagsException",
+      "tipo": "otro valor",
+      "java": "new java.util.IllegalFormatFlagsException(\" \").getLocalizedMessage()",
+      "jdk": "\"Flags = ' '\"",
+      "kaji": "\" \""
+    },
+    {
+      "clase": "java.util.IllegalFormatFlagsException",
+      "tipo": "otro valor",
+      "java": "new java.util.IllegalFormatFlagsException(java.lang.String.valueOf(-1L))",
+      "jdk": "java.util.IllegalFormatFlagsException: Flags = '-1'",
+      "kaji": "java.util.IllegalFormatFlagsException"
+    },
+    {
+      "clase": "java.util.IllegalFormatFlagsException",
+      "tipo": "otro valor",
+      "java": "new java.util.IllegalFormatFlagsException(java.lang.String.valueOf(-9223372036854775808L)).getLocalizedMessage().stripLeading()",
+      "jdk": "\"Flags = '-9223372036854775808'\"",
+      "kaji": "\"-9223372036854775808\""
+    },
+    {
+      "clase": "java.util.IllegalFormatFlagsException",
+      "tipo": "otro valor",
+      "java": "new java.util.IllegalFormatFlagsException(\"ABC abc\").getLocalizedMessage().stripLeading()",
+      "jdk": "\"Flags = 'ABC abc'\"",
+      "kaji": "\"ABC abc\""
+    },
+    {
+      "clase": "java.util.IllegalFormatFlagsException",
+      "tipo": "otro valor",
+      "java": "new java.util.IllegalFormatFlagsException(\"\\u00df\").initCause(new java.lang.Throwable(\"\\n\"))",
+      "jdk": "java.util.IllegalFormatFlagsException: Flags = 'ß'",
+      "kaji": "java.util.IllegalFormatFlagsException"
+    },
+    {
+      "clase": "java.util.IllegalFormatFlagsException",
+      "tipo": "otro valor",
+      "java": "new java.util.IllegalFormatFlagsException(\"a\").getLocalizedMessage().toLowerCase(java.util.Locale.of(\"a\"))",
+      "jdk": "\"flags = 'a'\"",
+      "kaji": "\"a\""
+    },
+    {
+      "clase": "java.util.IllegalFormatFlagsException",
+      "tipo": "otro valor",
+      "java": "new java.util.IllegalFormatFlagsException(\"\\u03a3\")",
+      "jdk": "java.util.IllegalFormatFlagsException: Flags = 'Σ'",
+      "kaji": "java.util.IllegalFormatFlagsException"
+    },
+    {
+      "clase": "java.util.IllegalFormatFlagsException",
+      "tipo": "otro valor",
+      "java": "new java.util.IllegalFormatFlagsException(\"A\").toString().substring(0)",
+      "jdk": "\"java.util.IllegalFormatFlagsException: Flags = 'A'\"",
+      "kaji": "\"java.util.IllegalFormatFlagsException\""
+    },
+    {
+      "clase": "java.util.IllegalFormatFlagsException",
+      "tipo": "otro valor",
+      "java": "new java.util.IllegalFormatFlagsException(\"-1\")",
+      "jdk": "java.util.IllegalFormatFlagsException: Flags = '-1'",
+      "kaji": "java.util.IllegalFormatFlagsException"
+    },
+    {
+      "clase": "java.util.IllegalFormatFlagsException",
+      "tipo": "otro valor",
+      "java": "new java.util.IllegalFormatFlagsException(\"\")",
+      "jdk": "java.util.IllegalFormatFlagsException: Flags = ''",
+      "kaji": "java.util.IllegalFormatFlagsException"
+    },
+    {
+      "clase": "java.util.IllegalFormatFlagsException",
+      "tipo": "otro valor",
+      "java": "new java.util.IllegalFormatFlagsException(\"abc\").getMessage()",
+      "jdk": "\"Flags = 'abc'\"",
+      "kaji": "\"abc\""
+    },
+    {
+      "clase": "java.util.IllegalFormatFlagsException",
+      "tipo": "otro valor",
+      "java": "new java.util.IllegalFormatFlagsException(new java.lang.String(new byte[] {-1, 0, 127}, 0))",
+      "jdk": "java.util.IllegalFormatFlagsException: Flags = 'ÿ\u0000'",
+      "kaji": "java.util.IllegalFormatFlagsException"
+    },
+    {
+      "clase": "java.util.IllegalFormatFlagsException",
+      "tipo": "otro valor",
+      "java": "new java.util.IllegalFormatFlagsException(\"\\u03a3\").toString()",
+      "jdk": "\"java.util.IllegalFormatFlagsException: Flags = 'Σ'\"",
+      "kaji": "\"java.util.IllegalFormatFlagsException\""
+    },
+    {
+      "clase": "java.util.IllegalFormatFlagsException",
+      "tipo": "excepción contra valor",
+      "java": "new java.util.IllegalFormatFlagsException(java.lang.String.valueOf(new char[0], 65535, 7))",
+      "jdk": "EXC:java.lang.StringIndexOutOfBoundsException",
+      "kaji": "java.util.IllegalFormatFlagsException"
+    },
+    {
+      "clase": "java.util.IllegalFormatFlagsException",
+      "tipo": "otro valor",
+      "java": "new java.util.IllegalFormatFlagsException(\" \").getMessage()",
+      "jdk": "\"Flags = ' '\"",
+      "kaji": "\" \""
+    },
+    {
+      "clase": "java.util.IllegalFormatFlagsException",
+      "tipo": "otro valor",
+      "java": "new java.util.IllegalFormatFlagsException(\"A\")",
+      "jdk": "java.util.IllegalFormatFlagsException: Flags = 'A'",
+      "kaji": "java.util.IllegalFormatFlagsException"
+    },
+    {
+      "clase": "java.util.IllegalFormatFlagsException",
+      "tipo": "excepción contra valor",
+      "java": "new java.util.IllegalFormatFlagsException(\" \").getLocalizedMessage().substring(2)",
+      "jdk": "\"ags = ' '\"",
+      "kaji": "EXC:java.lang.StringIndexOutOfBoundsException"
+    },
+    {
+      "clase": "java.util.IllegalFormatFlagsException",
+      "tipo": "otro valor",
+      "java": "new java.util.IllegalFormatFlagsException(\"\\u03a3\").initCause(new java.lang.Throwable(\"ABC abc\"))",
+      "jdk": "java.util.IllegalFormatFlagsException: Flags = 'Σ'",
+      "kaji": "java.util.IllegalFormatFlagsException"
+    },
+    {
+      "clase": "java.util.IllegalFormatFlagsException",
+      "tipo": "otro valor",
+      "java": "new java.util.IllegalFormatFlagsException(\"1234567890\").getLocalizedMessage()",
+      "jdk": "\"Flags = '1234567890'\"",
+      "kaji": "\"1234567890\""
+    },
+    {
+      "clase": "java.util.IllegalFormatFlagsException",
+      "tipo": "otro valor",
+      "java": "new java.util.IllegalFormatFlagsException(\"\\n\")",
+      "jdk": "java.util.IllegalFormatFlagsException: Flags = '",
+      "kaji": "java.util.IllegalFormatFlagsException"
+    },
+    {
+      "clase": "java.util.IllegalFormatFlagsException",
+      "tipo": "otro valor",
+      "java": "new java.util.IllegalFormatFlagsException(\"0\")",
+      "jdk": "java.util.IllegalFormatFlagsException: Flags = '0'",
+      "kaji": "java.util.IllegalFormatFlagsException"
+    },
+    {
+      "clase": "java.util.IllegalFormatFlagsException",
+      "tipo": "otro valor",
+      "java": "new java.util.IllegalFormatFlagsException(\"\\n\").toString()",
+      "jdk": "\"java.util.IllegalFormatFlagsException: Flags = '",
+      "kaji": "\"java.util.IllegalFormatFlagsException\""
+    },
+    {
+      "clase": "java.util.IllegalFormatFlagsException",
+      "tipo": "otro valor",
+      "java": "new java.util.IllegalFormatFlagsException(\"-1\")",
+      "jdk": "java.util.IllegalFormatFlagsException: Flags = '-1'",
+      "kaji": "java.util.IllegalFormatFlagsException"
+    },
+    {
+      "clase": "java.util.IllegalFormatFlagsException",
+      "tipo": "otro valor",
+      "java": "new java.util.IllegalFormatFlagsException(\"a\").getMessage()",
+      "jdk": "\"Flags = 'a'\"",
+      "kaji": "\"a\""
+    },
+    {
+      "clase": "java.util.IllegalFormatFlagsException",
+      "tipo": "otro valor",
+      "java": "new java.util.IllegalFormatFlagsException(\"a\")",
+      "jdk": "java.util.IllegalFormatFlagsException: Flags = 'a'",
+      "kaji": "java.util.IllegalFormatFlagsException"
+    },
+    {
+      "clase": "java.util.Date",
+      "tipo": "otro valor",
+      "java": "new java.util.Date(0L)",
+      "jdk": "Wed Dec 31 21:00:00 GMT-03:00 1969",
+      "kaji": "Date(0)"
+    },
+    {
+      "clase": "java.util.Date",
+      "tipo": "otro valor",
+      "java": "new java.util.Date().getTimezoneOffset()",
+      "jdk": "180",
+      "kaji": "0"
+    },
+    {
+      "clase": "java.util.Date",
+      "tipo": "otro valor",
+      "java": "new java.util.Date(255, 2, -128).toLocaleString()",
+      "jdk": "\"Oct 23, 2154, 12:00:00 AM\"",
+      "kaji": "\"23 Oct 2154 00:00:00\""
+    },
+    {
+      "clase": "java.util.Date",
+      "tipo": "otro valor",
+      "java": "new java.util.Date(255L).getYear()",
+      "jdk": "69",
+      "kaji": "70"
+    },
+    {
+      "clase": "java.util.Date",
+      "tipo": "otro valor",
+      "java": "new java.util.Date()",
+      "jdk": "Fri Oct 02 21:48:32 GMT-03:00 2026",
+      "kaji": "Date(1790988512640)"
+    },
+    {
+      "clase": "java.util.Date",
+      "tipo": "otra excepción",
+      "java": "java.util.Date.from(java.time.Instant.parse(\" \")).getDate()",
+      "jdk": "EXC:java.time.format.DateTimeParseException",
+      "kaji": "EXC:java.lang.StringIndexOutOfBoundsException"
+    },
+    {
+      "clase": "java.util.Date",
+      "tipo": "otro valor",
+      "java": "new java.util.Date()",
+      "jdk": "Fri Oct 02 21:48:32 GMT-03:00 2026",
+      "kaji": "Date(1790988512646)"
+    },
+    {
+      "clase": "java.util.Date",
+      "tipo": "otro valor",
+      "java": "new java.util.Date(4294967296L)",
+      "jdk": "Thu Feb 19 14:02:47 GMT-03:00 1970",
+      "kaji": "Date(4294967296)"
+    },
+    {
+      "clase": "java.util.Date",
+      "tipo": "otro valor",
+      "java": "new java.util.Date(32, 2147483647, 2147483647)",
+      "jdk": "Tue Feb 07 00:00:00 GMT-03:00 184838513",
+      "kaji": "Date(5832877918521600000)"
+    },
+    {
+      "clase": "java.util.Date",
+      "tipo": "otro valor",
+      "java": "new java.util.Date(65535, 255, 255)",
+      "jdk": "Thu Dec 11 00:00:00 GMT-03:00 67456",
+      "kaji": "Date(2066568336000000)"
+    },
+    {
+      "clase": "java.util.Date",
+      "tipo": "otro valor",
+      "java": "new java.util.Date(127, 2147483647, 7)",
+      "jdk": "Mon Aug 07 00:00:00 GMT-03:00 178958997",
+      "kaji": "Date(5647338330019200000)"
+    },
+    {
+      "clase": "java.util.Date",
+      "tipo": "excepción contra valor",
+      "java": "java.util.Date.from(java.time.Instant.ofEpochSecond(9223372036854775807L, 0L)).hashCode()",
+      "jdk": "EXC:java.time.DateTimeException",
+      "kaji": "999"
+    },
+    {
+      "clase": "java.util.Date",
+      "tipo": "otro valor",
+      "java": "java.util.Date.from(java.time.Instant.ofEpochMilli(1L)).getHours()",
+      "jdk": "21",
+      "kaji": "0"
+    },
+    {
+      "clase": "java.util.Date",
+      "tipo": "otro valor",
+      "java": "new java.util.Date(2, 2, 2).toLocaleString().replaceFirst(\"\\u00df\", \"a\")",
+      "jdk": "\"Mar 2, 1902, 12:00:00 AM\"",
+      "kaji": "\"2 Mar 1902 00:00:00\""
+    },
+    {
+      "clase": "java.util.Date",
+      "tipo": "otro valor",
+      "java": "new java.util.Date(127, -1, -128)",
+      "jdk": "Sat Jul 25 00:00:00 GMT-03:00 2026",
+      "kaji": "Date(1784937600000)"
+    },
+    {
+      "clase": "java.util.Date",
+      "tipo": "otro valor",
+      "java": "new java.util.Date().toLocaleString()",
+      "jdk": "\"Oct 2, 2026, 9:48:32 PM\"",
+      "kaji": "\"3 Oct 2026 00:48:32\""
+    },
+    {
+      "clase": "java.lang.classfile.attribute.NestMembersAttribute",
+      "tipo": "otro valor",
+      "java": "java.lang.classfile.attribute.NestMembersAttribute.of(java.util.List.of()).attributeMapper()",
+      "jdk": "AttributeMapper[name=NestMembers, allowMultiple=false, stability=CP_REFS]",
+      "kaji": "AttributeMapper[NestMembers]"
+    },
+    {
+      "clase": "java.lang.classfile.attribute.NestMembersAttribute",
+      "tipo": "otro valor",
+      "java": "java.lang.classfile.attribute.NestMembersAttribute.of(java.util.List.of())",
+      "jdk": "Attribute[name=NestMembers]",
+      "kaji": "<objeto>"
+    },
+    {
+      "clase": "java.lang.classfile.attribute.NestMembersAttribute",
+      "tipo": "otro valor",
+      "java": "java.lang.classfile.attribute.NestMembersAttribute.ofSymbols(java.util.List.of())",
+      "jdk": "Attribute[name=NestMembers]",
+      "kaji": "<objeto>"
+    },
+    {
+      "clase": "java.lang.classfile.attribute.NestMembersAttribute",
+      "tipo": "otro valor",
+      "java": "java.lang.classfile.attribute.NestMembersAttribute.of(java.util.List.of()).attributeMapper()",
+      "jdk": "AttributeMapper[name=NestMembers, allowMultiple=false, stability=CP_REFS]",
+      "kaji": "AttributeMapper[NestMembers]"
+    },
+    {
+      "clase": "java.lang.classfile.attribute.StackMapTableAttribute",
+      "tipo": "otro valor",
+      "java": "java.lang.classfile.attribute.StackMapTableAttribute.of(java.util.List.of()).attributeMapper()",
+      "jdk": "AttributeMapper[name=StackMapTable, allowMultiple=false, stability=LABELS]",
+      "kaji": "AttributeMapper[StackMapTable]"
+    },
+    {
+      "clase": "jdk.dynalink.NoSuchDynamicMethodException",
+      "tipo": "sin salida (crash o cuelgue)",
+      "java": "new jdk.dynalink.NoSuchDynamicMethodException(\"1234567890\").getLocalizedMessage().lastIndexOf(\"a\")",
+      "jdk": "-1",
+      "kaji": null
+    },
+    {
+      "clase": "java.util.Set",
+      "tipo": "excepción contra valor",
+      "java": "java.util.Set.of(\"-1\", \"\\n\").removeIf(java.util.function.Predicate.isEqual(\"hola mundo\"))",
+      "jdk": "EXC:java.lang.UnsupportedOperationException",
+      "kaji": "false"
+    },
+    {
+      "clase": "java.util.Set",
+      "tipo": "excepción contra valor",
+      "java": "java.util.Set.of().removeIf(java.util.function.Predicate.isEqual(\"hola mundo\"))",
+      "jdk": "EXC:java.lang.UnsupportedOperationException",
+      "kaji": "false"
+    },
+    {
+      "clase": "java.lang.Short",
+      "tipo": "sin salida (crash o cuelgue)",
+      "java": "java.lang.Short.valueOf(\"hola mundo\").hashCode()",
+      "jdk": "EXC:java.lang.NumberFormatException",
+      "kaji": null
+    },
+    {
+      "clase": "java.lang.classfile.attribute.ModuleRequireInfo",
+      "tipo": "excepción contra valor",
+      "java": "java.lang.classfile.attribute.ModuleRequireInfo.of(java.lang.constant.ModuleDesc.of(\"abc\"), 2147483647, java.lang.String.valueOf(new char[0])).requiresFlags().hashCode()",
+      "jdk": "EXC:java.lang.IllegalArgumentException",
+      "kaji": "-639664478"
+    },
+    {
+      "clase": "java.lang.classfile.attribute.ModuleRequireInfo",
+      "tipo": "otro valor",
+      "java": "java.lang.classfile.attribute.ModuleRequireInfo.of(java.lang.constant.ModuleDesc.of(\"\"), 0, \"a\")",
+      "jdk": "UnboundModuleRequiresInfo[requires=19 , requiresFlagsMask=0, requiresVersion=Optional[a]]",
+      "kaji": "<objeto>"
+    },
+    {
+      "clase": "java.lang.classfile.attribute.ModuleRequireInfo",
+      "tipo": "otro valor",
+      "java": "java.lang.classfile.attribute.ModuleRequireInfo.of(java.lang.constant.ModuleDesc.of(\"ABC abc\"), -128, \"\\u00df\").requiresVersion().filter(java.util.function.Predicate.isEqual(\"-1\"))",
+      "jdk": "Optional.empty",
+      "kaji": "<objeto>"
+    },
+    {
+      "clase": "java.lang.classfile.attribute.ModuleRequireInfo",
+      "tipo": "otro valor",
+      "java": "java.lang.classfile.attribute.ModuleRequireInfo.of(java.lang.constant.ModuleDesc.of(\"abc\"), 32, \"1234567890\").requiresVersion().hashCode()",
+      "jdk": "-980420965",
+      "kaji": "70625379"
+    },
+    {
+      "clase": "java.lang.classfile.attribute.ModuleRequireInfo",
+      "tipo": "excepción contra valor",
+      "java": "java.lang.classfile.attribute.ModuleRequireInfo.of(java.lang.constant.ModuleDesc.of(\"\\n\"), 1, \"\\u03a3\").requiresVersion().isPresent()",
+      "jdk": "EXC:java.lang.IllegalArgumentException",
+      "kaji": "true"
+    },
+    {
+      "clase": "java.lang.classfile.attribute.ModuleRequireInfo",
+      "tipo": "otro valor",
+      "java": "java.lang.classfile.attribute.ModuleRequireInfo.of(java.lang.constant.ModuleDesc.of(\"1234567890\"), 2147483647, java.lang.String.valueOf(\"0\")).requiresVersion()",
+      "jdk": "Optional[0]",
+      "kaji": "<objeto>"
+    },
+    {
+      "clase": "java.lang.classfile.attribute.ModuleRequireInfo",
+      "tipo": "excepción contra valor",
+      "java": "java.lang.classfile.attribute.ModuleRequireInfo.of(java.lang.constant.ModuleDesc.of(\"1234567890\"), 31, \"hola mundo\").requiresFlags().spliterator()",
+      "jdk": "EXC:java.lang.IllegalArgumentException",
+      "kaji": "<objeto>"
+    },
+    {
+      "clase": "java.lang.classfile.attribute.ModuleRequireInfo",
+      "tipo": "otro valor",
+      "java": "java.lang.classfile.attribute.ModuleRequireInfo.of(java.lang.constant.ModuleDesc.of(\"hola mundo\"), 31, \"A\")",
+      "jdk": "UnboundModuleRequiresInfo[requires=19 hola mundo, requiresFlagsMask=31, requiresVersion=Optional[A]]",
+      "kaji": "<objeto>"
+    },
+    {
+      "clase": "java.lang.classfile.attribute.ModuleRequireInfo",
+      "tipo": "otro valor",
+      "java": "java.lang.classfile.attribute.ModuleRequireInfo.of(java.lang.constant.ModuleDesc.of(\"\"), 2, \"1234567890\").requires()",
+      "jdk": "19 ",
+      "kaji": "module "
+    },
+    {
+      "clase": "java.lang.classfile.attribute.ModuleRequireInfo",
+      "tipo": "excepción contra valor",
+      "java": "java.lang.classfile.attribute.ModuleRequireInfo.of(java.lang.constant.ModuleDesc.of(\" \"), 31, java.lang.String.valueOf(\"0\")).requiresFlags().size()",
+      "jdk": "EXC:java.lang.IllegalArgumentException",
+      "kaji": "0"
+    },
+    {
+      "clase": "java.lang.classfile.attribute.ModuleRequireInfo",
+      "tipo": "otro valor",
+      "java": "java.lang.classfile.attribute.ModuleRequireInfo.of(java.lang.constant.ModuleDesc.of(\" \"), 0, \"A\")",
+      "jdk": "UnboundModuleRequiresInfo[requires=19  , requiresFlagsMask=0, requiresVersion=Optional[A]]",
+      "kaji": "<objeto>"
+    },
+    {
+      "clase": "java.lang.classfile.attribute.ModuleRequireInfo",
+      "tipo": "otro valor",
+      "java": "java.lang.classfile.attribute.ModuleRequireInfo.of(java.lang.constant.ModuleDesc.of(\"abc\"), 7, java.lang.String.valueOf(Double.POSITIVE_INFINITY)).requires()",
+      "jdk": "19 abc",
+      "kaji": "module abc"
+    },
+    {
+      "clase": "java.lang.classfile.attribute.ModuleRequireInfo",
+      "tipo": "excepción contra valor",
+      "java": "java.lang.classfile.attribute.ModuleRequireInfo.of(java.lang.constant.ModuleDesc.of(\"a\"), 1, \"A\").requiresFlags()",
+      "jdk": "EXC:java.lang.IllegalArgumentException",
+      "kaji": "[]"
+    },
+    {
+      "clase": "java.lang.classfile.attribute.ModuleRequireInfo",
+      "tipo": "otro valor",
+      "java": "java.lang.classfile.attribute.ModuleRequireInfo.of(java.lang.constant.ModuleDesc.of(\"1234567890\"), 65535, \"a\").requiresVersion()",
+      "jdk": "Optional[a]",
+      "kaji": "<objeto>"
+    },
+    {
+      "clase": "java.lang.classfile.attribute.ModuleRequireInfo",
+      "tipo": "excepción contra valor",
+      "java": "java.lang.classfile.attribute.ModuleRequireInfo.of(java.lang.constant.ModuleDesc.of(\"\\u03a3\"), 2147483647, \"\\u03a3\").requiresFlags()",
+      "jdk": "EXC:java.lang.IllegalArgumentException",
+      "kaji": "[MANDATED, STATIC_PHASE, SYNTHETIC, TRANSITIVE]"
+    },
+    {
+      "clase": "java.lang.classfile.attribute.ModuleRequireInfo",
+      "tipo": "excepción contra valor",
+      "java": "java.lang.classfile.attribute.ModuleRequireInfo.of(java.lang.constant.ModuleDesc.of(\"0\"), 7, \"1234567890\").requiresFlags()",
+      "jdk": "EXC:java.lang.IllegalArgumentException",
+      "kaji": "[]"
+    },
+    {
+      "clase": "java.lang.classfile.attribute.ModuleRequireInfo",
+      "tipo": "otro valor",
+      "java": "java.lang.classfile.attribute.ModuleRequireInfo.of(java.lang.constant.ModuleDesc.of(\"hola mundo\"), -1, \"abc\").requires()",
+      "jdk": "19 hola mundo",
+      "kaji": "module hola mundo"
+    },
+    {
+      "clase": "java.lang.classfile.attribute.ModuleRequireInfo",
+      "tipo": "excepción contra valor",
+      "java": "java.lang.classfile.attribute.ModuleRequireInfo.of(java.lang.constant.ModuleDesc.of(\"\\u03a3\"), 127, \"-1\").requiresFlags()",
+      "jdk": "EXC:java.lang.IllegalArgumentException",
+      "kaji": "[STATIC_PHASE, TRANSITIVE]"
+    },
+    {
+      "clase": "java.lang.classfile.attribute.ModuleRequireInfo",
+      "tipo": "otro valor",
+      "java": "java.lang.classfile.attribute.ModuleRequireInfo.of(java.lang.constant.ModuleDesc.of(\"hola mundo\"), 32, \"\\u03a3\").requires()",
+      "jdk": "19 hola mundo",
+      "kaji": "module hola mundo"
+    },
+    {
+      "clase": "java.lang.classfile.attribute.ModuleRequireInfo",
+      "tipo": "otro valor",
+      "java": "java.lang.classfile.attribute.ModuleRequireInfo.of(java.lang.constant.ModuleDesc.of(\"hola mundo\"), -128, java.lang.String.valueOf(-1L))",
+      "jdk": "UnboundModuleRequiresInfo[requires=19 hola mundo, requiresFlagsMask=-128, requiresVersion=Optional[-1]]",
+      "kaji": "<objeto>"
+    },
+    {
+      "clase": "java.lang.classfile.attribute.ModuleRequireInfo",
+      "tipo": "excepción contra valor",
+      "java": "java.lang.classfile.attribute.ModuleRequireInfo.of(java.lang.constant.ModuleDesc.of(\"abc\"), 31, \"ABC abc\").requiresFlags().stream()",
+      "jdk": "EXC:java.lang.IllegalArgumentException",
+      "kaji": "<objeto>"
+    },
+    {
+      "clase": "java.lang.classfile.attribute.ModuleRequireInfo",
+      "tipo": "otro valor",
+      "java": "java.lang.classfile.attribute.ModuleRequireInfo.of(java.lang.constant.ModuleDesc.of(\"\\u03a3\"), 32, java.lang.String.valueOf(0.0f))",
+      "jdk": "UnboundModuleRequiresInfo[requires=19 Σ, requiresFlagsMask=32, requiresVersion=Optional[0.0]]",
+      "kaji": "<objeto>"
+    },
+    {
+      "clase": "java.lang.classfile.attribute.ModuleRequireInfo",
+      "tipo": "otro valor",
+      "java": "java.lang.classfile.attribute.ModuleRequireInfo.of(java.lang.constant.ModuleDesc.of(\" \"), 0, \"hola mundo\")",
+      "jdk": "UnboundModuleRequiresInfo[requires=19  , requiresFlagsMask=0, requiresVersion=Optional[hola mundo]]",
+      "kaji": "<objeto>"
+    },
+    {
+      "clase": "java.lang.classfile.attribute.ModuleRequireInfo",
+      "tipo": "excepción contra valor",
+      "java": "java.lang.classfile.attribute.ModuleRequireInfo.of(java.lang.constant.ModuleDesc.of(\"\\n\"), 0, \"a\").requiresFlags().isEmpty()",
+      "jdk": "EXC:java.lang.IllegalArgumentException",
+      "kaji": "true"
+    },
+    {
+      "clase": "java.lang.classfile.attribute.ModuleRequireInfo",
+      "tipo": "otro valor",
+      "java": "java.lang.classfile.attribute.ModuleRequireInfo.of(java.lang.constant.ModuleDesc.of(\"0\"), 127, \"A\")",
+      "jdk": "UnboundModuleRequiresInfo[requires=19 0, requiresFlagsMask=127, requiresVersion=Optional[A]]",
+      "kaji": "<objeto>"
+    },
+    {
+      "clase": "java.lang.classfile.attribute.ModuleRequireInfo",
+      "tipo": "excepción contra valor",
+      "java": "java.lang.classfile.attribute.ModuleRequireInfo.of(java.lang.constant.ModuleDesc.of(\"\\n\"), -1, \"\\u00df\").requires().matches(java.lang.constant.ModuleDesc.of(\"\\n\"))",
+      "jdk": "EXC:java.lang.IllegalArgumentException",
+      "kaji": "true"
+    },
+    {
+      "clase": "java.lang.classfile.attribute.ModuleRequireInfo",
+      "tipo": "otro valor",
+      "java": "java.lang.classfile.attribute.ModuleRequireInfo.of(java.lang.constant.ModuleDesc.of(\"ABC abc\"), 127, \"hola mundo\")",
+      "jdk": "UnboundModuleRequiresInfo[requires=19 ABC abc, requiresFlagsMask=127, requiresVersion=Optional[hola mundo]]",
+      "kaji": "<objeto>"
+    },
+    {
+      "clase": "java.lang.classfile.attribute.ModuleRequireInfo",
+      "tipo": "otro valor",
+      "java": "java.lang.classfile.attribute.ModuleRequireInfo.of(java.lang.constant.ModuleDesc.of(\"abc\"), -2147483648, \"\\n\")",
+      "jdk": "UnboundModuleRequiresInfo[requires=19 abc, requiresFlagsMask=-2147483648, requiresVersion=Optional[",
+      "kaji": "<objeto>"
+    },
+    {
+      "clase": "java.lang.classfile.attribute.ModuleRequireInfo",
+      "tipo": "excepción contra valor",
+      "java": "java.lang.classfile.attribute.ModuleRequireInfo.of(java.lang.constant.ModuleDesc.of(\"ABC abc\"), -1, java.lang.String.valueOf(false)).requiresFlags()",
+      "jdk": "EXC:java.lang.IllegalArgumentException",
+      "kaji": "[MANDATED, STATIC_PHASE, SYNTHETIC, TRANSITIVE]"
+    },
+    {
+      "clase": "java.lang.classfile.attribute.ModuleRequireInfo",
+      "tipo": "excepción contra valor",
+      "java": "java.lang.classfile.attribute.ModuleRequireInfo.of(java.lang.constant.ModuleDesc.of(\"\\n\"), 7, \"0\")",
+      "jdk": "EXC:java.lang.IllegalArgumentException",
+      "kaji": "<objeto>"
+    },
+    {
+      "clase": "java.lang.classfile.attribute.ModuleRequireInfo",
+      "tipo": "otro valor",
+      "java": "java.lang.classfile.attribute.ModuleRequireInfo.of(java.lang.constant.ModuleDesc.of(\"\"), 0, \"a\")",
+      "jdk": "UnboundModuleRequiresInfo[requires=19 , requiresFlagsMask=0, requiresVersion=Optional[a]]",
+      "kaji": "<objeto>"
+    },
+    {
+      "clase": "java.nio.LongBuffer",
+      "tipo": "otro valor",
+      "java": "java.nio.LongBuffer.allocate(32)",
+      "jdk": "java.nio.HeapLongBuffer[pos=0 lim=32 cap=32]",
+      "kaji": "LongBuffer[pos=0 lim=32 cap=32]"
+    },
+    {
+      "clase": "java.nio.LongBuffer",
+      "tipo": "otro valor",
+      "java": "java.nio.LongBuffer.allocate(1)",
+      "jdk": "java.nio.HeapLongBuffer[pos=0 lim=1 cap=1]",
+      "kaji": "LongBuffer[pos=0 lim=1 cap=1]"
+    },
+    {
+      "clase": "java.nio.LongBuffer",
+      "tipo": "otro valor",
+      "java": "java.nio.LongBuffer.allocate(7)",
+      "jdk": "java.nio.HeapLongBuffer[pos=0 lim=7 cap=7]",
+      "kaji": "LongBuffer[pos=0 lim=7 cap=7]"
+    },
+    {
+      "clase": "java.nio.LongBuffer",
+      "tipo": "otra excepción",
+      "java": "java.nio.LongBuffer.wrap(new long[] {1L, -1L}, 31, 2147483647)",
+      "jdk": "EXC:java.lang.IndexOutOfBoundsException",
+      "kaji": "EXC:java.lang.IllegalArgumentException"
+    },
+    {
+      "clase": "java.nio.LongBuffer",
+      "tipo": "otro valor",
+      "java": "java.nio.LongBuffer.allocate(7).rewind()",
+      "jdk": "java.nio.HeapLongBuffer[pos=0 lim=7 cap=7]",
+      "kaji": "LongBuffer[pos=0 lim=7 cap=7]"
+    },
+    {
+      "clase": "java.nio.LongBuffer",
+      "tipo": "otro valor",
+      "java": "java.nio.LongBuffer.wrap(new long[] {1L, -1L})",
+      "jdk": "java.nio.HeapLongBuffer[pos=0 lim=2 cap=2]",
+      "kaji": "LongBuffer[pos=0 lim=2 cap=2]"
+    },
+    {
+      "clase": "java.nio.LongBuffer",
+      "tipo": "otro valor",
+      "java": "java.nio.LongBuffer.wrap(new long[] {1L, -1L})",
+      "jdk": "java.nio.HeapLongBuffer[pos=0 lim=2 cap=2]",
+      "kaji": "LongBuffer[pos=0 lim=2 cap=2]"
+    },
+    {
+      "clase": "java.nio.LongBuffer",
+      "tipo": "otra excepción",
+      "java": "java.nio.LongBuffer.wrap(new long[0], -2147483648, 1).toString()",
+      "jdk": "EXC:java.lang.IndexOutOfBoundsException",
+      "kaji": "EXC:java.lang.IllegalArgumentException"
+    },
+    {
+      "clase": "java.nio.LongBuffer",
+      "tipo": "otra excepción",
+      "java": "java.nio.LongBuffer.wrap(new long[] {1L, -1L}, 0, 255).isReadOnly()",
+      "jdk": "EXC:java.lang.IndexOutOfBoundsException",
+      "kaji": "EXC:java.lang.IllegalArgumentException"
+    },
+    {
+      "clase": "java.nio.LongBuffer",
+      "tipo": "otra excepción",
+      "java": "java.nio.LongBuffer.wrap(new long[0], 255, 0)",
+      "jdk": "EXC:java.lang.IndexOutOfBoundsException",
+      "kaji": "EXC:java.lang.IllegalArgumentException"
+    },
+    {
+      "clase": "java.nio.LongBuffer",
+      "tipo": "otra excepción",
+      "java": "java.nio.LongBuffer.wrap(new long[] {1L, -1L}, 65535, 2147483647).duplicate()",
+      "jdk": "EXC:java.lang.IndexOutOfBoundsException",
+      "kaji": "EXC:java.lang.IllegalArgumentException"
+    },
+    {
+      "clase": "java.nio.LongBuffer",
+      "tipo": "otra excepción",
+      "java": "java.nio.LongBuffer.wrap(new long[0], 2, 32).order()",
+      "jdk": "EXC:java.lang.IndexOutOfBoundsException",
+      "kaji": "EXC:java.lang.IllegalArgumentException"
+    },
+    {
+      "clase": "java.nio.LongBuffer",
+      "tipo": "otra excepción",
+      "java": "java.nio.LongBuffer.wrap(new long[0], -128, 127).limit()",
+      "jdk": "EXC:java.lang.IndexOutOfBoundsException",
+      "kaji": "EXC:java.lang.IllegalArgumentException"
+    },
+    {
+      "clase": "java.nio.LongBuffer",
+      "tipo": "otra excepción",
+      "java": "java.nio.LongBuffer.wrap(new long[] {1L, -1L}, 65535, 1)",
+      "jdk": "EXC:java.lang.IndexOutOfBoundsException",
+      "kaji": "EXC:java.lang.IllegalArgumentException"
+    },
+    {
+      "clase": "java.nio.LongBuffer",
+      "tipo": "otro valor",
+      "java": "java.nio.LongBuffer.wrap(new long[] {1L, -1L})",
+      "jdk": "java.nio.HeapLongBuffer[pos=0 lim=2 cap=2]",
+      "kaji": "LongBuffer[pos=0 lim=2 cap=2]"
+    },
+    {
+      "clase": "java.nio.LongBuffer",
+      "tipo": "otro valor",
+      "java": "java.nio.LongBuffer.allocate(127).slice()",
+      "jdk": "java.nio.HeapLongBuffer[pos=0 lim=127 cap=127]",
+      "kaji": "LongBuffer[pos=0 lim=127 cap=127]"
+    },
+    {
+      "clase": "java.nio.LongBuffer",
+      "tipo": "otra excepción",
+      "java": "java.nio.LongBuffer.wrap(new long[0], -2147483648, 0).slice()",
+      "jdk": "EXC:java.lang.IndexOutOfBoundsException",
+      "kaji": "EXC:java.lang.IllegalArgumentException"
+    },
+    {
+      "clase": "java.nio.LongBuffer",
+      "tipo": "otra excepción",
+      "java": "java.nio.LongBuffer.wrap(new long[0], -1, 0).hasArray()",
+      "jdk": "EXC:java.lang.IndexOutOfBoundsException",
+      "kaji": "EXC:java.lang.IllegalArgumentException"
+    },
+    {
+      "clase": "java.nio.LongBuffer",
+      "tipo": "otra excepción",
+      "java": "java.nio.LongBuffer.wrap(new long[0], 1, 1).slice().put(2147483647, new long[] {1L, -1L})",
+      "jdk": "EXC:java.lang.IndexOutOfBoundsException",
+      "kaji": "EXC:java.lang.IllegalArgumentException"
+    },
+    {
+      "clase": "java.nio.LongBuffer",
+      "tipo": "otro valor",
+      "java": "java.nio.LongBuffer.allocate(1)",
+      "jdk": "java.nio.HeapLongBuffer[pos=0 lim=1 cap=1]",
+      "kaji": "LongBuffer[pos=0 lim=1 cap=1]"
+    },
+    {
+      "clase": "java.nio.LongBuffer",
+      "tipo": "otra excepción",
+      "java": "java.nio.LongBuffer.wrap(new long[0], 1, 2).duplicate()",
+      "jdk": "EXC:java.lang.IndexOutOfBoundsException",
+      "kaji": "EXC:java.lang.IllegalArgumentException"
+    },
+    {
+      "clase": "java.nio.LongBuffer",
+      "tipo": "otra excepción",
+      "java": "java.nio.LongBuffer.wrap(new long[0], -1, 32).arrayOffset()",
+      "jdk": "EXC:java.lang.IndexOutOfBoundsException",
+      "kaji": "EXC:java.lang.IllegalArgumentException"
+    },
+    {
+      "clase": "java.nio.LongBuffer",
+      "tipo": "otra excepción",
+      "java": "java.nio.LongBuffer.wrap(new long[] {1L, -1L}, 2147483647, 65535)",
+      "jdk": "EXC:java.lang.IndexOutOfBoundsException",
+      "kaji": "EXC:java.lang.IllegalArgumentException"
+    },
+    {
+      "clase": "java.util.MissingFormatArgumentException",
+      "tipo": "sin salida (crash o cuelgue)",
+      "java": "new java.util.MissingFormatArgumentException(\" \")",
+      "jdk": "java.util.MissingFormatArgumentException: Format specifier ' '",
+      "kaji": null
+    },
+    {
+      "clase": "java.sql.SQLPermission",
+      "tipo": "sin salida (crash o cuelgue)",
+      "java": "new java.sql.SQLPermission(java.lang.String.valueOf(new char[] {'a', 'b'}, 0, 32)).newPermissionCollection()",
+      "jdk": "EXC:java.lang.StringIndexOutOfBoundsException",
+      "kaji": null
+    },
+    {
+      "clase": "java.lang.management.ManagementFactory",
+      "tipo": "excepción contra valor",
+      "java": "java.lang.management.ManagementFactory.getClassLoadingMXBean().getUnloadedClassCount()",
+      "jdk": "0",
+      "kaji": "EXC:java.lang.UnsupportedOperationException"
+    },
+    {
+      "clase": "java.lang.management.ManagementFactory",
+      "tipo": "otra excepción",
+      "java": "java.lang.management.ManagementFactory.getPlatformMBeanServer().isInstanceOf(javax.management.ObjectName.getInstance(\"\\n\", \" \", \" \"), new java.lang.String(new char[] {'a', 'b'}, 1, 0))",
+      "jdk": "EXC:javax.management.MalformedObjectNameException",
+      "kaji": "EXC:java.lang.UnsupportedOperationException"
+    },
+    {
+      "clase": "java.lang.management.ManagementFactory",
+      "tipo": "excepción contra valor",
+      "java": "java.lang.management.ManagementFactory.getMemoryMXBean().getObjectPendingFinalizationCount()",
+      "jdk": "0",
+      "kaji": "EXC:java.lang.UnsupportedOperationException"
+    },
+    {
+      "clase": "java.lang.management.ManagementFactory",
+      "tipo": "otro valor",
+      "java": "java.lang.management.ManagementFactory.getMemoryPoolMXBeans().size()",
+      "jdk": "8",
+      "kaji": "0"
+    },
+    {
+      "clase": "java.lang.management.ManagementFactory",
+      "tipo": "otra excepción",
+      "java": "java.lang.management.ManagementFactory.getPlatformMBeanServer().getAttributes(new javax.management.ObjectName(\"hola mundo\"), new String[0]).indexOf(\"\")",
+      "jdk": "EXC:javax.management.MalformedObjectNameException",
+      "kaji": "EXC:java.lang.UnsupportedOperationException"
+    },
+    {
+      "clase": "java.lang.management.ManagementFactory",
+      "tipo": "otro valor",
+      "java": "java.lang.management.ManagementFactory.getMemoryMXBean().getHeapMemoryUsage()",
+      "jdk": "init = 257949696(251904K) used = 9590432(9365K) committed = 260046848(253952K) max = 4112515072(4016128K)",
+      "kaji": "init = -1(-1K) used = 33554432(32768K) committed = 67108864(65536K) max = 268435456(262144K)"
+    },
+    {
+      "clase": "java.lang.management.ManagementFactory",
+      "tipo": "excepción contra valor",
+      "java": "java.lang.management.ManagementFactory.getPlatformManagementInterfaces().removeIf(java.util.function.Predicate.isEqual(\"\\u03a3\"))",
+      "jdk": "false",
+      "kaji": "EXC:java.lang.UnsupportedOperationException"
+    },
+    {
+      "clase": "java.lang.management.ManagementFactory",
+      "tipo": "excepción contra valor",
+      "java": "java.lang.management.ManagementFactory.getRuntimeMXBean().getSpecVendor().concat(new java.lang.String(new byte[0], 7))",
+      "jdk": "\"Oracle Corporation\"",
+      "kaji": "EXC:java.lang.NullPointerException"
+    },
+    {
+      "clase": "java.lang.management.ManagementFactory",
+      "tipo": "excepción contra valor",
+      "java": "java.lang.management.ManagementFactory.getClassLoadingMXBean().getLoadedClassCount()",
+      "jdk": "1537",
+      "kaji": "EXC:java.lang.UnsupportedOperationException"
+    },
+    {
+      "clase": "java.lang.management.ManagementFactory",
+      "tipo": "otro valor",
+      "java": "java.lang.management.ManagementFactory.getRuntimeMXBean().getSpecVendor()",
+      "jdk": "\"Oracle Corporation\"",
+      "kaji": "null"
+    },
+    {
+      "clase": "java.lang.management.ManagementFactory",
+      "tipo": "excepción contra valor",
+      "java": "java.lang.management.ManagementFactory.getThreadMXBean().findMonitorDeadlockedThreads()",
+      "jdk": "null",
+      "kaji": "EXC:java.lang.UnsupportedOperationException"
+    },
+    {
+      "clase": "java.lang.management.ManagementFactory",
+      "tipo": "otro valor",
+      "java": "java.lang.management.ManagementFactory.getCompilationMXBean().isCompilationTimeMonitoringSupported()",
+      "jdk": "true",
+      "kaji": "false"
+    },
+    {
+      "clase": "java.lang.management.ManagementFactory",
+      "tipo": "otro valor",
+      "java": "java.lang.management.ManagementFactory.getPlatformManagementInterfaces()",
+      "jdk": "[interface com.sun.management.GarbageCollectorMXBean, interface com.sun.management.HotSpotDiagnosticMXBean, interface com.sun.management.OperatingSystemMXBean, interface com.sun.management.ThreadMXBean, interface com.sun.management.UnixOperatingSystemMXBean, interface java.lang.management.BufferPoolMXBean, interface java.lang.management.ClassLoadingMXBean, interface java.lang.management.CompilationMXBean, interface java.lang.management.GarbageCollectorMXBean, interface java.lang.management.MemoryMXBean, interface java.lang.management.MemoryManagerMXBean, interface java.lang.management.MemoryPoolMXBean, interface java.lang.management.OperatingSystemMXBean, interface java.lang.management.PlatformLoggingMXBean, interface java.lang.management.RuntimeMXBean, interface java.lang.management.ThreadMXBean, interface jdk.management.VirtualThreadSchedulerMXBean, interface jdk.management.jfr.FlightRecorderMXBean]",
+      "kaji": "[interface java.lang.management.BufferPoolMXBean, interface java.lang.management.ClassLoadingMXBean, interface java.lang.management.CompilationMXBean, interface java.lang.management.GarbageCollectorMXBean, interface java.lang.management.MemoryMXBean, interface java.lang.management.MemoryManagerMXBean, interface java.lang.management.MemoryPoolMXBean, interface java.lang.management.OperatingSystemMXBean, interface java.lang.management.PlatformLoggingMXBean, interface java.lang.management.RuntimeMXBean, interface java.lang.management.ThreadMXBean]"
+    },
+    {
+      "clase": "java.lang.management.ManagementFactory",
+      "tipo": "excepción contra valor",
+      "java": "java.lang.management.ManagementFactory.getThreadMXBean().getDaemonThreadCount()",
+      "jdk": "6",
+      "kaji": "EXC:java.lang.UnsupportedOperationException"
+    },
+    {
+      "clase": "java.lang.management.ManagementFactory",
+      "tipo": "otro valor",
+      "java": "java.lang.management.ManagementFactory.getCompilationMXBean().getName()",
+      "jdk": "\"HotSpot 64-Bit Tiered Compilers\"",
+      "kaji": "\"Burst\""
+    },
+    {
+      "clase": "java.lang.management.ManagementFactory",
+      "tipo": "excepción contra valor",
+      "java": "java.lang.management.ManagementFactory.getClassLoadingMXBean().getLoadedClassCount()",
+      "jdk": "1537",
+      "kaji": "EXC:java.lang.UnsupportedOperationException"
+    },
+    {
+      "clase": "java.lang.management.ManagementFactory",
+      "tipo": "otro valor",
+      "java": "java.lang.management.ManagementFactory.getMemoryManagerMXBeans().size()",
+      "jdk": "5",
+      "kaji": "0"
+    },
+    {
+      "clase": "java.text.FieldPosition",
+      "tipo": "otro valor",
+      "java": "new java.text.FieldPosition(32)",
+      "jdk": "java.text.FieldPosition[field=32,attribute=null,beginIndex=0,endIndex=0]",
+      "kaji": "java.text.FieldPosition[field=32,beginIndex=0,endIndex=0]"
+    },
+    {
+      "clase": "java.text.FieldPosition",
+      "tipo": "otro valor",
+      "java": "new java.text.FieldPosition(-1)",
+      "jdk": "java.text.FieldPosition[field=-1,attribute=null,beginIndex=0,endIndex=0]",
+      "kaji": "java.text.FieldPosition[field=-1,beginIndex=0,endIndex=0]"
+    },
+    {
+      "clase": "java.text.FieldPosition",
+      "tipo": "otro valor",
+      "java": "new java.text.FieldPosition(7)",
+      "jdk": "java.text.FieldPosition[field=7,attribute=null,beginIndex=0,endIndex=0]",
+      "kaji": "java.text.FieldPosition[field=7,beginIndex=0,endIndex=0]"
+    },
+    {
+      "clase": "java.text.FieldPosition",
+      "tipo": "otro valor",
+      "java": "new java.text.FieldPosition(-2147483648)",
+      "jdk": "java.text.FieldPosition[field=-2147483648,attribute=null,beginIndex=0,endIndex=0]",
+      "kaji": "java.text.FieldPosition[field=-2147483648,beginIndex=0,endIndex=0]"
+    },
+    {
+      "clase": "java.text.FieldPosition",
+      "tipo": "otro valor",
+      "java": "new java.text.FieldPosition(-128)",
+      "jdk": "java.text.FieldPosition[field=-128,attribute=null,beginIndex=0,endIndex=0]",
+      "kaji": "java.text.FieldPosition[field=-128,beginIndex=0,endIndex=0]"
+    },
+    {
+      "clase": "java.text.FieldPosition",
+      "tipo": "otro valor",
+      "java": "new java.text.FieldPosition(2147483647)",
+      "jdk": "java.text.FieldPosition[field=2147483647,attribute=null,beginIndex=0,endIndex=0]",
+      "kaji": "java.text.FieldPosition[field=2147483647,beginIndex=0,endIndex=0]"
+    },
+    {
+      "clase": "java.text.FieldPosition",
+      "tipo": "otro valor",
+      "java": "new java.text.FieldPosition(-1)",
+      "jdk": "java.text.FieldPosition[field=-1,attribute=null,beginIndex=0,endIndex=0]",
+      "kaji": "java.text.FieldPosition[field=-1,beginIndex=0,endIndex=0]"
+    },
+    {
+      "clase": "java.text.FieldPosition",
+      "tipo": "otro valor",
+      "java": "new java.text.FieldPosition(7)",
+      "jdk": "java.text.FieldPosition[field=7,attribute=null,beginIndex=0,endIndex=0]",
+      "kaji": "java.text.FieldPosition[field=7,beginIndex=0,endIndex=0]"
+    },
+    {
+      "clase": "java.text.FieldPosition",
+      "tipo": "otro valor",
+      "java": "new java.text.FieldPosition(1).toString()",
+      "jdk": "\"java.text.FieldPosition[field=1,attribute=null,beginIndex=0,endIndex=0]\"",
+      "kaji": "\"java.text.FieldPosition[field=1,beginIndex=0,endIndex=0]\""
+    },
+    {
+      "clase": "java.text.FieldPosition",
+      "tipo": "otro valor",
+      "java": "new java.text.FieldPosition(127)",
+      "jdk": "java.text.FieldPosition[field=127,attribute=null,beginIndex=0,endIndex=0]",
+      "kaji": "java.text.FieldPosition[field=127,beginIndex=0,endIndex=0]"
+    },
+    {
+      "clase": "java.text.FieldPosition",
+      "tipo": "otro valor",
+      "java": "new java.text.FieldPosition(7)",
+      "jdk": "java.text.FieldPosition[field=7,attribute=null,beginIndex=0,endIndex=0]",
+      "kaji": "java.text.FieldPosition[field=7,beginIndex=0,endIndex=0]"
+    },
+    {
+      "clase": "java.text.FieldPosition",
+      "tipo": "otro valor",
+      "java": "new java.text.FieldPosition(31)",
+      "jdk": "java.text.FieldPosition[field=31,attribute=null,beginIndex=0,endIndex=0]",
+      "kaji": "java.text.FieldPosition[field=31,beginIndex=0,endIndex=0]"
+    },
+    {
+      "clase": "java.text.FieldPosition",
+      "tipo": "otro valor",
+      "java": "new java.text.FieldPosition(32)",
+      "jdk": "java.text.FieldPosition[field=32,attribute=null,beginIndex=0,endIndex=0]",
+      "kaji": "java.text.FieldPosition[field=32,beginIndex=0,endIndex=0]"
+    },
+    {
+      "clase": "java.text.FieldPosition",
+      "tipo": "otro valor",
+      "java": "new java.text.FieldPosition(-128)",
+      "jdk": "java.text.FieldPosition[field=-128,attribute=null,beginIndex=0,endIndex=0]",
+      "kaji": "java.text.FieldPosition[field=-128,beginIndex=0,endIndex=0]"
+    },
+    {
+      "clase": "java.text.FieldPosition",
+      "tipo": "otro valor",
+      "java": "new java.text.FieldPosition(32)",
+      "jdk": "java.text.FieldPosition[field=32,attribute=null,beginIndex=0,endIndex=0]",
+      "kaji": "java.text.FieldPosition[field=32,beginIndex=0,endIndex=0]"
+    },
+    {
+      "clase": "java.text.FieldPosition",
+      "tipo": "otro valor",
+      "java": "new java.text.FieldPosition(2).toString().describeConstable()",
+      "jdk": "Optional[java.text.FieldPosition[field=2,attribute=null,beginIndex=0,endIndex=0]]",
+      "kaji": "<objeto>"
+    },
+    {
+      "clase": "java.text.FieldPosition",
+      "tipo": "otro valor",
+      "java": "new java.text.FieldPosition(-1)",
+      "jdk": "java.text.FieldPosition[field=-1,attribute=null,beginIndex=0,endIndex=0]",
+      "kaji": "java.text.FieldPosition[field=-1,beginIndex=0,endIndex=0]"
+    },
+    {
+      "clase": "java.util.stream.Collectors",
+      "tipo": "otro valor",
+      "java": "java.util.stream.Collectors.groupingBy(java.util.function.Function.identity()).characteristics()",
+      "jdk": "[IDENTITY_FINISH]",
+      "kaji": "[]"
+    },
+    {
+      "clase": "java.util.stream.Collectors",
+      "tipo": "otro valor",
+      "java": "java.util.stream.Collectors.groupingBy(java.util.function.Function.identity()).supplier().get()",
+      "jdk": "[]",
+      "kaji": "[[], []]"
+    },
+    {
+      "clase": "java.util.stream.Collectors",
+      "tipo": "otro valor",
+      "java": "java.util.stream.Collectors.groupingBy(java.util.function.Function.identity()).supplier().get()",
+      "jdk": "[]",
+      "kaji": "[[], []]"
+    },
+    {
+      "clase": "java.lang.classfile.attribute.RuntimeVisibleParameterAnnotationsAttribute",
+      "tipo": "otro valor",
+      "java": "java.lang.classfile.attribute.RuntimeVisibleParameterAnnotationsAttribute.of(java.util.List.of()).attributeMapper()",
+      "jdk": "AttributeMapper[name=RuntimeVisibleParameterAnnotations, allowMultiple=false, stability=CP_REFS]",
+      "kaji": "AttributeMapper[RuntimeVisibleParameterAnnotations]"
+    },
+    {
+      "clase": "java.lang.classfile.attribute.RuntimeVisibleParameterAnnotationsAttribute",
+      "tipo": "otro valor",
+      "java": "java.lang.classfile.attribute.RuntimeVisibleParameterAnnotationsAttribute.of(java.util.List.of())",
+      "jdk": "Attribute[name=RuntimeVisibleParameterAnnotations]",
+      "kaji": "<objeto>"
+    },
+    {
+      "clase": "java.lang.classfile.attribute.RuntimeVisibleParameterAnnotationsAttribute",
+      "tipo": "otro valor",
+      "java": "java.lang.classfile.attribute.RuntimeVisibleParameterAnnotationsAttribute.of(java.util.List.of()).attributeMapper()",
+      "jdk": "AttributeMapper[name=RuntimeVisibleParameterAnnotations, allowMultiple=false, stability=CP_REFS]",
+      "kaji": "AttributeMapper[RuntimeVisibleParameterAnnotations]"
+    },
+    {
+      "clase": "java.lang.classfile.attribute.RuntimeVisibleParameterAnnotationsAttribute",
+      "tipo": "otro valor",
+      "java": "java.lang.classfile.attribute.RuntimeVisibleParameterAnnotationsAttribute.of(java.util.List.of())",
+      "jdk": "Attribute[name=RuntimeVisibleParameterAnnotations]",
+      "kaji": "<objeto>"
+    },
+    {
+      "clase": "java.lang.classfile.attribute.RuntimeVisibleParameterAnnotationsAttribute",
+      "tipo": "otro valor",
+      "java": "java.lang.classfile.attribute.RuntimeVisibleParameterAnnotationsAttribute.of(java.util.List.of())",
+      "jdk": "Attribute[name=RuntimeVisibleParameterAnnotations]",
+      "kaji": "<objeto>"
+    },
+    {
+      "clase": "java.lang.classfile.attribute.RuntimeVisibleParameterAnnotationsAttribute",
+      "tipo": "otra excepción",
+      "java": "java.lang.classfile.attribute.RuntimeVisibleParameterAnnotationsAttribute.of(java.util.List.of()).parameterAnnotations().subList(31, -1)",
+      "jdk": "EXC:java.lang.IllegalArgumentException",
+      "kaji": "EXC:java.lang.IndexOutOfBoundsException"
+    },
+    {
+      "clase": "java.security.spec.ECFieldF2m",
+      "tipo": "otro valor",
+      "java": "new java.security.spec.ECFieldF2m(2, new int[] {1}).hashCode()",
+      "jdk": "8192",
+      "kaji": "69"
+    },
+    {
+      "clase": "java.security.spec.ECFieldF2m",
+      "tipo": "otro valor",
+      "java": "new java.security.spec.ECFieldF2m(255).hashCode()",
+      "jdk": "8160",
+      "kaji": "7905"
+    },
+    {
+      "clase": "java.security.spec.ECFieldF2m",
+      "tipo": "otra excepción",
+      "java": "new java.security.spec.ECFieldF2m(255, new java.math.BigInteger(new byte[] {1, 2, 3}, 2147483647, 32)).getMidTermsOfReductionPolynomial()",
+      "jdk": "EXC:java.lang.IndexOutOfBoundsException",
+      "kaji": "EXC:java.lang.ArrayIndexOutOfBoundsException"
+    },
+    {
+      "clase": "java.security.spec.ECFieldF2m",
+      "tipo": "otro valor",
+      "java": "new java.security.spec.ECFieldF2m(65535).hashCode()",
+      "jdk": "2097120",
+      "kaji": "2031585"
+    },
+    {
+      "clase": "java.security.spec.ECFieldF2m",
+      "tipo": "otra excepción",
+      "java": "new java.security.spec.ECFieldF2m(2, new java.math.BigInteger(new byte[] {1, 2, 3}, 1, 32))",
+      "jdk": "EXC:java.lang.IndexOutOfBoundsException",
+      "kaji": "EXC:java.lang.ArrayIndexOutOfBoundsException"
+    },
+    {
+      "clase": "java.lang.classfile.instruction.NewPrimitiveArrayInstruction",
+      "tipo": "otro valor",
+      "java": "java.lang.classfile.instruction.NewPrimitiveArrayInstruction.of(java.lang.classfile.TypeKind.fromNewarrayCode(7))",
+      "jdk": "NewPrimitiveArray[OP=NEWARRAY, type=DOUBLE]",
+      "kaji": "NEWARRAY DOUBLE"
+    },
+    {
+      "clase": "java.util.ResourceBundle",
+      "tipo": "sin salida (crash o cuelgue)",
+      "java": "java.util.ResourceBundle.getBundle(\"a\", java.util.Locale.of(\" \")).getString(\"\\u00df\").stripTrailing()",
+      "jdk": "EXC:java.util.MissingResourceException",
+      "kaji": null
+    },
+    {
+      "clase": "java.lang.classfile.attribute.ModulePackagesAttribute",
+      "tipo": "otro valor",
+      "java": "java.lang.classfile.attribute.ModulePackagesAttribute.ofNames(java.util.List.of())",
+      "jdk": "Attribute[name=ModulePackages]",
+      "kaji": "<objeto>"
+    },
+    {
+      "clase": "java.lang.classfile.attribute.ModulePackagesAttribute",
+      "tipo": "otro valor",
+      "java": "java.lang.classfile.attribute.ModulePackagesAttribute.ofNames(java.util.List.of())",
+      "jdk": "Attribute[name=ModulePackages]",
+      "kaji": "<objeto>"
+    },
+    {
+      "clase": "java.lang.classfile.Attributes",
+      "tipo": "otro valor",
+      "java": "java.lang.classfile.Attributes.characterRangeTable()",
+      "jdk": "AttributeMapper[name=CharacterRangeTable, allowMultiple=true, stability=LABELS]",
+      "kaji": "AttributeMapper[CharacterRangeTable]"
+    },
+    {
+      "clase": "java.lang.classfile.Attributes",
+      "tipo": "otro valor",
+      "java": "java.lang.classfile.Attributes.moduleHashes()",
+      "jdk": "AttributeMapper[name=ModuleHashes, allowMultiple=false, stability=CP_REFS]",
+      "kaji": "AttributeMapper[ModuleHashes]"
+    },
+    {
+      "clase": "java.lang.classfile.Attributes",
+      "tipo": "otro valor",
+      "java": "java.lang.classfile.Attributes.compilationId()",
+      "jdk": "AttributeMapper[name=CompilationID, allowMultiple=false, stability=CP_REFS]",
+      "kaji": "AttributeMapper[CompilationID]"
+    },
+    {
+      "clase": "java.lang.classfile.Attributes",
+      "tipo": "otro valor",
+      "java": "java.lang.classfile.Attributes.moduleMainClass()",
+      "jdk": "AttributeMapper[name=ModuleMainClass, allowMultiple=false, stability=CP_REFS]",
+      "kaji": "AttributeMapper[ModuleMainClass]"
+    },
+    {
+      "clase": "java.lang.classfile.Attributes",
+      "tipo": "otro valor",
+      "java": "java.lang.classfile.Attributes.stackMapTable()",
+      "jdk": "AttributeMapper[name=StackMapTable, allowMultiple=false, stability=LABELS]",
+      "kaji": "AttributeMapper[StackMapTable]"
+    },
+    {
+      "clase": "java.lang.classfile.Attributes",
+      "tipo": "otro valor",
+      "java": "java.lang.classfile.Attributes.runtimeVisibleTypeAnnotations()",
+      "jdk": "AttributeMapper[name=RuntimeVisibleTypeAnnotations, allowMultiple=false, stability=UNSTABLE]",
+      "kaji": "AttributeMapper[RuntimeVisibleTypeAnnotations]"
+    },
+    {
+      "clase": "java.lang.classfile.Attributes",
+      "tipo": "otro valor",
+      "java": "java.lang.classfile.Attributes.exceptions()",
+      "jdk": "AttributeMapper[name=Exceptions, allowMultiple=false, stability=CP_REFS]",
+      "kaji": "AttributeMapper[Exceptions]"
+    },
+    {
+      "clase": "java.lang.classfile.Attributes",
+      "tipo": "otro valor",
+      "java": "java.lang.classfile.Attributes.moduleHashes()",
+      "jdk": "AttributeMapper[name=ModuleHashes, allowMultiple=false, stability=CP_REFS]",
+      "kaji": "AttributeMapper[ModuleHashes]"
+    },
+    {
+      "clase": "java.lang.classfile.Attributes",
+      "tipo": "otro valor",
+      "java": "java.lang.classfile.Attributes.moduleResolution()",
+      "jdk": "AttributeMapper[name=ModuleResolution, allowMultiple=false, stability=STATELESS]",
+      "kaji": "AttributeMapper[ModuleResolution]"
+    },
+    {
+      "clase": "java.lang.classfile.Attributes",
+      "tipo": "excepción contra valor",
+      "java": "java.lang.classfile.Attributes.methodParameters().name().startsWith(java.lang.String.valueOf(new char[0], 2147483647, 0), 1)",
+      "jdk": "EXC:java.lang.StringIndexOutOfBoundsException",
+      "kaji": "true"
+    },
+    {
+      "clase": "java.lang.classfile.Attributes",
+      "tipo": "otro valor",
+      "java": "java.lang.classfile.Attributes.bootstrapMethods()",
+      "jdk": "AttributeMapper[name=BootstrapMethods, allowMultiple=false, stability=CP_REFS]",
+      "kaji": "AttributeMapper[BootstrapMethods]"
+    },
+    {
+      "clase": "java.lang.classfile.Attributes",
+      "tipo": "otro valor",
+      "java": "java.lang.classfile.Attributes.lineNumberTable()",
+      "jdk": "AttributeMapper[name=LineNumberTable, allowMultiple=true, stability=LABELS]",
+      "kaji": "AttributeMapper[LineNumberTable]"
+    },
+    {
+      "clase": "java.lang.classfile.Attributes",
+      "tipo": "otro valor",
+      "java": "java.lang.classfile.Attributes.synthetic()",
+      "jdk": "AttributeMapper[name=Synthetic, allowMultiple=true, stability=STATELESS]",
+      "kaji": "AttributeMapper[Synthetic]"
+    },
+    {
+      "clase": "java.lang.classfile.Attributes",
+      "tipo": "otro valor",
+      "java": "java.lang.classfile.Attributes.bootstrapMethods()",
+      "jdk": "AttributeMapper[name=BootstrapMethods, allowMultiple=false, stability=CP_REFS]",
+      "kaji": "AttributeMapper[BootstrapMethods]"
+    },
+    {
+      "clase": "java.lang.classfile.Attributes",
+      "tipo": "otro valor",
+      "java": "java.lang.classfile.Attributes.nestMembers()",
+      "jdk": "AttributeMapper[name=NestMembers, allowMultiple=false, stability=CP_REFS]",
+      "kaji": "AttributeMapper[NestMembers]"
+    },
+    {
+      "clase": "java.lang.classfile.Attributes",
+      "tipo": "otro valor",
+      "java": "java.lang.classfile.Attributes.module()",
+      "jdk": "AttributeMapper[name=Module, allowMultiple=false, stability=CP_REFS]",
+      "kaji": "AttributeMapper[Module]"
+    },
+    {
+      "clase": "java.lang.classfile.Attributes",
+      "tipo": "otro valor",
+      "java": "java.lang.classfile.Attributes.compilationId()",
+      "jdk": "AttributeMapper[name=CompilationID, allowMultiple=false, stability=CP_REFS]",
+      "kaji": "AttributeMapper[CompilationID]"
+    },
+    {
+      "clase": "java.lang.classfile.Attributes",
+      "tipo": "otro valor",
+      "java": "java.lang.classfile.Attributes.exceptions()",
+      "jdk": "AttributeMapper[name=Exceptions, allowMultiple=false, stability=CP_REFS]",
+      "kaji": "AttributeMapper[Exceptions]"
+    },
+    {
+      "clase": "java.lang.classfile.attribute.RuntimeVisibleTypeAnnotationsAttribute",
+      "tipo": "otro valor",
+      "java": "java.lang.classfile.attribute.RuntimeVisibleTypeAnnotationsAttribute.of(java.util.List.of())",
+      "jdk": "Attribute[name=RuntimeVisibleTypeAnnotations]",
+      "kaji": "<objeto>"
+    },
+    {
+      "clase": "java.lang.classfile.attribute.RuntimeVisibleTypeAnnotationsAttribute",
+      "tipo": "otro valor",
+      "java": "java.lang.classfile.attribute.RuntimeVisibleTypeAnnotationsAttribute.of(java.util.List.of())",
+      "jdk": "Attribute[name=RuntimeVisibleTypeAnnotations]",
+      "kaji": "<objeto>"
+    },
+    {
+      "clase": "java.lang.classfile.attribute.RuntimeVisibleTypeAnnotationsAttribute",
+      "tipo": "otro valor",
+      "java": "java.lang.classfile.attribute.RuntimeVisibleTypeAnnotationsAttribute.of(java.util.List.of())",
+      "jdk": "Attribute[name=RuntimeVisibleTypeAnnotations]",
+      "kaji": "<objeto>"
+    },
+    {
+      "clase": "java.lang.foreign.SymbolLookup",
+      "tipo": "otro valor",
+      "java": "java.lang.foreign.SymbolLookup.loaderLookup().find(\"\\u00df\")",
+      "jdk": "Optional.empty",
+      "kaji": "<objeto>"
+    },
+    {
+      "clase": "java.lang.foreign.SymbolLookup",
+      "tipo": "otra excepción",
+      "java": "java.lang.foreign.SymbolLookup.libraryLookup(new java.lang.String(), java.lang.foreign.Arena.global())",
+      "jdk": "EXC:java.lang.IllegalArgumentException",
+      "kaji": "EXC:java.lang.UnsupportedOperationException"
+    },
+    {
+      "clase": "java.lang.foreign.SymbolLookup",
+      "tipo": "otro valor",
+      "java": "java.lang.foreign.SymbolLookup.loaderLookup().find(\"0\")",
+      "jdk": "Optional.empty",
+      "kaji": "<objeto>"
+    },
+    {
+      "clase": "java.lang.foreign.SymbolLookup",
+      "tipo": "otro valor",
+      "java": "java.lang.foreign.SymbolLookup.loaderLookup().find(\"ABC abc\")",
+      "jdk": "Optional.empty",
+      "kaji": "<objeto>"
+    },
+    {
+      "clase": "java.lang.foreign.SymbolLookup",
+      "tipo": "otra excepción",
+      "java": "java.lang.foreign.SymbolLookup.libraryLookup(\"abc\", java.lang.foreign.Arena.global()).find(\"1234567890\").orElseThrow()",
+      "jdk": "EXC:java.lang.IllegalArgumentException",
+      "kaji": "EXC:java.lang.UnsupportedOperationException"
+    },
+    {
+      "clase": "java.lang.foreign.SymbolLookup",
+      "tipo": "otra excepción",
+      "java": "java.lang.foreign.SymbolLookup.libraryLookup(java.lang.String.valueOf(0.5), java.lang.foreign.Arena.ofShared())",
+      "jdk": "EXC:java.lang.IllegalArgumentException",
+      "kaji": "EXC:java.lang.UnsupportedOperationException"
+    },
+    {
+      "clase": "java.lang.foreign.SymbolLookup",
+      "tipo": "otra excepción",
+      "java": "java.lang.foreign.SymbolLookup.libraryLookup(\"-1\", java.lang.foreign.Arena.ofConfined())",
+      "jdk": "EXC:java.lang.IllegalArgumentException",
+      "kaji": "EXC:java.lang.UnsupportedOperationException"
+    },
+    {
+      "clase": "java.lang.foreign.SymbolLookup",
+      "tipo": "otra excepción",
+      "java": "java.lang.foreign.SymbolLookup.libraryLookup(java.lang.String.valueOf(true), java.lang.foreign.Arena.ofConfined()).find(java.lang.String.valueOf(-1.0f)).get()",
+      "jdk": "EXC:java.lang.IllegalArgumentException",
+      "kaji": "EXC:java.lang.UnsupportedOperationException"
+    },
+    {
+      "clase": "java.lang.foreign.SymbolLookup",
+      "tipo": "otro valor",
+      "java": "java.lang.foreign.SymbolLookup.loaderLookup().find(\"\\u03a3\")",
+      "jdk": "Optional.empty",
+      "kaji": "<objeto>"
+    },
+    {
+      "clase": "java.lang.foreign.SymbolLookup",
+      "tipo": "otra excepción",
+      "java": "java.lang.foreign.SymbolLookup.libraryLookup(\"-1\", java.lang.foreign.Arena.ofShared())",
+      "jdk": "EXC:java.lang.IllegalArgumentException",
+      "kaji": "EXC:java.lang.UnsupportedOperationException"
+    },
+    {
+      "clase": "java.lang.foreign.SymbolLookup",
+      "tipo": "otra excepción",
+      "java": "java.lang.foreign.SymbolLookup.libraryLookup(\"a\", java.lang.foreign.Arena.ofAuto())",
+      "jdk": "EXC:java.lang.IllegalArgumentException",
+      "kaji": "EXC:java.lang.UnsupportedOperationException"
+    },
+    {
+      "clase": "java.lang.foreign.SymbolLookup",
+      "tipo": "otra excepción",
+      "java": "java.lang.foreign.SymbolLookup.libraryLookup(\"\", java.lang.foreign.Arena.ofShared()).find(\"0\").isEmpty()",
+      "jdk": "EXC:java.lang.IllegalArgumentException",
+      "kaji": "EXC:java.lang.UnsupportedOperationException"
+    },
+    {
+      "clase": "java.lang.foreign.SymbolLookup",
+      "tipo": "otra excepción",
+      "java": "java.lang.foreign.SymbolLookup.libraryLookup(new java.lang.String(new char[] {(char) 0, (char) 65535}), java.lang.foreign.Arena.global()).findOrThrow(java.lang.String.valueOf(true)).address()",
+      "jdk": "EXC:java.lang.IllegalArgumentException",
+      "kaji": "EXC:java.lang.UnsupportedOperationException"
+    },
+    {
+      "clase": "java.lang.foreign.SymbolLookup",
+      "tipo": "otra excepción",
+      "java": "java.lang.foreign.SymbolLookup.libraryLookup(java.lang.String.valueOf(new char[] {'a', 'b'}), java.lang.foreign.Arena.ofConfined()).find(\" \")",
+      "jdk": "EXC:java.lang.IllegalArgumentException",
+      "kaji": "EXC:java.lang.UnsupportedOperationException"
+    },
+    {
+      "clase": "java.lang.foreign.SymbolLookup",
+      "tipo": "otra excepción",
+      "java": "java.lang.foreign.SymbolLookup.libraryLookup(java.lang.String.valueOf(new char[] {(char) 0, (char) 65535}), java.lang.foreign.Arena.global()).findOrThrow(java.lang.String.valueOf(new char[0], 65535, -1)).byteSize()",
+      "jdk": "EXC:java.lang.IllegalArgumentException",
+      "kaji": "EXC:java.lang.UnsupportedOperationException"
+    },
+    {
+      "clase": "java.lang.foreign.SymbolLookup",
+      "tipo": "otra excepción",
+      "java": "java.lang.foreign.SymbolLookup.libraryLookup(\"0\", java.lang.foreign.Arena.ofShared()).findOrThrow(\" \").scope()",
+      "jdk": "EXC:java.lang.IllegalArgumentException",
+      "kaji": "EXC:java.lang.UnsupportedOperationException"
+    },
+    {
+      "clase": "java.lang.foreign.SymbolLookup",
+      "tipo": "otra excepción",
+      "java": "java.lang.foreign.SymbolLookup.libraryLookup(\"a\", java.lang.foreign.Arena.ofAuto())",
+      "jdk": "EXC:java.lang.IllegalArgumentException",
+      "kaji": "EXC:java.lang.UnsupportedOperationException"
+    },
+    {
+      "clase": "java.lang.foreign.SymbolLookup",
+      "tipo": "otra excepción",
+      "java": "java.lang.foreign.SymbolLookup.libraryLookup(\"\", java.lang.foreign.Arena.ofShared())",
+      "jdk": "EXC:java.lang.IllegalArgumentException",
+      "kaji": "EXC:java.lang.UnsupportedOperationException"
+    },
+    {
+      "clase": "java.lang.foreign.SymbolLookup",
+      "tipo": "otra excepción",
+      "java": "java.lang.foreign.SymbolLookup.libraryLookup(\"0\", java.lang.foreign.Arena.ofConfined()).or(java.lang.foreign.SymbolLookup.loaderLookup()).find(\"0\")",
+      "jdk": "EXC:java.lang.IllegalArgumentException",
+      "kaji": "EXC:java.lang.UnsupportedOperationException"
+    },
+    {
+      "clase": "java.lang.foreign.SymbolLookup",
+      "tipo": "otra excepción",
+      "java": "java.lang.foreign.SymbolLookup.libraryLookup(\"abc\", java.lang.foreign.Arena.ofConfined()).find(\"abc\")",
+      "jdk": "EXC:java.lang.IllegalArgumentException",
+      "kaji": "EXC:java.lang.UnsupportedOperationException"
+    },
+    {
+      "clase": "java.lang.foreign.SymbolLookup",
+      "tipo": "otro valor",
+      "java": "java.lang.foreign.SymbolLookup.loaderLookup().find(\"1234567890\")",
+      "jdk": "Optional.empty",
+      "kaji": "<objeto>"
+    },
+    {
+      "clase": "java.lang.foreign.SymbolLookup",
+      "tipo": "otra excepción",
+      "java": "java.lang.foreign.SymbolLookup.libraryLookup(\"\\n\", java.lang.foreign.Arena.ofAuto()).findOrThrow(\" \").hashCode()",
+      "jdk": "EXC:java.lang.IllegalArgumentException",
+      "kaji": "EXC:java.lang.UnsupportedOperationException"
+    },
+    {
+      "clase": "java.lang.foreign.SymbolLookup",
+      "tipo": "otra excepción",
+      "java": "java.lang.foreign.SymbolLookup.libraryLookup(\"-1\", java.lang.foreign.Arena.global()).or(java.lang.foreign.SymbolLookup.loaderLookup())",
+      "jdk": "EXC:java.lang.IllegalArgumentException",
+      "kaji": "EXC:java.lang.UnsupportedOperationException"
+    },
+    {
+      "clase": "java.lang.foreign.SymbolLookup",
+      "tipo": "otra excepción",
+      "java": "java.lang.foreign.SymbolLookup.libraryLookup(\"hola mundo\", java.lang.foreign.Arena.global())",
+      "jdk": "EXC:java.lang.IllegalArgumentException",
+      "kaji": "EXC:java.lang.UnsupportedOperationException"
+    },
+    {
+      "clase": "java.lang.classfile.attribute.ModuleOpenInfo",
+      "tipo": "otro valor",
+      "java": "java.lang.classfile.attribute.ModuleOpenInfo.of(java.lang.constant.PackageDesc.of(\"-1\"), -2147483648, java.util.List.of()).openedPackage()",
+      "jdk": "20 -1",
+      "kaji": "package -1"
+    },
+    {
+      "clase": "java.lang.classfile.attribute.ModuleOpenInfo",
+      "tipo": "excepción contra valor",
+      "java": "java.lang.classfile.attribute.ModuleOpenInfo.of(java.lang.constant.PackageDesc.of(\"A\"), 2147483647, java.util.List.of()).opensFlags().toArray()",
+      "jdk": "EXC:java.lang.IllegalArgumentException",
+      "kaji": "[SYNTHETIC, MANDATED]"
+    },
+    {
+      "clase": "java.lang.classfile.attribute.ModuleOpenInfo",
+      "tipo": "otro valor",
+      "java": "java.lang.classfile.attribute.ModuleOpenInfo.of(java.lang.constant.PackageDesc.of(\"hola mundo\"), 7, java.util.List.of())",
+      "jdk": "UnboundModuleOpenInfo[openedPackage=20 hola mundo, opensFlagsMask=7, opensTo=[]]",
+      "kaji": "<objeto>"
+    },
+    {
+      "clase": "java.lang.classfile.attribute.ModuleOpenInfo",
+      "tipo": "otro valor",
+      "java": "java.lang.classfile.attribute.ModuleOpenInfo.of(java.lang.constant.PackageDesc.ofInternalName(\"\\u03a3\"), 1, java.util.List.of())",
+      "jdk": "UnboundModuleOpenInfo[openedPackage=20 Σ, opensFlagsMask=1, opensTo=[]]",
+      "kaji": "<objeto>"
+    },
+    {
+      "clase": "java.lang.classfile.attribute.ModuleOpenInfo",
+      "tipo": "otro valor",
+      "java": "java.lang.classfile.attribute.ModuleOpenInfo.of(java.lang.constant.PackageDesc.of(\"ABC abc\"), 2, java.util.List.of()).openedPackage()",
+      "jdk": "20 ABC abc",
+      "kaji": "package ABC abc"
+    },
+    {
+      "clase": "java.lang.classfile.attribute.ModuleOpenInfo",
+      "tipo": "otro valor",
+      "java": "java.lang.classfile.attribute.ModuleOpenInfo.of(java.lang.constant.PackageDesc.ofInternalName(\"-1\"), 2147483647, java.util.List.of()).openedPackage()",
+      "jdk": "20 -1",
+      "kaji": "package -1"
+    },
+    {
+      "clase": "java.lang.classfile.attribute.ModuleOpenInfo",
+      "tipo": "excepción contra valor",
+      "java": "java.lang.classfile.attribute.ModuleOpenInfo.of(java.lang.constant.PackageDesc.ofInternalName(\"\"), 7, java.util.List.of()).opensFlags().toArray()",
+      "jdk": "EXC:java.lang.IllegalArgumentException",
+      "kaji": "[]"
+    },
+    {
+      "clase": "java.lang.InstantiationError",
+      "tipo": "excepción contra valor",
+      "java": "new java.lang.InstantiationError(java.lang.String.valueOf(new char[] {(char) 0, (char) 65535}, 7, 1)).initCause(new java.lang.Throwable(\"hola mundo\")).getMessage()",
+      "jdk": "EXC:java.lang.StringIndexOutOfBoundsException",
+      "kaji": "\"\u0000\""
+    },
+    {
+      "clase": "java.lang.InstantiationError",
+      "tipo": "excepción contra valor",
+      "java": "new java.lang.InstantiationError(\"\\n\").getMessage().indexOf(\"-1\", 32, 255)",
+      "jdk": "EXC:java.lang.StringIndexOutOfBoundsException",
+      "kaji": "-1"
+    },
+    {
+      "clase": "org.xml.sax.SAXException",
+      "tipo": "sin salida (crash o cuelgue)",
+      "java": "new org.xml.sax.SAXException(\"ABC abc\", new java.lang.Exception()).initCause(new java.lang.Throwable())",
+      "jdk": "EXC:java.lang.IllegalStateException",
+      "kaji": null
+    },
+    {
+      "clase": "java.util.zip.Inflater",
+      "tipo": "excepción contra valor",
+      "java": "new java.util.zip.Inflater().inflate(new byte[] {1, 2, 3}, 65535, 127)",
+      "jdk": "EXC:java.lang.ArrayIndexOutOfBoundsException",
+      "kaji": "0"
+    },
+    {
+      "clase": "java.util.zip.Inflater",
+      "tipo": "excepción contra valor",
+      "java": "new java.util.zip.Inflater(true).inflate(new byte[0], -2147483648, 32)",
+      "jdk": "EXC:java.lang.ArrayIndexOutOfBoundsException",
+      "kaji": "0"
+    },
+    {
+      "clase": "java.util.zip.Inflater",
+      "tipo": "excepción contra valor",
+      "java": "new java.util.zip.Inflater(false).inflate(new byte[] {1, 2, 3}, -1, 65535)",
+      "jdk": "EXC:java.lang.ArrayIndexOutOfBoundsException",
+      "kaji": "0"
+    },
+    {
+      "clase": "java.util.zip.Inflater",
+      "tipo": "otro valor",
+      "java": "new java.util.zip.Inflater(true).getAdler()",
+      "jdk": "0",
+      "kaji": "1"
+    },
+    {
+      "clase": "java.util.zip.Inflater",
+      "tipo": "otra excepción",
+      "java": "new java.util.zip.Inflater().inflate(java.nio.ByteBuffer.wrap(new byte[] {-1, 0, 127}, 65535, 32))",
+      "jdk": "EXC:java.lang.IndexOutOfBoundsException",
+      "kaji": "EXC:java.lang.IllegalArgumentException"
+    },
+    {
+      "clase": "java.lang.classfile.attribute.DeprecatedAttribute",
+      "tipo": "otro valor",
+      "java": "java.lang.classfile.attribute.DeprecatedAttribute.of()",
+      "jdk": "Attribute[name=Deprecated]",
+      "kaji": "Deprecated[]"
+    },
+    {
+      "clase": "java.lang.classfile.attribute.DeprecatedAttribute",
+      "tipo": "otro valor",
+      "java": "java.lang.classfile.attribute.DeprecatedAttribute.of().attributeMapper()",
+      "jdk": "AttributeMapper[name=Deprecated, allowMultiple=true, stability=STATELESS]",
+      "kaji": "AttributeMapper[Deprecated]"
+    },
+    {
+      "clase": "java.lang.classfile.attribute.DeprecatedAttribute",
+      "tipo": "otro valor",
+      "java": "java.lang.classfile.attribute.DeprecatedAttribute.of()",
+      "jdk": "Attribute[name=Deprecated]",
+      "kaji": "Deprecated[]"
+    },
+    {
+      "clase": "java.lang.classfile.attribute.DeprecatedAttribute",
+      "tipo": "otro valor",
+      "java": "java.lang.classfile.attribute.DeprecatedAttribute.of()",
+      "jdk": "Attribute[name=Deprecated]",
+      "kaji": "Deprecated[]"
+    },
+    {
+      "clase": "java.lang.classfile.attribute.DeprecatedAttribute",
+      "tipo": "otro valor",
+      "java": "java.lang.classfile.attribute.DeprecatedAttribute.of()",
+      "jdk": "Attribute[name=Deprecated]",
+      "kaji": "Deprecated[]"
+    },
+    {
+      "clase": "java.lang.classfile.attribute.DeprecatedAttribute",
+      "tipo": "otro valor",
+      "java": "java.lang.classfile.attribute.DeprecatedAttribute.of()",
+      "jdk": "Attribute[name=Deprecated]",
+      "kaji": "Deprecated[]"
+    },
+    {
+      "clase": "java.lang.classfile.attribute.DeprecatedAttribute",
+      "tipo": "otro valor",
+      "java": "java.lang.classfile.attribute.DeprecatedAttribute.of().attributeMapper()",
+      "jdk": "AttributeMapper[name=Deprecated, allowMultiple=true, stability=STATELESS]",
+      "kaji": "AttributeMapper[Deprecated]"
+    },
+    {
+      "clase": "java.lang.classfile.attribute.DeprecatedAttribute",
+      "tipo": "otro valor",
+      "java": "java.lang.classfile.attribute.DeprecatedAttribute.of().attributeMapper()",
+      "jdk": "AttributeMapper[name=Deprecated, allowMultiple=true, stability=STATELESS]",
+      "kaji": "AttributeMapper[Deprecated]"
+    },
+    {
+      "clase": "java.lang.classfile.attribute.DeprecatedAttribute",
+      "tipo": "otro valor",
+      "java": "java.lang.classfile.attribute.DeprecatedAttribute.of()",
+      "jdk": "Attribute[name=Deprecated]",
+      "kaji": "Deprecated[]"
+    },
+    {
+      "clase": "java.lang.classfile.attribute.DeprecatedAttribute",
+      "tipo": "otro valor",
+      "java": "java.lang.classfile.attribute.DeprecatedAttribute.of()",
+      "jdk": "Attribute[name=Deprecated]",
+      "kaji": "Deprecated[]"
+    },
+    {
+      "clase": "java.lang.classfile.attribute.DeprecatedAttribute",
+      "tipo": "otro valor",
+      "java": "java.lang.classfile.attribute.DeprecatedAttribute.of()",
+      "jdk": "Attribute[name=Deprecated]",
+      "kaji": "Deprecated[]"
+    },
+    {
+      "clase": "java.lang.classfile.attribute.DeprecatedAttribute",
+      "tipo": "otro valor",
+      "java": "java.lang.classfile.attribute.DeprecatedAttribute.of()",
+      "jdk": "Attribute[name=Deprecated]",
+      "kaji": "Deprecated[]"
+    },
+    {
+      "clase": "java.lang.classfile.attribute.DeprecatedAttribute",
+      "tipo": "otro valor",
+      "java": "java.lang.classfile.attribute.DeprecatedAttribute.of()",
+      "jdk": "Attribute[name=Deprecated]",
+      "kaji": "Deprecated[]"
+    },
+    {
+      "clase": "java.lang.classfile.attribute.DeprecatedAttribute",
+      "tipo": "otro valor",
+      "java": "java.lang.classfile.attribute.DeprecatedAttribute.of()",
+      "jdk": "Attribute[name=Deprecated]",
+      "kaji": "Deprecated[]"
+    },
+    {
+      "clase": "java.lang.classfile.attribute.DeprecatedAttribute",
+      "tipo": "otro valor",
+      "java": "java.lang.classfile.attribute.DeprecatedAttribute.of().attributeMapper()",
+      "jdk": "AttributeMapper[name=Deprecated, allowMultiple=true, stability=STATELESS]",
+      "kaji": "AttributeMapper[Deprecated]"
+    },
+    {
+      "clase": "java.lang.classfile.attribute.DeprecatedAttribute",
+      "tipo": "otro valor",
+      "java": "java.lang.classfile.attribute.DeprecatedAttribute.of()",
+      "jdk": "Attribute[name=Deprecated]",
+      "kaji": "Deprecated[]"
+    },
+    {
+      "clase": "java.lang.classfile.attribute.DeprecatedAttribute",
+      "tipo": "otro valor",
+      "java": "java.lang.classfile.attribute.DeprecatedAttribute.of()",
+      "jdk": "Attribute[name=Deprecated]",
+      "kaji": "Deprecated[]"
+    },
+    {
+      "clase": "java.lang.classfile.attribute.DeprecatedAttribute",
+      "tipo": "otro valor",
+      "java": "java.lang.classfile.attribute.DeprecatedAttribute.of()",
+      "jdk": "Attribute[name=Deprecated]",
+      "kaji": "Deprecated[]"
+    },
+    {
+      "clase": "java.lang.classfile.attribute.DeprecatedAttribute",
+      "tipo": "otro valor",
+      "java": "java.lang.classfile.attribute.DeprecatedAttribute.of()",
+      "jdk": "Attribute[name=Deprecated]",
+      "kaji": "Deprecated[]"
+    },
+    {
+      "clase": "java.lang.classfile.attribute.DeprecatedAttribute",
+      "tipo": "otro valor",
+      "java": "java.lang.classfile.attribute.DeprecatedAttribute.of()",
+      "jdk": "Attribute[name=Deprecated]",
+      "kaji": "Deprecated[]"
+    },
+    {
+      "clase": "java.lang.classfile.attribute.DeprecatedAttribute",
+      "tipo": "otro valor",
+      "java": "java.lang.classfile.attribute.DeprecatedAttribute.of()",
+      "jdk": "Attribute[name=Deprecated]",
+      "kaji": "Deprecated[]"
+    },
+    {
+      "clase": "java.lang.classfile.attribute.DeprecatedAttribute",
+      "tipo": "otro valor",
+      "java": "java.lang.classfile.attribute.DeprecatedAttribute.of().attributeMapper()",
+      "jdk": "AttributeMapper[name=Deprecated, allowMultiple=true, stability=STATELESS]",
+      "kaji": "AttributeMapper[Deprecated]"
+    },
+    {
+      "clase": "java.lang.classfile.attribute.DeprecatedAttribute",
+      "tipo": "otro valor",
+      "java": "java.lang.classfile.attribute.DeprecatedAttribute.of()",
+      "jdk": "Attribute[name=Deprecated]",
+      "kaji": "Deprecated[]"
+    },
+    {
+      "clase": "java.lang.classfile.attribute.DeprecatedAttribute",
+      "tipo": "otro valor",
+      "java": "java.lang.classfile.attribute.DeprecatedAttribute.of().attributeMapper()",
+      "jdk": "AttributeMapper[name=Deprecated, allowMultiple=true, stability=STATELESS]",
+      "kaji": "AttributeMapper[Deprecated]"
+    },
+    {
+      "clase": "java.lang.classfile.Opcode",
+      "tipo": "otra excepción",
+      "java": "java.lang.classfile.Opcode.valueOf(java.lang.String.copyValueOf(new char[] {'a', 'b'}, 2, 2)).kind()",
+      "jdk": "EXC:java.lang.StringIndexOutOfBoundsException",
+      "kaji": "EXC:java.lang.IllegalArgumentException"
+    },
+    {
+      "clase": "java.time.temporal.TemporalAdjusters",
+      "tipo": "otra excepción",
+      "java": "java.time.temporal.TemporalAdjusters.previousOrSame(java.time.DayOfWeek.of(-128))",
+      "jdk": "EXC:java.time.DateTimeException",
+      "kaji": "EXC:java.lang.ArrayIndexOutOfBoundsException"
+    },
+    {
+      "clase": "java.time.temporal.TemporalAdjusters",
+      "tipo": "otra excepción",
+      "java": "java.time.temporal.TemporalAdjusters.nextOrSame(java.time.DayOfWeek.of(31))",
+      "jdk": "EXC:java.time.DateTimeException",
+      "kaji": "EXC:java.lang.ArrayIndexOutOfBoundsException"
+    },
+    {
+      "clase": "java.time.temporal.TemporalAdjusters",
+      "tipo": "otra excepción",
+      "java": "java.time.temporal.TemporalAdjusters.next(java.time.DayOfWeek.of(2147483647))",
+      "jdk": "EXC:java.time.DateTimeException",
+      "kaji": "EXC:java.lang.ArrayIndexOutOfBoundsException"
+    },
+    {
+      "clase": "java.time.temporal.TemporalAdjusters",
+      "tipo": "otra excepción",
+      "java": "java.time.temporal.TemporalAdjusters.previous(java.time.DayOfWeek.of(65535))",
+      "jdk": "EXC:java.time.DateTimeException",
+      "kaji": "EXC:java.lang.ArrayIndexOutOfBoundsException"
+    },
+    {
+      "clase": "java.time.temporal.TemporalAdjusters",
+      "tipo": "otra excepción",
+      "java": "java.time.temporal.TemporalAdjusters.nextOrSame(java.time.DayOfWeek.of(31))",
+      "jdk": "EXC:java.time.DateTimeException",
+      "kaji": "EXC:java.lang.ArrayIndexOutOfBoundsException"
+    },
+    {
+      "clase": "jdk.swing.interop.SwingInterOpUtils",
+      "tipo": "otro valor",
+      "java": "new jdk.swing.interop.SwingInterOpUtils().getClass().getModule()",
+      "jdk": "module jdk.unsupported.desktop",
+      "kaji": "unnamed module"
+    },
+    {
+      "clase": "jdk.swing.interop.SwingInterOpUtils",
+      "tipo": "otro valor",
+      "java": "new jdk.swing.interop.SwingInterOpUtils().getClass().getModule()",
+      "jdk": "module jdk.unsupported.desktop",
+      "kaji": "unnamed module"
+    },
+    {
+      "clase": "java.lang.invoke.VolatileCallSite",
+      "tipo": "otra excepción",
+      "java": "new java.lang.invoke.VolatileCallSite(java.lang.invoke.MethodType.genericMethodType(-2147483648)).getClass()",
+      "jdk": "EXC:java.lang.IllegalArgumentException",
+      "kaji": "EXC:java.lang.NegativeArraySizeException"
+    },
+    {
+      "clase": "java.lang.invoke.VolatileCallSite",
+      "tipo": "excepción contra valor",
+      "java": "new java.lang.invoke.VolatileCallSite(java.lang.invoke.MethodType.genericMethodType(1, true)).dynamicInvoker()",
+      "jdk": "MethodHandle(Object,Object[])Object",
+      "kaji": "EXC:java.lang.UnsupportedOperationException"
+    },
+    {
+      "clase": "java.lang.invoke.VolatileCallSite",
+      "tipo": "otra excepción",
+      "java": "new java.lang.invoke.VolatileCallSite(java.lang.invoke.MethodType.genericMethodType(-2147483648))",
+      "jdk": "EXC:java.lang.IllegalArgumentException",
+      "kaji": "EXC:java.lang.NegativeArraySizeException"
+    },
+    {
+      "clase": "java.lang.invoke.VolatileCallSite",
+      "tipo": "otra excepción",
+      "java": "new java.lang.invoke.VolatileCallSite(java.lang.invoke.MethodType.genericMethodType(-2147483648)).equals(new java.lang.Object())",
+      "jdk": "EXC:java.lang.IllegalArgumentException",
+      "kaji": "EXC:java.lang.NegativeArraySizeException"
+    },
+    {
+      "clase": "java.lang.invoke.VolatileCallSite",
+      "tipo": "otra excepción",
+      "java": "new java.lang.invoke.VolatileCallSite(java.lang.invoke.MethodType.genericMethodType(-1, true)).dynamicInvoker()",
+      "jdk": "EXC:java.lang.IllegalArgumentException",
+      "kaji": "EXC:java.lang.ArrayIndexOutOfBoundsException"
+    },
+    {
+      "clase": "java.lang.invoke.VolatileCallSite",
+      "tipo": "otra excepción",
+      "java": "new java.lang.invoke.VolatileCallSite(java.lang.invoke.MethodType.genericMethodType(-1, true)).getTarget()",
+      "jdk": "EXC:java.lang.IllegalArgumentException",
+      "kaji": "EXC:java.lang.ArrayIndexOutOfBoundsException"
+    },
+    {
+      "clase": "java.lang.invoke.VolatileCallSite",
+      "tipo": "otro valor",
+      "java": "new java.lang.invoke.VolatileCallSite(java.lang.invoke.MethodType.genericMethodType(32)).getTarget()",
+      "jdk": "MethodHandle(Object,Object,Object,Object,Object,Object,Object,Object,Object,Object,Object,Object,Object,Object,Object,Object,Object,Object,Object,Object,Object,Object,Object,Object,Object,Object,Object,Object,Object,Object,Object,Object)Object",
+      "kaji": "null"
+    },
+    {
+      "clase": "java.lang.invoke.VolatileCallSite",
+      "tipo": "otro valor",
+      "java": "new java.lang.invoke.VolatileCallSite(java.lang.invoke.MethodType.genericMethodType(7, true)).getTarget()",
+      "jdk": "MethodHandle(Object,Object,Object,Object,Object,Object,Object,Object[])Object",
+      "kaji": "null"
+    },
+    {
+      "clase": "java.lang.invoke.VolatileCallSite",
+      "tipo": "excepción contra valor",
+      "java": "new java.lang.invoke.VolatileCallSite(java.lang.invoke.MethodType.genericMethodType(1)).dynamicInvoker().toString()",
+      "jdk": "\"MethodHandle(Object)Object\"",
+      "kaji": "EXC:java.lang.UnsupportedOperationException"
+    },
+    {
+      "clase": "java.lang.invoke.VolatileCallSite",
+      "tipo": "otra excepción",
+      "java": "new java.lang.invoke.VolatileCallSite(java.lang.invoke.MethodType.genericMethodType(-1, false))",
+      "jdk": "EXC:java.lang.IllegalArgumentException",
+      "kaji": "EXC:java.lang.NegativeArraySizeException"
+    },
+    {
+      "clase": "java.lang.invoke.VolatileCallSite",
+      "tipo": "otra excepción",
+      "java": "new java.lang.invoke.VolatileCallSite(java.lang.invoke.MethodType.genericMethodType(-128, false)).type()",
+      "jdk": "EXC:java.lang.IllegalArgumentException",
+      "kaji": "EXC:java.lang.NegativeArraySizeException"
+    },
+    {
+      "clase": "java.lang.invoke.VolatileCallSite",
+      "tipo": "otra excepción",
+      "java": "new java.lang.invoke.VolatileCallSite(java.lang.invoke.MethodType.genericMethodType(-128, false)).getClass()",
+      "jdk": "EXC:java.lang.IllegalArgumentException",
+      "kaji": "EXC:java.lang.NegativeArraySizeException"
+    },
+    {
+      "clase": "java.lang.invoke.VolatileCallSite",
+      "tipo": "excepción contra valor",
+      "java": "new java.lang.invoke.VolatileCallSite(java.lang.invoke.MethodType.genericMethodType(0)).dynamicInvoker()",
+      "jdk": "MethodHandle()Object",
+      "kaji": "EXC:java.lang.UnsupportedOperationException"
+    },
+    {
+      "clase": "java.lang.invoke.VolatileCallSite",
+      "tipo": "otra excepción",
+      "java": "new java.lang.invoke.VolatileCallSite(java.lang.invoke.MethodType.genericMethodType(255, true)).dynamicInvoker()",
+      "jdk": "EXC:java.lang.IllegalArgumentException",
+      "kaji": "EXC:java.lang.UnsupportedOperationException"
+    },
+    {
+      "clase": "java.lang.invoke.VolatileCallSite",
+      "tipo": "excepción contra valor",
+      "java": "new java.lang.invoke.VolatileCallSite(java.lang.invoke.MethodType.genericMethodType(255, true)).type()",
+      "jdk": "EXC:java.lang.IllegalArgumentException",
+      "kaji": "(Object,Object,Object,Object,Object,Object,Object,Object,Object,Object,Object,Object,Object,Object,Object,Object,Object,Object,Object,Object,Object,Object,Object,Object,Object,Object,Object,Object,Object,Object,Object,Object,Object,Object,Object,Object,Object,Object,Object,Object,Object,Object,Object,Object,Object,Object,Object,Object,Object,Object,Object,Object,Object,Object,Object,Object,Object,Object,Object,Object,Object,Object,Object,Object,Object,Object,Object,Object,Object,Object,Object,Object,Object,Object,Object,Object,Object,Object,Object,Object,Object,Object,Object,Object,Object,Object,Object,Object,Object,Object,Object,Object,Object,Object,Object,Object,Object,Object,Object,Object,Object,Object,Object,Object,Object,Object,Object,Object,Object,Object,Object,Object,Object,Object,Object,Object,Object,Object,Object,Object,Object,Object,Object,Object,Object,Object,Object,Object,Object,Object,Object,Object,Object,Object,Object,Object,Object,Object,Object,Object,Object,Object,Object,Object,Object,Object,Object,Object,Object,Object,Object,Object,Object,Object,Object,Object,Object,Object,Object,Object,Object,Object,Object,Object,Object,Object,Object,Object,Object,Object,Object,Object,Object,Object,Object,Object,Object,Object,Object,Object,Object,Object,Object,Object,Object,Object,Object,Object,Object,Object,Object,Object,Object,Object,Object,Object,Object,Object,Object,Object,Object,Object,Object,Object,Object,Object,Object,Object,Object,Object,Object,Object,Object,Object,Object,Object,Object,Object,Object,Object,Object,Object,Object,Object,Object,Object,Object,Object,Object,Object,Object,Object,Object,Object,Object,Object,Object,Object,Object,Object,Object,Object,Object,Object,Object,Object,Object,Object,Object,Object,Object,Object,Object,Object,Object,Object;)Object"
+    },
+    {
+      "clase": "java.lang.invoke.VolatileCallSite",
+      "tipo": "otra excepción",
+      "java": "new java.lang.invoke.VolatileCallSite(java.lang.invoke.MethodType.genericMethodType(-128))",
+      "jdk": "EXC:java.lang.IllegalArgumentException",
+      "kaji": "EXC:java.lang.NegativeArraySizeException"
+    },
+    {
+      "clase": "java.lang.invoke.VolatileCallSite",
+      "tipo": "otra excepción",
+      "java": "new java.lang.invoke.VolatileCallSite(java.lang.invoke.MethodType.genericMethodType(-128)).type().equals(\" \")",
+      "jdk": "EXC:java.lang.IllegalArgumentException",
+      "kaji": "EXC:java.lang.NegativeArraySizeException"
+    },
+    {
+      "clase": "java.lang.invoke.VolatileCallSite",
+      "tipo": "excepción contra valor",
+      "java": "new java.lang.invoke.VolatileCallSite(java.lang.invoke.MethodType.genericMethodType(255, false))",
+      "jdk": "EXC:java.lang.invoke.WrongMethodTypeException",
+      "kaji": "<objeto>"
+    },
+    {
+      "clase": "java.lang.invoke.VolatileCallSite",
+      "tipo": "otra excepción",
+      "java": "new java.lang.invoke.VolatileCallSite(java.lang.invoke.MethodType.genericMethodType(2147483647, true))",
+      "jdk": "EXC:java.lang.IllegalArgumentException",
+      "kaji": "EXC:java.lang.NegativeArraySizeException"
+    },
+    {
+      "clase": "java.lang.invoke.VolatileCallSite",
+      "tipo": "excepción contra valor",
+      "java": "new java.lang.invoke.VolatileCallSite(java.lang.invoke.MethodType.genericMethodType(31, true)).getTarget().equals(new java.lang.Object())",
+      "jdk": "false",
+      "kaji": "EXC:java.lang.NullPointerException"
+    },
+    {
+      "clase": "java.lang.invoke.VolatileCallSite",
+      "tipo": "excepción contra valor",
+      "java": "new java.lang.invoke.VolatileCallSite(java.lang.invoke.MethodType.genericMethodType(255, true))",
+      "jdk": "EXC:java.lang.IllegalArgumentException",
+      "kaji": "<objeto>"
+    },
+    {
+      "clase": "java.lang.invoke.VolatileCallSite",
+      "tipo": "otra excepción",
+      "java": "new java.lang.invoke.VolatileCallSite(java.lang.invoke.MethodType.genericMethodType(-2147483648, false)).getClass()",
+      "jdk": "EXC:java.lang.IllegalArgumentException",
+      "kaji": "EXC:java.lang.NegativeArraySizeException"
+    },
+    {
+      "clase": "java.lang.invoke.VolatileCallSite",
+      "tipo": "otro valor",
+      "java": "new java.lang.invoke.VolatileCallSite(java.lang.invoke.MethodType.genericMethodType(7)).type().hashCode()",
+      "jdk": "-1143098367",
+      "kaji": "282965913"
+    },
+    {
+      "clase": "java.lang.invoke.VolatileCallSite",
+      "tipo": "otra excepción",
+      "java": "new java.lang.invoke.VolatileCallSite(java.lang.invoke.MethodType.genericMethodType(-128)).getTarget().asVarargsCollector(java.lang.Class.forName(\"-1\"))",
+      "jdk": "EXC:java.lang.IllegalArgumentException",
+      "kaji": "EXC:java.lang.NegativeArraySizeException"
+    },
+    {
+      "clase": "java.lang.invoke.VolatileCallSite",
+      "tipo": "otra excepción",
+      "java": "new java.lang.invoke.VolatileCallSite(java.lang.invoke.MethodType.genericMethodType(-1, false))",
+      "jdk": "EXC:java.lang.IllegalArgumentException",
+      "kaji": "EXC:java.lang.NegativeArraySizeException"
+    },
+    {
+      "clase": "java.security.KeyPairGenerator",
+      "tipo": "sin salida (crash o cuelgue)",
+      "java": "java.security.KeyPairGenerator.getInstance(\"\\u00df\")",
+      "jdk": "EXC:java.security.NoSuchAlgorithmException",
+      "kaji": null
+    },
+    {
+      "clase": "java.lang.foreign.SegmentAllocator",
+      "tipo": "otra excepción",
+      "java": "java.lang.foreign.SegmentAllocator.slicingAllocator(java.lang.foreign.MemorySegment.ofAddress(-9223372036854775808L)).allocateFrom(java.lang.String.valueOf(new char[0], 255, 7), java.nio.charset.Charset.defaultCharset()).asSlice(255L, 0L, 4294967296L)",
+      "jdk": "EXC:java.lang.StringIndexOutOfBoundsException",
+      "kaji": "EXC:java.lang.IndexOutOfBoundsException"
+    },
+    {
+      "clase": "java.lang.foreign.SegmentAllocator",
+      "tipo": "otro valor",
+      "java": "java.lang.foreign.SegmentAllocator.prefixAllocator(java.lang.foreign.MemorySegment.ofAddress(0L))",
+      "jdk": "MemorySegment{ kind: native, address: 0x0, byteSize: 0 }",
+      "kaji": "<objeto>"
+    },
+    {
+      "clase": "java.lang.foreign.SegmentAllocator",
+      "tipo": "otro valor",
+      "java": "java.lang.foreign.SegmentAllocator.prefixAllocator(java.lang.foreign.MemorySegment.ofAddress(-9223372036854775808L))",
+      "jdk": "MemorySegment{ kind: native, address: 0x8000000000000000, byteSize: 0 }",
+      "kaji": "<objeto>"
+    },
+    {
+      "clase": "java.security.spec.RSAPrivateKeySpec",
+      "tipo": "otra excepción",
+      "java": "new java.security.spec.RSAPrivateKeySpec(java.math.BigInteger.valueOf(255L), new java.math.BigInteger(new byte[] {1, 2, 3}, 1, -2147483648))",
+      "jdk": "EXC:java.lang.IndexOutOfBoundsException",
+      "kaji": "EXC:java.lang.NegativeArraySizeException"
+    },
+    {
+      "clase": "java.security.spec.RSAPrivateKeySpec",
+      "tipo": "otra excepción",
+      "java": "new java.security.spec.RSAPrivateKeySpec(java.math.BigInteger.valueOf(-9223372036854775808L), new java.math.BigInteger(new byte[0], 0, 65535)).getClass()",
+      "jdk": "EXC:java.lang.NumberFormatException",
+      "kaji": "EXC:java.lang.ArrayIndexOutOfBoundsException"
+    },
+    {
+      "clase": "java.security.spec.RSAPrivateKeySpec",
+      "tipo": "otra excepción",
+      "java": "new java.security.spec.RSAPrivateKeySpec(java.math.BigInteger.valueOf(4294967296L), new java.math.BigInteger(new byte[] {-1, 0, 127}, -2147483648, 255))",
+      "jdk": "EXC:java.lang.IndexOutOfBoundsException",
+      "kaji": "EXC:java.lang.ArrayIndexOutOfBoundsException"
+    },
+    {
+      "clase": "java.security.spec.RSAPrivateKeySpec",
+      "tipo": "otra excepción",
+      "java": "new java.security.spec.RSAPrivateKeySpec(new java.math.BigInteger(new byte[] {1, 2, 3}, 1, -1), java.math.BigInteger.valueOf(255L)).getModulus().parallelMultiply(new java.math.BigInteger(32, new byte[] {-1, 0, 127}))",
+      "jdk": "EXC:java.lang.IndexOutOfBoundsException",
+      "kaji": "EXC:java.lang.NumberFormatException"
+    },
+    {
+      "clase": "java.security.spec.RSAPrivateKeySpec",
+      "tipo": "otra excepción",
+      "java": "new java.security.spec.RSAPrivateKeySpec(new java.math.BigInteger(new byte[] {1, 2, 3}, 0, 65535), java.math.BigInteger.valueOf(-9223372036854775808L)).getModulus().xor(new java.math.BigInteger(\" \"))",
+      "jdk": "EXC:java.lang.IndexOutOfBoundsException",
+      "kaji": "EXC:java.lang.ArrayIndexOutOfBoundsException"
+    },
+    {
+      "clase": "java.security.spec.RSAPrivateKeySpec",
+      "tipo": "otra excepción",
+      "java": "new java.security.spec.RSAPrivateKeySpec(new java.math.BigInteger(new byte[] {1, 2, 3}, 0, -2147483648), new java.math.BigInteger(65535, new byte[] {-1, 0, 127})).getParams()",
+      "jdk": "EXC:java.lang.IndexOutOfBoundsException",
+      "kaji": "EXC:java.lang.NegativeArraySizeException"
+    },
+    {
+      "clase": "java.security.spec.RSAPrivateKeySpec",
+      "tipo": "otra excepción",
+      "java": "new java.security.spec.RSAPrivateKeySpec(new java.math.BigInteger(new byte[0], 2147483647, 255), new java.math.BigInteger(\"a\", 2147483647)).getParams()",
+      "jdk": "EXC:java.lang.NumberFormatException",
+      "kaji": "EXC:java.lang.ArrayIndexOutOfBoundsException"
+    },
+    {
+      "clase": "java.security.spec.RSAPrivateKeySpec",
+      "tipo": "otra excepción",
+      "java": "new java.security.spec.RSAPrivateKeySpec(new java.math.BigInteger(new byte[0], 1, 31), new java.math.BigInteger(\"ABC abc\"))",
+      "jdk": "EXC:java.lang.NumberFormatException",
+      "kaji": "EXC:java.lang.ArrayIndexOutOfBoundsException"
+    },
+    {
+      "clase": "java.security.spec.RSAPrivateKeySpec",
+      "tipo": "otra excepción",
+      "java": "new java.security.spec.RSAPrivateKeySpec(new java.math.BigInteger(new byte[] {1, 2, 3}, 127, 32), new java.math.BigInteger(new byte[0], 1, -2147483648)).getModulus().signum()",
+      "jdk": "EXC:java.lang.IndexOutOfBoundsException",
+      "kaji": "EXC:java.lang.ArrayIndexOutOfBoundsException"
+    },
+    {
+      "clase": "java.security.spec.RSAPrivateKeySpec",
+      "tipo": "otra excepción",
+      "java": "new java.security.spec.RSAPrivateKeySpec(new java.math.BigInteger(new byte[] {-1, 0, 127}, 255, -2147483648), new java.math.BigInteger(\"hola mundo\", -2147483648)).getClass()",
+      "jdk": "EXC:java.lang.IndexOutOfBoundsException",
+      "kaji": "EXC:java.lang.ArrayIndexOutOfBoundsException"
+    },
+    {
+      "clase": "java.util.zip.Deflater",
+      "tipo": "sin salida (crash o cuelgue)",
+      "java": "new java.util.zip.Deflater(-1).getAdler()",
+      "jdk": "1",
+      "kaji": null
+    },
+    {
+      "clase": "jdk.jfr.consumer.RecordingStream",
+      "tipo": "otra excepción",
+      "java": "new jdk.jfr.consumer.RecordingStream(jdk.jfr.Configuration.getConfiguration(\" \"))",
+      "jdk": "EXC:java.nio.file.NoSuchFileException",
+      "kaji": "EXC:java.io.IOException"
+    },
+    {
+      "clase": "jdk.jfr.consumer.RecordingStream",
+      "tipo": "otra excepción",
+      "java": "new jdk.jfr.consumer.RecordingStream(jdk.jfr.Configuration.getConfiguration(\"\\u03a3\"))",
+      "jdk": "EXC:java.nio.file.NoSuchFileException",
+      "kaji": "EXC:java.io.IOException"
+    },
+    {
+      "clase": "jdk.jfr.consumer.RecordingStream",
+      "tipo": "otra excepción",
+      "java": "new jdk.jfr.consumer.RecordingStream(jdk.jfr.Configuration.getConfiguration(\"a\")).stop()",
+      "jdk": "EXC:java.nio.file.NoSuchFileException",
+      "kaji": "EXC:java.io.IOException"
+    },
+    {
+      "clase": "jdk.jfr.consumer.RecordingStream",
+      "tipo": "otra excepción",
+      "java": "new jdk.jfr.consumer.RecordingStream(jdk.jfr.Configuration.getConfiguration(\"abc\"))",
+      "jdk": "EXC:java.nio.file.NoSuchFileException",
+      "kaji": "EXC:java.io.IOException"
+    },
+    {
+      "clase": "jdk.jfr.consumer.RecordingStream",
+      "tipo": "otra excepción",
+      "java": "new jdk.jfr.consumer.RecordingStream(jdk.jfr.Configuration.getConfiguration(\"0\")).stop()",
+      "jdk": "EXC:java.nio.file.NoSuchFileException",
+      "kaji": "EXC:java.io.IOException"
+    },
+    {
+      "clase": "jdk.jfr.consumer.RecordingStream",
+      "tipo": "otra excepción",
+      "java": "new jdk.jfr.consumer.RecordingStream(jdk.jfr.Configuration.getConfiguration(\"\\n\")).equals(\"A\")",
+      "jdk": "EXC:java.nio.file.NoSuchFileException",
+      "kaji": "EXC:java.io.IOException"
+    },
+    {
+      "clase": "jdk.jfr.consumer.RecordingStream",
+      "tipo": "excepción contra valor",
+      "java": "new jdk.jfr.consumer.RecordingStream().getClass()",
+      "jdk": "class jdk.jfr.consumer.RecordingStream",
+      "kaji": "EXC:java.lang.IllegalStateException"
+    },
+    {
+      "clase": "jdk.jfr.consumer.RecordingStream",
+      "tipo": "otra excepción",
+      "java": "new jdk.jfr.consumer.RecordingStream(jdk.jfr.Configuration.getConfiguration(\"1234567890\"))",
+      "jdk": "EXC:java.nio.file.NoSuchFileException",
+      "kaji": "EXC:java.io.IOException"
+    },
+    {
+      "clase": "jdk.jfr.consumer.RecordingStream",
+      "tipo": "otra excepción",
+      "java": "new jdk.jfr.consumer.RecordingStream(jdk.jfr.Configuration.getConfiguration(\"ABC abc\")).stop()",
+      "jdk": "EXC:java.nio.file.NoSuchFileException",
+      "kaji": "EXC:java.io.IOException"
+    },
+    {
+      "clase": "jdk.jfr.consumer.RecordingStream",
+      "tipo": "otra excepción",
+      "java": "new jdk.jfr.consumer.RecordingStream(jdk.jfr.Configuration.getConfiguration(\"0\"))",
+      "jdk": "EXC:java.nio.file.NoSuchFileException",
+      "kaji": "EXC:java.io.IOException"
+    },
+    {
+      "clase": "jdk.jfr.consumer.RecordingStream",
+      "tipo": "otra excepción",
+      "java": "new jdk.jfr.consumer.RecordingStream(jdk.jfr.Configuration.getConfiguration(\"hola mundo\"))",
+      "jdk": "EXC:java.nio.file.NoSuchFileException",
+      "kaji": "EXC:java.io.IOException"
+    },
+    {
+      "clase": "jdk.jfr.consumer.RecordingStream",
+      "tipo": "otra excepción",
+      "java": "new jdk.jfr.consumer.RecordingStream(jdk.jfr.Configuration.getConfiguration(\" \")).stop()",
+      "jdk": "EXC:java.nio.file.NoSuchFileException",
+      "kaji": "EXC:java.io.IOException"
+    },
+    {
+      "clase": "jdk.jfr.consumer.RecordingStream",
+      "tipo": "otra excepción",
+      "java": "new jdk.jfr.consumer.RecordingStream(jdk.jfr.Configuration.getConfiguration(\"ABC abc\")).enable(new java.lang.String(new char[] {(char) 0, (char) 65535}, 32, 255)).withStackTrace()",
+      "jdk": "EXC:java.nio.file.NoSuchFileException",
+      "kaji": "EXC:java.io.IOException"
+    },
+    {
+      "clase": "jdk.jfr.consumer.RecordingStream",
+      "tipo": "otra excepción",
+      "java": "new jdk.jfr.consumer.RecordingStream(jdk.jfr.Configuration.getConfiguration(\"hola mundo\"))",
+      "jdk": "EXC:java.nio.file.NoSuchFileException",
+      "kaji": "EXC:java.io.IOException"
+    },
+    {
+      "clase": "jdk.jfr.consumer.RecordingStream",
+      "tipo": "otra excepción",
+      "java": "new jdk.jfr.consumer.RecordingStream(jdk.jfr.Configuration.getConfiguration(\"hola mundo\")).getClass().isEnum()",
+      "jdk": "EXC:java.nio.file.NoSuchFileException",
+      "kaji": "EXC:java.io.IOException"
+    },
+    {
+      "clase": "jdk.jfr.consumer.RecordingStream",
+      "tipo": "otra excepción",
+      "java": "new jdk.jfr.consumer.RecordingStream(jdk.jfr.Configuration.getConfiguration(\"\")).equals(\"\")",
+      "jdk": "EXC:java.nio.file.NoSuchFileException",
+      "kaji": "EXC:java.io.IOException"
+    },
+    {
+      "clase": "jdk.jfr.consumer.RecordingStream",
+      "tipo": "otra excepción",
+      "java": "new jdk.jfr.consumer.RecordingStream(jdk.jfr.Configuration.getConfiguration(\" \")).disable(\"a\").withPeriod(java.time.Duration.ofMillis(-1L))",
+      "jdk": "EXC:java.nio.file.NoSuchFileException",
+      "kaji": "EXC:java.io.IOException"
+    },
+    {
+      "clase": "jdk.jfr.consumer.RecordingStream",
+      "tipo": "otra excepción",
+      "java": "new jdk.jfr.consumer.RecordingStream(jdk.jfr.Configuration.getConfiguration(\"A\"))",
+      "jdk": "EXC:java.nio.file.NoSuchFileException",
+      "kaji": "EXC:java.io.IOException"
+    },
+    {
+      "clase": "jdk.jfr.consumer.RecordingStream",
+      "tipo": "otra excepción",
+      "java": "new jdk.jfr.consumer.RecordingStream(jdk.jfr.Configuration.getConfiguration(\"abc\"))",
+      "jdk": "EXC:java.nio.file.NoSuchFileException",
+      "kaji": "EXC:java.io.IOException"
+    },
+    {
+      "clase": "jdk.jfr.consumer.RecordingStream",
+      "tipo": "otra excepción",
+      "java": "new jdk.jfr.consumer.RecordingStream(jdk.jfr.Configuration.getConfiguration(\"1234567890\"))",
+      "jdk": "EXC:java.nio.file.NoSuchFileException",
+      "kaji": "EXC:java.io.IOException"
+    },
+    {
+      "clase": "jdk.jfr.consumer.RecordingStream",
+      "tipo": "otra excepción",
+      "java": "new jdk.jfr.consumer.RecordingStream(jdk.jfr.Configuration.getConfiguration(\"\\u03a3\")).remove(new java.lang.Object())",
+      "jdk": "EXC:java.nio.file.NoSuchFileException",
+      "kaji": "EXC:java.io.IOException"
+    },
+    {
+      "clase": "jdk.jfr.consumer.RecordingStream",
+      "tipo": "otra excepción",
+      "java": "new jdk.jfr.consumer.RecordingStream(jdk.jfr.Configuration.getConfiguration(\" \"))",
+      "jdk": "EXC:java.nio.file.NoSuchFileException",
+      "kaji": "EXC:java.io.IOException"
+    },
+    {
+      "clase": "jdk.jfr.consumer.RecordingStream",
+      "tipo": "otra excepción",
+      "java": "new jdk.jfr.consumer.RecordingStream(jdk.jfr.Configuration.getConfiguration(\"\")).enable(\"ABC abc\").withPeriod(java.time.Duration.ofSeconds(255L, 255L))",
+      "jdk": "EXC:java.nio.file.NoSuchFileException",
+      "kaji": "EXC:java.io.IOException"
+    },
+    {
+      "clase": "jdk.jfr.consumer.RecordingStream",
+      "tipo": "otra excepción",
+      "java": "new jdk.jfr.consumer.RecordingStream(jdk.jfr.Configuration.getConfiguration(\"-1\")).getClass()",
+      "jdk": "EXC:java.nio.file.NoSuchFileException",
+      "kaji": "EXC:java.io.IOException"
+    },
+    {
+      "clase": "java.lang.ExceptionInInitializerError",
+      "tipo": "sin salida (crash o cuelgue)",
+      "java": "new java.lang.ExceptionInInitializerError(new java.lang.Throwable(\"a\"))",
+      "jdk": "java.lang.ExceptionInInitializerError",
+      "kaji": null
+    },
+    {
+      "clase": "java.util.LinkedHashMap",
+      "tipo": "excepción contra valor",
+      "java": "new java.util.LinkedHashMap(0, Float.NaN, false).values()",
+      "jdk": "EXC:java.lang.IllegalArgumentException",
+      "kaji": "[]"
+    },
+    {
+      "clase": "java.util.LinkedHashMap",
+      "tipo": "excepción contra valor",
+      "java": "new java.util.LinkedHashMap(127, Float.NaN).getClass()",
+      "jdk": "EXC:java.lang.IllegalArgumentException",
+      "kaji": "class java.util.LinkedHashMap"
+    },
+    {
+      "clase": "java.util.LinkedHashMap",
+      "tipo": "otra excepción",
+      "java": "new java.util.LinkedHashMap(7, Float.NaN, false).clone().getClass()",
+      "jdk": "EXC:java.lang.IllegalArgumentException",
+      "kaji": "EXC:java.lang.CloneNotSupportedException"
+    },
+    {
+      "clase": "java.time.Year",
+      "tipo": "otra excepción",
+      "java": "java.time.Year.now(java.time.Clock.systemDefaultZone()).isValidMonthDay(java.time.MonthDay.parse(\"a\"))",
+      "jdk": "EXC:java.time.format.DateTimeParseException",
+      "kaji": "EXC:java.lang.StringIndexOutOfBoundsException"
+    },
+    {
+      "clase": "java.time.Year",
+      "tipo": "otra excepción",
+      "java": "java.time.Year.now(java.time.ZoneId.systemDefault()).atMonthDay(java.time.MonthDay.parse(\"\")).minusMonths(9223372036854775807L)",
+      "jdk": "EXC:java.time.format.DateTimeParseException",
+      "kaji": "EXC:java.lang.StringIndexOutOfBoundsException"
+    },
+    {
+      "clase": "java.time.Year",
+      "tipo": "otra excepción",
+      "java": "java.time.Year.of(7).atMonthDay(java.time.MonthDay.parse(\"A\")).hashCode()",
+      "jdk": "EXC:java.time.format.DateTimeParseException",
+      "kaji": "EXC:java.lang.StringIndexOutOfBoundsException"
+    },
+    {
+      "clase": "java.time.Year",
+      "tipo": "excepción contra valor",
+      "java": "java.time.Year.parse(\"1234567890\").isLeap()",
+      "jdk": "EXC:java.time.format.DateTimeParseException",
+      "kaji": "false"
+    },
+    {
+      "clase": "java.time.Year",
+      "tipo": "otra excepción",
+      "java": "java.time.Year.now(java.time.ZoneId.of(\"a\")).isAfter(java.time.Year.now())",
+      "jdk": "EXC:java.time.DateTimeException",
+      "kaji": "EXC:java.time.zone.ZoneRulesException"
+    },
+    {
+      "clase": "java.time.Year",
+      "tipo": "excepción contra valor",
+      "java": "java.time.Year.parse(\"A\").getValue()",
+      "jdk": "EXC:java.time.format.DateTimeParseException",
+      "kaji": "17"
+    },
+    {
+      "clase": "java.time.Year",
+      "tipo": "otra excepción",
+      "java": "java.time.Year.parse(\"\").getValue()",
+      "jdk": "EXC:java.time.format.DateTimeParseException",
+      "kaji": "EXC:java.lang.StringIndexOutOfBoundsException"
+    },
+    {
+      "clase": "java.time.Year",
+      "tipo": "excepción contra valor",
+      "java": "java.time.Year.parse(\"\\n\").isLeap()",
+      "jdk": "EXC:java.time.format.DateTimeParseException",
+      "kaji": "false"
+    },
+    {
+      "clase": "java.time.Year",
+      "tipo": "excepción contra valor",
+      "java": "java.time.Year.parse(\"\\u00df\")",
+      "jdk": "EXC:java.time.format.DateTimeParseException",
+      "kaji": "175"
+    },
+    {
+      "clase": "java.time.Year",
+      "tipo": "excepción contra valor",
+      "java": "java.time.Year.parse(\"\\n\").atMonthDay(java.time.MonthDay.now()).getMonth()",
+      "jdk": "EXC:java.time.format.DateTimeParseException",
+      "kaji": "OCTOBER"
+    },
+    {
+      "clase": "java.time.Year",
+      "tipo": "excepción contra valor",
+      "java": "java.time.Year.of(7).isBefore(java.time.Year.parse(\"\\u00df\"))",
+      "jdk": "EXC:java.time.format.DateTimeParseException",
+      "kaji": "true"
+    },
+    {
+      "clase": "java.time.Year",
+      "tipo": "excepción contra valor",
+      "java": "java.time.Year.now(java.time.Clock.systemUTC()).isValidMonthDay(java.time.MonthDay.of(-128, 65535))",
+      "jdk": "EXC:java.time.DateTimeException",
+      "kaji": "true"
+    },
+    {
+      "clase": "java.time.Year",
+      "tipo": "excepción contra valor",
+      "java": "java.time.Year.parse(\"\\u03a3\").compareTo(java.time.Year.of(2))",
+      "jdk": "EXC:java.time.format.DateTimeParseException",
+      "kaji": "881"
+    },
+    {
+      "clase": "java.security.cert.X509CRLSelector",
+      "tipo": "otra excepción",
+      "java": "new java.security.cert.X509CRLSelector().getMinCRL().min(new java.math.BigInteger(new byte[] {1, 2, 3}, 255, 32))",
+      "jdk": "EXC:java.lang.IndexOutOfBoundsException",
+      "kaji": "EXC:java.lang.ArrayIndexOutOfBoundsException"
+    },
+    {
+      "clase": "java.security.cert.X509CRLSelector",
+      "tipo": "otra excepción",
+      "java": "new java.security.cert.X509CRLSelector().getMinCRL().modInverse(new java.math.BigInteger(new byte[] {-1, 0, 127}, 32, -2147483648))",
+      "jdk": "EXC:java.lang.IndexOutOfBoundsException",
+      "kaji": "EXC:java.lang.ArrayIndexOutOfBoundsException"
+    },
+    {
+      "clase": "org.w3c.dom.bootstrap.DOMImplementationRegistry",
+      "tipo": "otro valor",
+      "java": "org.w3c.dom.bootstrap.DOMImplementationRegistry.newInstance().getDOMImplementationList(\" \").getLength()",
+      "jdk": "4",
+      "kaji": "0"
+    },
+    {
+      "clase": "org.w3c.dom.bootstrap.DOMImplementationRegistry",
+      "tipo": "otro valor",
+      "java": "org.w3c.dom.bootstrap.DOMImplementationRegistry.newInstance().getClass().describeConstable()",
+      "jdk": "Optional[ClassOrInterfaceDesc[DOMImplementationRegistry]]",
+      "kaji": "<objeto>"
+    },
+    {
+      "clase": "java.security.CryptoPrimitive",
+      "tipo": "sin salida (crash o cuelgue)",
+      "java": "java.security.CryptoPrimitive.valueOf(\"\\u00df\").ordinal()",
+      "jdk": "EXC:java.lang.IllegalArgumentException",
+      "kaji": null
+    },
+    {
+      "clase": "java.nio.CharBuffer",
+      "tipo": "otra excepción",
+      "java": "java.nio.CharBuffer.wrap(new char[] {(char) 0, (char) 65535}, 127, -128).codePoints()",
+      "jdk": "EXC:java.lang.IndexOutOfBoundsException",
+      "kaji": "EXC:java.lang.IllegalArgumentException"
+    },
+    {
+      "clase": "java.nio.CharBuffer",
+      "tipo": "otra excepción",
+      "java": "java.nio.CharBuffer.wrap(new char[] {'a', 'b'}, 0, 32)",
+      "jdk": "EXC:java.lang.IndexOutOfBoundsException",
+      "kaji": "EXC:java.lang.IllegalArgumentException"
+    },
+    {
+      "clase": "java.nio.CharBuffer",
+      "tipo": "otra excepción",
+      "java": "java.nio.CharBuffer.wrap(new char[] {'a', 'b'}, 32, 2)",
+      "jdk": "EXC:java.lang.IndexOutOfBoundsException",
+      "kaji": "EXC:java.lang.IllegalArgumentException"
+    },
+    {
+      "clase": "java.nio.CharBuffer",
+      "tipo": "otra excepción",
+      "java": "java.nio.CharBuffer.wrap(new char[0], 0, 32)",
+      "jdk": "EXC:java.lang.IndexOutOfBoundsException",
+      "kaji": "EXC:java.lang.IllegalArgumentException"
+    },
+    {
+      "clase": "java.nio.CharBuffer",
+      "tipo": "otra excepción",
+      "java": "java.nio.CharBuffer.wrap(new char[0], 32, -128).slice().append(\"\\u03a3\", -128, -1)",
+      "jdk": "EXC:java.lang.IndexOutOfBoundsException",
+      "kaji": "EXC:java.lang.IllegalArgumentException"
+    },
+    {
+      "clase": "java.nio.CharBuffer",
+      "tipo": "otra excepción",
+      "java": "java.nio.CharBuffer.wrap(new char[] {'a', 'b'}, 2, 31).mark().append(\"abc\", 255, 32)",
+      "jdk": "EXC:java.lang.IndexOutOfBoundsException",
+      "kaji": "EXC:java.lang.IllegalArgumentException"
+    },
+    {
+      "clase": "java.nio.CharBuffer",
+      "tipo": "otra excepción",
+      "java": "java.nio.CharBuffer.wrap(new char[0], -2147483648, 2).rewind().mismatch(java.nio.CharBuffer.wrap(new char[0]))",
+      "jdk": "EXC:java.lang.IndexOutOfBoundsException",
+      "kaji": "EXC:java.lang.IllegalArgumentException"
+    },
+    {
+      "clase": "java.nio.CharBuffer",
+      "tipo": "otra excepción",
+      "java": "java.nio.CharBuffer.wrap(new char[] {'a', 'b'}, 127, 2).equals(\"abc\")",
+      "jdk": "EXC:java.lang.IndexOutOfBoundsException",
+      "kaji": "EXC:java.lang.IllegalArgumentException"
+    },
+    {
+      "clase": "java.nio.CharBuffer",
+      "tipo": "otra excepción",
+      "java": "java.nio.CharBuffer.wrap(new char[0], 1, 1).order()",
+      "jdk": "EXC:java.lang.IndexOutOfBoundsException",
+      "kaji": "EXC:java.lang.IllegalArgumentException"
+    },
+    {
+      "clase": "java.nio.CharBuffer",
+      "tipo": "otra excepción",
+      "java": "java.nio.CharBuffer.wrap(new char[0], -1, -128).append(\"A\")",
+      "jdk": "EXC:java.lang.IndexOutOfBoundsException",
+      "kaji": "EXC:java.lang.IllegalArgumentException"
+    },
+    {
+      "clase": "java.nio.CharBuffer",
+      "tipo": "otra excepción",
+      "java": "java.nio.CharBuffer.wrap(new char[] {'a', 'b'}, 127, -2147483648).put('a')",
+      "jdk": "EXC:java.lang.IndexOutOfBoundsException",
+      "kaji": "EXC:java.lang.IllegalArgumentException"
+    },
+    {
+      "clase": "java.nio.CharBuffer",
+      "tipo": "otra excepción",
+      "java": "java.nio.CharBuffer.wrap(new char[0], -128, 32)",
+      "jdk": "EXC:java.lang.IndexOutOfBoundsException",
+      "kaji": "EXC:java.lang.IllegalArgumentException"
+    },
+    {
+      "clase": "java.lang.String",
+      "tipo": "sin salida (crash o cuelgue)",
+      "java": "java.lang.String.copyValueOf(new char[] {(char) 0, (char) 65535}, 32, 2).length()",
+      "jdk": "EXC:java.lang.StringIndexOutOfBoundsException",
+      "kaji": null
+    },
+    {
+      "clase": "java.time.temporal.ChronoField",
+      "tipo": "sin salida (crash o cuelgue)",
+      "java": "java.time.temporal.ChronoField.valueOf(\"hola mundo\")",
+      "jdk": "EXC:java.lang.IllegalArgumentException",
+      "kaji": null
+    },
+    {
+      "clase": "java.time.format.TextStyle",
+      "tipo": "sin salida (crash o cuelgue)",
+      "java": "java.time.format.TextStyle.valueOf(\"-1\").isStandalone()",
+      "jdk": "EXC:java.lang.IllegalArgumentException",
+      "kaji": null
+    },
+    {
+      "clase": "java.lang.invoke.LambdaConversionException",
+      "tipo": "excepción contra valor",
+      "java": "new java.lang.invoke.LambdaConversionException(java.lang.String.valueOf(new char[] {'a', 'b'}, 255, 255)).getMessage().translateEscapes()",
+      "jdk": "EXC:java.lang.StringIndexOutOfBoundsException",
+      "kaji": "\"4-1986,ASCII,IBM367,ISO646-US,ISO_646.irv:1991,ascii7,cp367,csASCII,iso-ir-6,iso_646.irv:1983,usƐ\u0000\u0000\u0000Ɛ\u0000\u0000\u0000˚\u0000\u0000\u0000ƨ\u0000ß\u0000\u0002\u0000S\u0000S\u0000ŉ\u0000\u0002\u0000ʼ\u0000N\u0000ǰ\u0000\u0002\u0000J\u0000̌\u0000ΐ\u0000\u0003\u0000Ι\u0000̈\u0000́\u0000ΰ\u0000\u0003\u0000Υ\u0000̈\u0000́\u0000և\u0000\u0002\u0000Ե\u0000Ւ\u0000ẖ\u0000\u0002\u0000H\u0000̱\u0000ẗ\u0000\u0002\u0000T\u0000̈\u0000ẘ\u0000\u0002\u0000W\u0000̊\u0000ẙ\u0000\u0002\u0000Y\u0000̊\u0000ẚ\u0000\u0002\u0000A\u0000ʾ\u0000ὐ\u0000\u0002\u0000Υ\u0000̓\u0000ὒ\u0000\u0003\u0000Υ\u0000̓\u0000̀\u0000ὔ\u0000\u0003\u0000Υ\u0000̓\u0000́\u0000ὖ\u0000\u0003\u0000Υ\u0000̓\u0000͂\u0000ᾀ\u0000\u0002\u0000Ἀ\u0000Ι\u0000ᾁ\u0000\u0002\u0000Ἁ\u0000Ι\""
+    },
+    {
+      "clase": "java.time.LocalDate",
+      "tipo": "otro valor",
+      "java": "java.time.LocalDate.ofInstant(java.time.Instant.now(), java.time.ZoneId.systemDefault())",
+      "jdk": "2026-10-02",
+      "kaji": "2026-10-03"
+    },
+    {
+      "clase": "java.time.LocalDate",
+      "tipo": "otro valor",
+      "java": "java.time.LocalDate.now()",
+      "jdk": "2026-10-02",
+      "kaji": "2026-10-03"
+    },
+    {
+      "clase": "java.time.LocalDate",
+      "tipo": "otra excepción",
+      "java": "java.time.LocalDate.parse(\"a\")",
+      "jdk": "EXC:java.time.format.DateTimeParseException",
+      "kaji": "EXC:java.lang.StringIndexOutOfBoundsException"
+    },
+    {
+      "clase": "java.time.LocalDate",
+      "tipo": "otra excepción",
+      "java": "java.time.LocalDate.of(2147483647, java.time.Month.of(-128), 2147483647).getChronology().isIsoBased()",
+      "jdk": "EXC:java.time.DateTimeException",
+      "kaji": "EXC:java.lang.ArrayIndexOutOfBoundsException"
+    },
+    {
+      "clase": "java.time.LocalDate",
+      "tipo": "otra excepción",
+      "java": "java.time.LocalDate.parse(\"\\u03a3\").getDayOfYear()",
+      "jdk": "EXC:java.time.format.DateTimeParseException",
+      "kaji": "EXC:java.lang.StringIndexOutOfBoundsException"
+    },
+    {
+      "clase": "java.time.LocalDate",
+      "tipo": "otro valor",
+      "java": "java.time.LocalDate.now()",
+      "jdk": "2026-10-02",
+      "kaji": "2026-10-03"
+    },
+    {
+      "clase": "java.time.LocalDate",
+      "tipo": "excepción contra valor",
+      "java": "java.time.LocalDate.ofEpochDay(9223372036854775807L).withDayOfYear(1).minusWeeks(-1L)",
+      "jdk": "EXC:java.time.DateTimeException",
+      "kaji": "+2030437271-01-08"
+    },
+    {
+      "clase": "java.time.LocalDate",
+      "tipo": "otra excepción",
+      "java": "java.time.LocalDate.parse(\"hola mundo\").plusMonths(4294967296L).getMonthValue()",
+      "jdk": "EXC:java.time.format.DateTimeParseException",
+      "kaji": "EXC:java.lang.StringIndexOutOfBoundsException"
+    },
+    {
+      "clase": "java.time.LocalDate",
+      "tipo": "otra excepción",
+      "java": "java.time.LocalDate.ofInstant(java.time.Instant.ofEpochMilli(0L), java.time.ZoneId.systemDefault()).atStartOfDay(java.time.ZoneId.of(\" \")).getSecond()",
+      "jdk": "EXC:java.time.DateTimeException",
+      "kaji": "EXC:java.time.zone.ZoneRulesException"
+    },
+    {
+      "clase": "java.time.LocalDate",
+      "tipo": "excepción contra valor",
+      "java": "java.time.LocalDate.now(java.time.ZoneId.systemDefault()).withDayOfYear(-128).hashCode()",
+      "jdk": "EXC:java.time.DateTimeException",
+      "kaji": "4147737"
+    },
+    {
+      "clase": "java.time.LocalDate",
+      "tipo": "excepción contra valor",
+      "java": "java.time.LocalDate.ofEpochDay(9223372036854775807L).atTime(2147483647, -1, 0)",
+      "jdk": "EXC:java.time.DateTimeException",
+      "kaji": "+2030437271-06-06T2147483647:0-1"
+    },
+    {
+      "clase": "java.time.LocalDate",
+      "tipo": "otra excepción",
+      "java": "java.time.LocalDate.of(-128, java.time.Month.of(127), 32).isLeapYear()",
+      "jdk": "EXC:java.time.DateTimeException",
+      "kaji": "EXC:java.lang.ArrayIndexOutOfBoundsException"
+    },
+    {
+      "clase": "java.time.LocalDate",
+      "tipo": "excepción contra valor",
+      "java": "java.time.LocalDate.now(java.time.ZoneId.of(\"-1\"))",
+      "jdk": "2026-10-02",
+      "kaji": "EXC:java.lang.StringIndexOutOfBoundsException"
+    },
+    {
+      "clase": "java.time.LocalDate",
+      "tipo": "otra excepción",
+      "java": "java.time.LocalDate.ofInstant(java.time.Instant.ofEpochSecond(-1L), java.time.ZoneId.of(\"\\u03a3\")).datesUntil(java.time.LocalDate.parse(\"\\u00df\")).findAny()",
+      "jdk": "EXC:java.time.DateTimeException",
+      "kaji": "EXC:java.time.zone.ZoneRulesException"
+    },
+    {
+      "clase": "java.time.LocalDate",
+      "tipo": "otra excepción",
+      "java": "java.time.LocalDate.of(2, java.time.Month.of(31), -128)",
+      "jdk": "EXC:java.time.DateTimeException",
+      "kaji": "EXC:java.lang.ArrayIndexOutOfBoundsException"
+    },
+    {
+      "clase": "java.time.LocalDate",
+      "tipo": "otra excepción",
+      "java": "java.time.LocalDate.parse(\"A\").atTime(java.time.OffsetTime.now()).toEpochSecond()",
+      "jdk": "EXC:java.time.format.DateTimeParseException",
+      "kaji": "EXC:java.lang.StringIndexOutOfBoundsException"
+    },
+    {
+      "clase": "java.time.LocalDate",
+      "tipo": "otra excepción",
+      "java": "java.time.LocalDate.now(java.time.Clock.systemDefaultZone()).datesUntil(java.time.LocalDate.parse(\"\\u00df\")).spliterator()",
+      "jdk": "EXC:java.time.format.DateTimeParseException",
+      "kaji": "EXC:java.lang.StringIndexOutOfBoundsException"
+    },
+    {
+      "clase": "java.time.LocalDate",
+      "tipo": "otro valor",
+      "java": "java.time.LocalDate.now()",
+      "jdk": "2026-10-02",
+      "kaji": "2026-10-03"
+    },
+    {
+      "clase": "java.time.LocalDate",
+      "tipo": "otra excepción",
+      "java": "java.time.LocalDate.of(-2147483648, java.time.Month.of(2147483647), 0)",
+      "jdk": "EXC:java.time.DateTimeException",
+      "kaji": "EXC:java.lang.ArrayIndexOutOfBoundsException"
+    },
+    {
+      "clase": "java.time.LocalDate",
+      "tipo": "otra excepción",
+      "java": "java.time.LocalDate.of(2147483647, java.time.Month.of(255), -128).isLeapYear()",
+      "jdk": "EXC:java.time.DateTimeException",
+      "kaji": "EXC:java.lang.ArrayIndexOutOfBoundsException"
+    },
+    {
+      "clase": "java.time.LocalDate",
+      "tipo": "otro valor",
+      "java": "java.time.LocalDate.ofInstant(java.time.Instant.now(), java.time.ZoneId.systemDefault())",
+      "jdk": "2026-10-02",
+      "kaji": "2026-10-03"
+    },
+    {
+      "clase": "java.time.LocalDate",
+      "tipo": "otro valor",
+      "java": "java.time.LocalDate.now(java.time.ZoneId.systemDefault()).minusYears(-1L)",
+      "jdk": "2027-10-02",
+      "kaji": "2027-10-03"
+    },
+    {
+      "clase": "jdk.swing.interop.LightweightFrameWrapper",
+      "tipo": "excepción contra valor",
+      "java": "new jdk.swing.interop.LightweightFrameWrapper().createUngrabEvent(new jdk.swing.interop.LightweightFrameWrapper())",
+      "jdk": "sun.awt.UngrabEvent[sun.swing.JLightweightFrame[frame0,0,0,0x0,invalid,hidden,layout=java.awt.BorderLayout,title=,resizable,normal]]",
+      "kaji": "EXC:java.awt.HeadlessException"
+    },
+    {
+      "clase": "jdk.swing.interop.LightweightFrameWrapper",
+      "tipo": "excepción contra valor",
+      "java": "new jdk.swing.interop.LightweightFrameWrapper().getClass().descriptorString()",
+      "jdk": "\"Ljdk/swing/interop/LightweightFrameWrapper;\"",
+      "kaji": "EXC:java.awt.HeadlessException"
+    },
+    {
+      "clase": "jdk.swing.interop.LightweightFrameWrapper",
+      "tipo": "excepción contra valor",
+      "java": "new jdk.swing.interop.LightweightFrameWrapper().getClass()",
+      "jdk": "class jdk.swing.interop.LightweightFrameWrapper",
+      "kaji": "EXC:java.awt.HeadlessException"
+    },
+    {
+      "clase": "jdk.swing.interop.LightweightFrameWrapper",
+      "tipo": "excepción contra valor",
+      "java": "new jdk.swing.interop.LightweightFrameWrapper().createUngrabEvent(new jdk.swing.interop.LightweightFrameWrapper())",
+      "jdk": "sun.awt.UngrabEvent[sun.swing.JLightweightFrame[frame1,0,0,0x0,invalid,hidden,layout=java.awt.BorderLayout,title=,resizable,normal]]",
+      "kaji": "EXC:java.awt.HeadlessException"
+    },
+    {
+      "clase": "jdk.swing.interop.LightweightFrameWrapper",
+      "tipo": "excepción contra valor",
+      "java": "new jdk.swing.interop.LightweightFrameWrapper().equals(new java.lang.Object())",
+      "jdk": "false",
+      "kaji": "EXC:java.awt.HeadlessException"
+    },
+    {
+      "clase": "jdk.swing.interop.LightweightFrameWrapper",
+      "tipo": "excepción contra valor",
+      "java": "new jdk.swing.interop.LightweightFrameWrapper().equals(\"A\")",
+      "jdk": "false",
+      "kaji": "EXC:java.awt.HeadlessException"
+    },
+    {
+      "clase": "jdk.swing.interop.LightweightFrameWrapper",
+      "tipo": "excepción contra valor",
+      "java": "new jdk.swing.interop.LightweightFrameWrapper().createUngrabEvent(new jdk.swing.interop.LightweightFrameWrapper()).toString()",
+      "jdk": "\"sun.awt.UngrabEvent[sun.swing.JLightweightFrame[frame2,0,0,0x0,invalid,hidden,layout=java.awt.BorderLayout,title=,resizable,normal]]\"",
+      "kaji": "EXC:java.awt.HeadlessException"
+    },
+    {
+      "clase": "jdk.swing.interop.LightweightFrameWrapper",
+      "tipo": "excepción contra valor",
+      "java": "new jdk.swing.interop.LightweightFrameWrapper().getClass().getModifiers()",
+      "jdk": "1",
+      "kaji": "EXC:java.awt.HeadlessException"
+    },
+    {
+      "clase": "jdk.swing.interop.LightweightFrameWrapper",
+      "tipo": "excepción contra valor",
+      "java": "new jdk.swing.interop.LightweightFrameWrapper().getClass().equals(\"abc\")",
+      "jdk": "false",
+      "kaji": "EXC:java.awt.HeadlessException"
+    },
+    {
+      "clase": "jdk.swing.interop.LightweightFrameWrapper",
+      "tipo": "excepción contra valor",
+      "java": "new jdk.swing.interop.LightweightFrameWrapper().createUngrabEvent(new jdk.swing.interop.LightweightFrameWrapper())",
+      "jdk": "sun.awt.UngrabEvent[sun.swing.JLightweightFrame[frame3,0,0,0x0,invalid,hidden,layout=java.awt.BorderLayout,title=,resizable,normal]]",
+      "kaji": "EXC:java.awt.HeadlessException"
+    },
+    {
+      "clase": "jdk.swing.interop.LightweightFrameWrapper",
+      "tipo": "excepción contra valor",
+      "java": "new jdk.swing.interop.LightweightFrameWrapper().getClass().equals(\"abc\")",
+      "jdk": "false",
+      "kaji": "EXC:java.awt.HeadlessException"
+    },
+    {
+      "clase": "jdk.swing.interop.LightweightFrameWrapper",
+      "tipo": "excepción contra valor",
+      "java": "new jdk.swing.interop.LightweightFrameWrapper().createUngrabEvent(new jdk.swing.interop.LightweightFrameWrapper())",
+      "jdk": "sun.awt.UngrabEvent[sun.swing.JLightweightFrame[frame4,0,0,0x0,invalid,hidden,layout=java.awt.BorderLayout,title=,resizable,normal]]",
+      "kaji": "EXC:java.awt.HeadlessException"
+    },
+    {
+      "clase": "jdk.swing.interop.LightweightFrameWrapper",
+      "tipo": "excepción contra valor",
+      "java": "new jdk.swing.interop.LightweightFrameWrapper().equals(\"\\n\")",
+      "jdk": "false",
+      "kaji": "EXC:java.awt.HeadlessException"
+    },
+    {
+      "clase": "jdk.swing.interop.LightweightFrameWrapper",
+      "tipo": "excepción contra valor",
+      "java": "new jdk.swing.interop.LightweightFrameWrapper().getClass().getClass()",
+      "jdk": "class java.lang.Class",
+      "kaji": "EXC:java.awt.HeadlessException"
+    },
+    {
+      "clase": "jdk.swing.interop.LightweightFrameWrapper",
+      "tipo": "excepción contra valor",
+      "java": "new jdk.swing.interop.LightweightFrameWrapper().getClass().getSigners()",
+      "jdk": "null",
+      "kaji": "EXC:java.awt.HeadlessException"
+    },
+    {
+      "clase": "jdk.swing.interop.LightweightFrameWrapper",
+      "tipo": "excepción contra valor",
+      "java": "new jdk.swing.interop.LightweightFrameWrapper().getClass().getClass()",
+      "jdk": "class java.lang.Class",
+      "kaji": "EXC:java.awt.HeadlessException"
+    },
+    {
+      "clase": "jdk.swing.interop.LightweightFrameWrapper",
+      "tipo": "excepción contra valor",
+      "java": "new jdk.swing.interop.LightweightFrameWrapper().getClass()",
+      "jdk": "class jdk.swing.interop.LightweightFrameWrapper",
+      "kaji": "EXC:java.awt.HeadlessException"
+    },
+    {
+      "clase": "jdk.swing.interop.LightweightFrameWrapper",
+      "tipo": "excepción contra valor",
+      "java": "new jdk.swing.interop.LightweightFrameWrapper().equals(\"\")",
+      "jdk": "false",
+      "kaji": "EXC:java.awt.HeadlessException"
+    },
+    {
+      "clase": "jdk.swing.interop.LightweightFrameWrapper",
+      "tipo": "excepción contra valor",
+      "java": "new jdk.swing.interop.LightweightFrameWrapper().equals(\"\\u03a3\")",
+      "jdk": "false",
+      "kaji": "EXC:java.awt.HeadlessException"
+    },
+    {
+      "clase": "jdk.swing.interop.LightweightFrameWrapper",
+      "tipo": "excepción contra valor",
+      "java": "new jdk.swing.interop.LightweightFrameWrapper().getClass()",
+      "jdk": "class jdk.swing.interop.LightweightFrameWrapper",
+      "kaji": "EXC:java.awt.HeadlessException"
+    },
+    {
+      "clase": "jdk.swing.interop.LightweightFrameWrapper",
+      "tipo": "excepción contra valor",
+      "java": "new jdk.swing.interop.LightweightFrameWrapper().equals(\"A\")",
+      "jdk": "false",
+      "kaji": "EXC:java.awt.HeadlessException"
+    },
+    {
+      "clase": "jdk.swing.interop.LightweightFrameWrapper",
+      "tipo": "excepción contra valor",
+      "java": "new jdk.swing.interop.LightweightFrameWrapper().createUngrabEvent(new jdk.swing.interop.LightweightFrameWrapper()).paramString()",
+      "jdk": "\"\"",
+      "kaji": "EXC:java.awt.HeadlessException"
+    },
+    {
+      "clase": "jdk.swing.interop.LightweightFrameWrapper",
+      "tipo": "excepción contra valor",
+      "java": "new jdk.swing.interop.LightweightFrameWrapper().equals(\"\\n\")",
+      "jdk": "false",
+      "kaji": "EXC:java.awt.HeadlessException"
+    },
+    {
+      "clase": "jdk.swing.interop.LightweightFrameWrapper",
+      "tipo": "excepción contra valor",
+      "java": "new jdk.swing.interop.LightweightFrameWrapper().equals(\"hola mundo\")",
+      "jdk": "false",
+      "kaji": "EXC:java.awt.HeadlessException"
+    },
+    {
+      "clase": "jdk.swing.interop.LightweightFrameWrapper",
+      "tipo": "excepción contra valor",
+      "java": "new jdk.swing.interop.LightweightFrameWrapper().createUngrabEvent(new jdk.swing.interop.LightweightFrameWrapper()).paramString()",
+      "jdk": "\"\"",
+      "kaji": "EXC:java.awt.HeadlessException"
+    },
+    {
+      "clase": "jdk.swing.interop.LightweightFrameWrapper",
+      "tipo": "excepción contra valor",
+      "java": "new jdk.swing.interop.LightweightFrameWrapper().getClass().getEnumConstants()",
+      "jdk": "null",
+      "kaji": "EXC:java.awt.HeadlessException"
+    },
+    {
+      "clase": "jdk.swing.interop.LightweightFrameWrapper",
+      "tipo": "excepción contra valor",
+      "java": "new jdk.swing.interop.LightweightFrameWrapper().createUngrabEvent(new jdk.swing.interop.LightweightFrameWrapper())",
+      "jdk": "sun.awt.UngrabEvent[sun.swing.JLightweightFrame[frame5,0,0,0x0,invalid,hidden,layout=java.awt.BorderLayout,title=,resizable,normal]]",
+      "kaji": "EXC:java.awt.HeadlessException"
+    },
+    {
+      "clase": "java.sql.Time",
+      "tipo": "otro valor",
+      "java": "new java.sql.Time(0L).toLocalTime()",
+      "jdk": "21:00",
+      "kaji": "00:00"
+    },
+    {
+      "clase": "java.sql.Time",
+      "tipo": "excepción contra valor",
+      "java": "new java.sql.Time(65535, 127, 255).toLocalTime().isAfter(java.time.LocalTime.ofSecondOfDay(-1L))",
+      "jdk": "EXC:java.time.DateTimeException",
+      "kaji": "true"
+    },
+    {
+      "clase": "java.sql.Time",
+      "tipo": "excepción contra valor",
+      "java": "java.sql.Time.valueOf(java.time.LocalTime.of(31, 2))",
+      "jdk": "EXC:java.time.DateTimeException",
+      "kaji": "07:02:00"
+    },
+    {
+      "clase": "java.sql.Time",
+      "tipo": "otro valor",
+      "java": "new java.sql.Time(2, 2147483647, 1).toGMTString().replace('A', (char) 65535)",
+      "jdk": "\"23 Jan 6053 07:07:01 GMT\"",
+      "kaji": "\"23 Jan 6053 04:07:01 GMT\""
+    },
+    {
+      "clase": "java.sql.Time",
+      "tipo": "otro valor",
+      "java": "java.sql.Time.valueOf(java.time.LocalTime.now())",
+      "jdk": "21:51:02",
+      "kaji": "00:51:02"
+    },
+    {
+      "clase": "java.sql.Time",
+      "tipo": "excepción contra valor",
+      "java": "java.sql.Time.valueOf(java.time.LocalTime.of(65535, 65535, 2)).before(new java.util.Date())",
+      "jdk": "EXC:java.time.DateTimeException",
+      "kaji": "true"
+    },
+    {
+      "clase": "java.sql.Time",
+      "tipo": "otro valor",
+      "java": "new java.sql.Time(255L)",
+      "jdk": "21:00:00",
+      "kaji": "00:00:00"
+    },
+    {
+      "clase": "java.sql.Time",
+      "tipo": "otra excepción",
+      "java": "java.sql.Time.valueOf(java.time.LocalTime.parse(\"\\n\"))",
+      "jdk": "EXC:java.time.format.DateTimeParseException",
+      "kaji": "EXC:java.lang.StringIndexOutOfBoundsException"
+    },
+    {
+      "clase": "java.sql.Time",
+      "tipo": "otro valor",
+      "java": "java.sql.Time.valueOf(java.time.LocalTime.now())",
+      "jdk": "21:51:02",
+      "kaji": "00:51:02"
+    },
+    {
+      "clase": "java.sql.Time",
+      "tipo": "otra excepción",
+      "java": "java.sql.Time.valueOf(java.time.LocalTime.parse(\"\\u03a3\")).getDate()",
+      "jdk": "EXC:java.time.format.DateTimeParseException",
+      "kaji": "EXC:java.lang.StringIndexOutOfBoundsException"
+    },
+    {
+      "clase": "java.sql.Time",
+      "tipo": "otra excepción",
+      "java": "java.sql.Time.valueOf(java.time.LocalTime.parse(\"1234567890\")).getDate()",
+      "jdk": "EXC:java.time.format.DateTimeParseException",
+      "kaji": "EXC:java.lang.IllegalArgumentException"
+    },
+    {
+      "clase": "java.sql.Time",
+      "tipo": "excepción contra valor",
+      "java": "java.sql.Time.valueOf(java.time.LocalTime.of(32, 2, 2147483647)).hashCode()",
+      "jdk": "EXC:java.time.DateTimeException",
+      "kaji": "115319084"
+    },
+    {
+      "clase": "java.sql.Time",
+      "tipo": "excepción contra valor",
+      "java": "java.sql.Time.valueOf(java.time.LocalTime.of(-2147483648, 2147483647))",
+      "jdk": "EXC:java.time.DateTimeException",
+      "kaji": "18:07:00"
+    },
+    {
+      "clase": "java.sql.Time",
+      "tipo": "otro valor",
+      "java": "new java.sql.Time(4294967296L).toString()",
+      "jdk": "\"14:02:47\"",
+      "kaji": "\"17:02:47\""
+    },
+    {
+      "clase": "org.w3c.dom.xpath.XPathException",
+      "tipo": "sin salida (crash o cuelgue)",
+      "java": "new org.w3c.dom.xpath.XPathException((short) 1, new java.lang.String(new char[0], 0, -128)).getCause()",
+      "jdk": "EXC:java.lang.StringIndexOutOfBoundsException",
+      "kaji": null
+    },
+    {
+      "clase": "java.time.chrono.JapaneseDate",
+      "tipo": "excepción contra valor",
+      "java": "java.time.chrono.JapaneseDate.now(java.time.ZoneId.systemDefault()).atTime(java.time.LocalTime.ofNanoOfDay(-9223372036854775808L))",
+      "jdk": "EXC:java.time.DateTimeException",
+      "kaji": "Japanese Reiwa 8-10-03T0-2562047:0-47"
+    },
+    {
+      "clase": "java.time.chrono.JapaneseDate",
+      "tipo": "otro valor",
+      "java": "java.time.chrono.JapaneseDate.now(java.time.ZoneId.systemDefault())",
+      "jdk": "Japanese Reiwa 8-10-02",
+      "kaji": "Japanese Reiwa 8-10-03"
+    },
+    {
+      "clase": "java.time.chrono.JapaneseDate",
+      "tipo": "otra excepción",
+      "java": "java.time.chrono.JapaneseDate.now(java.time.ZoneId.of(\"ABC abc\")).format(java.time.format.DateTimeFormatter.ofPattern(\" \")).intern()",
+      "jdk": "EXC:java.time.DateTimeException",
+      "kaji": "EXC:java.time.zone.ZoneRulesException"
+    },
+    {
+      "clase": "java.time.chrono.JapaneseDate",
+      "tipo": "otra excepción",
+      "java": "java.time.chrono.JapaneseDate.now(java.time.ZoneId.of(\"-1\")).format(java.time.format.DateTimeFormatter.ofLocalizedPattern(\"\"))",
+      "jdk": "EXC:java.time.DateTimeException",
+      "kaji": "EXC:java.lang.StringIndexOutOfBoundsException"
+    },
+    {
+      "clase": "java.time.chrono.JapaneseDate",
+      "tipo": "otro valor",
+      "java": "java.time.chrono.JapaneseDate.now().hashCode()",
+      "jdk": "-691801773",
+      "kaji": "-691801774"
+    },
+    {
+      "clase": "java.time.chrono.JapaneseDate",
+      "tipo": "otro valor",
+      "java": "java.time.chrono.JapaneseDate.now().getChronology().eraOf(0)",
+      "jdk": "Taisho",
+      "kaji": "TAISHO"
+    },
+    {
+      "clase": "java.time.chrono.JapaneseDate",
+      "tipo": "otra excepción",
+      "java": "java.time.chrono.JapaneseDate.now(java.time.ZoneId.of(\"ABC abc\")).lengthOfMonth()",
+      "jdk": "EXC:java.time.DateTimeException",
+      "kaji": "EXC:java.time.zone.ZoneRulesException"
+    },
+    {
+      "clase": "java.time.chrono.JapaneseDate",
+      "tipo": "otro valor",
+      "java": "java.time.chrono.JapaneseDate.now()",
+      "jdk": "Japanese Reiwa 8-10-02",
+      "kaji": "Japanese Reiwa 8-10-03"
+    },
+    {
+      "clase": "java.time.chrono.JapaneseDate",
+      "tipo": "otro valor",
+      "java": "java.time.chrono.JapaneseDate.now().getEra()",
+      "jdk": "Reiwa",
+      "kaji": "REIWA"
+    },
+    {
+      "clase": "java.time.chrono.JapaneseDate",
+      "tipo": "otro valor",
+      "java": "java.time.chrono.JapaneseDate.now(java.time.ZoneId.systemDefault())",
+      "jdk": "Japanese Reiwa 8-10-02",
+      "kaji": "Japanese Reiwa 8-10-03"
+    },
+    {
+      "clase": "java.time.chrono.JapaneseDate",
+      "tipo": "otro valor",
+      "java": "java.time.chrono.JapaneseDate.now()",
+      "jdk": "Japanese Reiwa 8-10-02",
+      "kaji": "Japanese Reiwa 8-10-03"
+    },
+    {
+      "clase": "java.time.chrono.JapaneseDate",
+      "tipo": "otro valor",
+      "java": "java.time.chrono.JapaneseDate.now()",
+      "jdk": "Japanese Reiwa 8-10-02",
+      "kaji": "Japanese Reiwa 8-10-03"
+    },
+    {
+      "clase": "java.time.chrono.JapaneseDate",
+      "tipo": "otra excepción",
+      "java": "java.time.chrono.JapaneseDate.now(java.time.ZoneId.of(\"a\")).hashCode()",
+      "jdk": "EXC:java.time.DateTimeException",
+      "kaji": "EXC:java.time.zone.ZoneRulesException"
+    },
+    {
+      "clase": "java.time.chrono.JapaneseDate",
+      "tipo": "excepción contra valor",
+      "java": "java.time.chrono.JapaneseDate.now(java.time.Clock.systemDefaultZone()).atTime(java.time.LocalTime.ofSecondOfDay(-1L)).toEpochSecond(java.time.ZoneOffset.ofTotalSeconds(0))",
+      "jdk": "EXC:java.time.DateTimeException",
+      "kaji": "1790985599"
+    },
+    {
+      "clase": "java.time.chrono.JapaneseDate",
+      "tipo": "otro valor",
+      "java": "java.time.chrono.JapaneseDate.now(java.time.ZoneId.systemDefault())",
+      "jdk": "Japanese Reiwa 8-10-02",
+      "kaji": "Japanese Reiwa 8-10-03"
+    },
+    {
+      "clase": "java.time.chrono.JapaneseDate",
+      "tipo": "otro valor",
+      "java": "java.time.chrono.JapaneseDate.now()",
+      "jdk": "Japanese Reiwa 8-10-02",
+      "kaji": "Japanese Reiwa 8-10-03"
+    },
+    {
+      "clase": "java.time.chrono.JapaneseDate",
+      "tipo": "otro valor",
+      "java": "java.time.chrono.JapaneseDate.now(java.time.ZoneId.systemDefault())",
+      "jdk": "Japanese Reiwa 8-10-02",
+      "kaji": "Japanese Reiwa 8-10-03"
+    },
+    {
+      "clase": "java.time.chrono.JapaneseDate",
+      "tipo": "otra excepción",
+      "java": "java.time.chrono.JapaneseDate.now().atTime(java.time.LocalTime.parse(\"\\u03a3\")).toInstant(java.time.ZoneOffset.ofTotalSeconds(-128))",
+      "jdk": "EXC:java.time.format.DateTimeParseException",
+      "kaji": "EXC:java.lang.StringIndexOutOfBoundsException"
+    },
+    {
+      "clase": "java.lang.classfile.MethodSignature",
+      "tipo": "otra excepción",
+      "java": "java.lang.classfile.MethodSignature.of(java.lang.constant.MethodTypeDesc.ofDescriptor(\"\\u00df\")).throwableSignatures().removeIf(java.util.function.Predicate.isEqual(\"ABC abc\"))",
+      "jdk": "EXC:java.lang.IllegalArgumentException",
+      "kaji": "EXC:java.lang.StringIndexOutOfBoundsException"
+    },
+    {
+      "clase": "java.lang.classfile.MethodSignature",
+      "tipo": "otra excepción",
+      "java": "java.lang.classfile.MethodSignature.of(java.lang.constant.MethodTypeDesc.ofDescriptor(\"1234567890\")).signatureString().lastIndexOf(\"ABC abc\")",
+      "jdk": "EXC:java.lang.IllegalArgumentException",
+      "kaji": "EXC:java.lang.StringIndexOutOfBoundsException"
+    },
+    {
+      "clase": "java.lang.classfile.MethodSignature",
+      "tipo": "otra excepción",
+      "java": "java.lang.classfile.MethodSignature.of(java.lang.constant.MethodTypeDesc.ofDescriptor(\" \")).throwableSignatures().listIterator(0)",
+      "jdk": "EXC:java.lang.IllegalArgumentException",
+      "kaji": "EXC:java.lang.StringIndexOutOfBoundsException"
+    },
+    {
+      "clase": "java.lang.classfile.MethodSignature",
+      "tipo": "otra excepción",
+      "java": "java.lang.classfile.MethodSignature.of(java.lang.constant.MethodTypeDesc.ofDescriptor(\"abc\")).signatureString()",
+      "jdk": "EXC:java.lang.IllegalArgumentException",
+      "kaji": "EXC:java.lang.StringIndexOutOfBoundsException"
+    },
+    {
+      "clase": "java.lang.classfile.MethodSignature",
+      "tipo": "otra excepción",
+      "java": "java.lang.classfile.MethodSignature.of(java.lang.constant.MethodTypeDesc.ofDescriptor(\"A\")).signatureString()",
+      "jdk": "EXC:java.lang.IllegalArgumentException",
+      "kaji": "EXC:java.lang.StringIndexOutOfBoundsException"
+    },
+    {
+      "clase": "java.lang.classfile.MethodSignature",
+      "tipo": "otra excepción",
+      "java": "java.lang.classfile.MethodSignature.of(java.lang.constant.MethodTypeDesc.ofDescriptor(\"A\"))",
+      "jdk": "EXC:java.lang.IllegalArgumentException",
+      "kaji": "EXC:java.lang.StringIndexOutOfBoundsException"
+    },
+    {
+      "clase": "java.lang.classfile.MethodSignature",
+      "tipo": "otra excepción",
+      "java": "java.lang.classfile.MethodSignature.of(java.lang.constant.MethodTypeDesc.ofDescriptor(\"\\u00df\")).signatureString()",
+      "jdk": "EXC:java.lang.IllegalArgumentException",
+      "kaji": "EXC:java.lang.StringIndexOutOfBoundsException"
+    },
+    {
+      "clase": "java.lang.classfile.MethodSignature",
+      "tipo": "otra excepción",
+      "java": "java.lang.classfile.MethodSignature.of(java.lang.constant.MethodTypeDesc.ofDescriptor(\"abc\")).throwableSignatures()",
+      "jdk": "EXC:java.lang.IllegalArgumentException",
+      "kaji": "EXC:java.lang.StringIndexOutOfBoundsException"
+    },
+    {
+      "clase": "java.lang.classfile.MethodSignature",
+      "tipo": "otra excepción",
+      "java": "java.lang.classfile.MethodSignature.of(java.lang.constant.MethodTypeDesc.ofDescriptor(\"a\"))",
+      "jdk": "EXC:java.lang.IllegalArgumentException",
+      "kaji": "EXC:java.lang.StringIndexOutOfBoundsException"
+    },
+    {
+      "clase": "java.lang.classfile.MethodSignature",
+      "tipo": "otra excepción",
+      "java": "java.lang.classfile.MethodSignature.of(java.lang.constant.MethodTypeDesc.ofDescriptor(\"hola mundo\"))",
+      "jdk": "EXC:java.lang.IllegalArgumentException",
+      "kaji": "EXC:java.lang.StringIndexOutOfBoundsException"
+    },
+    {
+      "clase": "java.lang.classfile.MethodSignature",
+      "tipo": "otra excepción",
+      "java": "java.lang.classfile.MethodSignature.of(java.lang.constant.MethodTypeDesc.ofDescriptor(\"A\")).result()",
+      "jdk": "EXC:java.lang.IllegalArgumentException",
+      "kaji": "EXC:java.lang.StringIndexOutOfBoundsException"
+    },
+    {
+      "clase": "java.lang.classfile.MethodSignature",
+      "tipo": "otra excepción",
+      "java": "java.lang.classfile.MethodSignature.of(java.lang.constant.MethodTypeDesc.ofDescriptor(\"abc\")).arguments()",
+      "jdk": "EXC:java.lang.IllegalArgumentException",
+      "kaji": "EXC:java.lang.StringIndexOutOfBoundsException"
+    },
+    {
+      "clase": "java.lang.classfile.MethodSignature",
+      "tipo": "otra excepción",
+      "java": "java.lang.classfile.MethodSignature.of(java.lang.constant.MethodTypeDesc.ofDescriptor(\" \"))",
+      "jdk": "EXC:java.lang.IllegalArgumentException",
+      "kaji": "EXC:java.lang.StringIndexOutOfBoundsException"
+    },
+    {
+      "clase": "java.lang.classfile.MethodSignature",
+      "tipo": "otra excepción",
+      "java": "java.lang.classfile.MethodSignature.of(java.lang.constant.MethodTypeDesc.ofDescriptor(\"\\u03a3\")).throwableSignatures()",
+      "jdk": "EXC:java.lang.IllegalArgumentException",
+      "kaji": "EXC:java.lang.StringIndexOutOfBoundsException"
+    },
+    {
+      "clase": "java.lang.classfile.MethodSignature",
+      "tipo": "otra excepción",
+      "java": "java.lang.classfile.MethodSignature.of(java.lang.constant.MethodTypeDesc.ofDescriptor(\"1234567890\")).signatureString()",
+      "jdk": "EXC:java.lang.IllegalArgumentException",
+      "kaji": "EXC:java.lang.StringIndexOutOfBoundsException"
+    },
+    {
+      "clase": "java.lang.classfile.MethodSignature",
+      "tipo": "otra excepción",
+      "java": "java.lang.classfile.MethodSignature.of(java.lang.constant.MethodTypeDesc.ofDescriptor(\"\\u03a3\")).typeParameters()",
+      "jdk": "EXC:java.lang.IllegalArgumentException",
+      "kaji": "EXC:java.lang.StringIndexOutOfBoundsException"
+    },
+    {
+      "clase": "java.lang.classfile.MethodSignature",
+      "tipo": "otra excepción",
+      "java": "java.lang.classfile.MethodSignature.of(java.lang.constant.MethodTypeDesc.ofDescriptor(\"-1\")).throwableSignatures()",
+      "jdk": "EXC:java.lang.IllegalArgumentException",
+      "kaji": "EXC:java.lang.StringIndexOutOfBoundsException"
+    },
+    {
+      "clase": "java.sql.SQLException",
+      "tipo": "otro valor",
+      "java": "new java.sql.SQLException(new java.lang.Throwable()).getLocalizedMessage()",
+      "jdk": "\"java.lang.Throwable\"",
+      "kaji": "null"
+    },
+    {
+      "clase": "java.sql.SQLException",
+      "tipo": "excepción contra valor",
+      "java": "new java.sql.SQLException(\"abc\", \"1234567890\", 127).initCause(new java.lang.Throwable(\"abc\"))",
+      "jdk": "java.sql.SQLException: abc",
+      "kaji": "EXC:java.lang.IllegalStateException"
+    },
+    {
+      "clase": "java.sql.SQLException",
+      "tipo": "excepción contra valor",
+      "java": "new java.sql.SQLException().initCause(new java.lang.Throwable()).getMessage()",
+      "jdk": "null",
+      "kaji": "EXC:java.lang.IllegalStateException"
+    },
+    {
+      "clase": "java.sql.SQLException",
+      "tipo": "excepción contra valor",
+      "java": "new java.sql.SQLException(\"hola mundo\", \"\", 65535).initCause(new java.lang.Throwable())",
+      "jdk": "java.sql.SQLException: hola mundo",
+      "kaji": "EXC:java.lang.IllegalStateException"
+    },
+    {
+      "clase": "java.sql.SQLException",
+      "tipo": "otro valor",
+      "java": "new java.sql.SQLException(new java.lang.Throwable(\"-1\"))",
+      "jdk": "java.sql.SQLException: java.lang.Throwable: -1",
+      "kaji": "java.sql.SQLException"
+    },
+    {
+      "clase": "java.time.Duration",
+      "tipo": "excepción contra valor",
+      "java": "java.time.Duration.parse(\"0\").toDaysPart()",
+      "jdk": "EXC:java.time.format.DateTimeParseException",
+      "kaji": "0"
+    },
+    {
+      "clase": "java.time.Duration",
+      "tipo": "excepción contra valor",
+      "java": "java.time.Duration.ofMinutes(-1L).minus(java.time.Duration.parse(\"a\")).plusMinutes(9223372036854775807L)",
+      "jdk": "EXC:java.time.format.DateTimeParseException",
+      "kaji": "PT-2M"
+    },
+    {
+      "clase": "java.time.Duration",
+      "tipo": "excepción contra valor",
+      "java": "java.time.Duration.ofDays(-9223372036854775808L).toString().translateEscapes()",
+      "jdk": "EXC:java.lang.ArithmeticException",
+      "kaji": "\"PT0S\""
+    },
+    {
+      "clase": "java.time.Duration",
+      "tipo": "excepción contra valor",
+      "java": "java.time.Duration.parse(\"ABC abc\").toDays()",
+      "jdk": "EXC:java.time.format.DateTimeParseException",
+      "kaji": "0"
+    },
+    {
+      "clase": "java.time.Duration",
+      "tipo": "excepción contra valor",
+      "java": "java.time.Duration.parse(\"hola mundo\").toHours()",
+      "jdk": "EXC:java.time.format.DateTimeParseException",
+      "kaji": "0"
+    },
+    {
+      "clase": "java.time.Duration",
+      "tipo": "excepción contra valor",
+      "java": "java.time.Duration.parse(\"-1\").minus(java.time.Duration.ofDays(9223372036854775807L)).toDays()",
+      "jdk": "EXC:java.time.format.DateTimeParseException",
+      "kaji": "1"
+    },
+    {
+      "clase": "java.time.Duration",
+      "tipo": "excepción contra valor",
+      "java": "java.time.Duration.ofHours(-9223372036854775808L).plusMillis(1L)",
+      "jdk": "EXC:java.lang.ArithmeticException",
+      "kaji": "PT0.001S"
+    },
+    {
+      "clase": "java.time.Duration",
+      "tipo": "excepción contra valor",
+      "java": "java.time.Duration.ofNanos(1L).minusMinutes(9223372036854775807L)",
+      "jdk": "EXC:java.lang.ArithmeticException",
+      "kaji": "PT1M0.000000001S"
+    },
+    {
+      "clase": "java.time.Duration",
+      "tipo": "excepción contra valor",
+      "java": "java.time.Duration.parse(\"\\u03a3\")",
+      "jdk": "EXC:java.time.format.DateTimeParseException",
+      "kaji": "PT0S"
+    },
+    {
+      "clase": "java.time.Duration",
+      "tipo": "excepción contra valor",
+      "java": "java.time.Duration.parse(\"\\n\").getClass()",
+      "jdk": "EXC:java.time.format.DateTimeParseException",
+      "kaji": "class java.time.Duration"
+    },
+    {
+      "clase": "java.math.BigDecimal",
+      "tipo": "otra excepción",
+      "java": "new java.math.BigDecimal(1L).multiply(java.math.BigDecimal.valueOf(1e-308), new java.math.MathContext(\"\\u03a3\"))",
+      "jdk": "EXC:java.lang.IllegalArgumentException",
+      "kaji": "EXC:java.lang.NumberFormatException"
+    },
+    {
+      "clase": "java.math.BigDecimal",
+      "tipo": "otra excepción",
+      "java": "new java.math.BigDecimal(new char[] {'a', 'b'}, -128, 1)",
+      "jdk": "EXC:java.lang.NumberFormatException",
+      "kaji": "EXC:java.lang.StringIndexOutOfBoundsException"
+    },
+    {
+      "clase": "java.math.BigDecimal",
+      "tipo": "otra excepción",
+      "java": "new java.math.BigDecimal(new java.math.BigInteger(new byte[] {1, 2, 3}), 32).divideToIntegralValue(new java.math.BigDecimal(new char[0], 7, 0), new java.math.MathContext(\"abc\"))",
+      "jdk": "EXC:java.lang.NumberFormatException",
+      "kaji": "EXC:java.lang.StringIndexOutOfBoundsException"
+    },
+    {
+      "clase": "java.math.BigDecimal",
+      "tipo": "otra excepción",
+      "java": "new java.math.BigDecimal(new char[] {'a', 'b'}, 7, -2147483648).stripTrailingZeros().divide(java.math.BigDecimal.valueOf(255L, -1))",
+      "jdk": "EXC:java.lang.NumberFormatException",
+      "kaji": "EXC:java.lang.StringIndexOutOfBoundsException"
+    },
+    {
+      "clase": "java.math.BigDecimal",
+      "tipo": "otra excepción",
+      "java": "new java.math.BigDecimal(new char[] {(char) 0, (char) 65535}, -2147483648, -1).toPlainString().charAt(31)",
+      "jdk": "EXC:java.lang.NumberFormatException",
+      "kaji": "EXC:java.lang.StringIndexOutOfBoundsException"
+    },
+    {
+      "clase": "java.math.BigDecimal",
+      "tipo": "otra excepción",
+      "java": "new java.math.BigDecimal(255L).divideAndRemainder(new java.math.BigDecimal(new char[] {(char) 0, (char) 65535}, 255, 255), new java.math.MathContext(\"ABC abc\"))",
+      "jdk": "EXC:java.lang.NumberFormatException",
+      "kaji": "EXC:java.lang.StringIndexOutOfBoundsException"
+    },
+    {
+      "clase": "java.time.temporal.ChronoUnit",
+      "tipo": "sin salida (crash o cuelgue)",
+      "java": "java.time.temporal.ChronoUnit.valueOf(\"1234567890\").ordinal()",
+      "jdk": "EXC:java.lang.IllegalArgumentException",
+      "kaji": null
+    },
+    {
+      "clase": "org.ietf.jgss.ChannelBinding",
+      "tipo": "otro valor",
+      "java": "new org.ietf.jgss.ChannelBinding(java.net.InetAddress.getLocalHost(), java.net.InetAddress.getLoopbackAddress(), new byte[] {-1, 0, 127}).getInitiatorAddress()",
+      "jdk": "WINDOWS-GNTK4RF/192.168.1.37",
+      "kaji": "localhost/127.0.0.1"
+    },
+    {
+      "clase": "java.lang.ClassCastException",
+      "tipo": "excepción contra valor",
+      "java": "new java.lang.ClassCastException(java.lang.String.copyValueOf(new char[] {(char) 0, (char) 65535}, 2, 255)).getLocalizedMessage()",
+      "jdk": "EXC:java.lang.StringIndexOutOfBoundsException",
+      "kaji": "\"va.lang.ClassCastException@sƠ\u0000\u0000\u0000\u001f\u000032=java.lang.ClassCastException\u0000\u0000\u0000ᵖ\u0000\u0000\u0000鮎\u0002 \u0000\u0000\u0000\u0000\u0000\u0001\u0000\u0001\u0000Ơ\u0000\u0000\u0000\u0007\u000033=nullnioᵖ\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000ᵖ\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000鹆\u0002鮬\u0002\u0000\u0000\u0002\u0000鿃\u0000\u0000\u0000\u0000\u0000\u0000\u0000ᵖ\u0000\u0000\u0000\u0000\u0000ň\u0000\u0000\u0000\u0000\u0000\u0001\u0000\u0001\u0000鯺\u0002鲮\u0002\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0001\u0000醴\u0002Ɛ\u0000\u0000\u0000Ɛ\u0000\u0000\u0000Ɛ\u0000\u0000\u0000Ɛ\u0000\u0000\u0000੘\u0000ˢ\u0000ଂ\u0000Ơ\u0000\u0000\u0000\b\u0000US-ASCIIƠ\u0000\u0000\u0000{\u0000646,ANSI_X3.4-1968,ANSI_X3.4-\""
+    },
+    {
+      "clase": "java.nio.IntBuffer",
+      "tipo": "otro valor",
+      "java": "java.nio.IntBuffer.allocate(31)",
+      "jdk": "java.nio.HeapIntBuffer[pos=0 lim=31 cap=31]",
+      "kaji": "IntBuffer[pos=0 lim=31 cap=31]"
+    },
+    {
+      "clase": "java.nio.IntBuffer",
+      "tipo": "otra excepción",
+      "java": "java.nio.IntBuffer.wrap(new int[0], 2, 127)",
+      "jdk": "EXC:java.lang.IndexOutOfBoundsException",
+      "kaji": "EXC:java.lang.IllegalArgumentException"
+    },
+    {
+      "clase": "java.nio.IntBuffer",
+      "tipo": "otro valor",
+      "java": "java.nio.IntBuffer.wrap(new int[] {-1, 0, 2147483647}).put(65535)",
+      "jdk": "java.nio.HeapIntBuffer[pos=1 lim=3 cap=3]",
+      "kaji": "IntBuffer[pos=1 lim=3 cap=3]"
+    },
+    {
+      "clase": "java.nio.IntBuffer",
+      "tipo": "otro valor",
+      "java": "java.nio.IntBuffer.allocate(32).put(2147483647)",
+      "jdk": "java.nio.HeapIntBuffer[pos=1 lim=32 cap=32]",
+      "kaji": "IntBuffer[pos=1 lim=32 cap=32]"
+    },
+    {
+      "clase": "java.nio.IntBuffer",
+      "tipo": "otro valor",
+      "java": "java.nio.IntBuffer.wrap(new int[] {-1, 0, 2147483647}).mark()",
+      "jdk": "java.nio.HeapIntBuffer[pos=0 lim=3 cap=3]",
+      "kaji": "IntBuffer[pos=0 lim=3 cap=3]"
+    },
+    {
+      "clase": "java.nio.IntBuffer",
+      "tipo": "excepción contra valor",
+      "java": "java.nio.IntBuffer.wrap(new int[] {-1, 0, 2147483647}, 2, -1)",
+      "jdk": "EXC:java.lang.IndexOutOfBoundsException",
+      "kaji": "IntBuffer[pos=1 lim=1 cap=3]"
+    },
+    {
+      "clase": "java.nio.IntBuffer",
+      "tipo": "otra excepción",
+      "java": "java.nio.IntBuffer.wrap(new int[] {-1, 0, 2147483647}, -1, 127).hasRemaining()",
+      "jdk": "EXC:java.lang.IndexOutOfBoundsException",
+      "kaji": "EXC:java.lang.IllegalArgumentException"
+    },
+    {
+      "clase": "java.nio.IntBuffer",
+      "tipo": "otra excepción",
+      "java": "java.nio.IntBuffer.wrap(new int[] {1, 2, 3}, -128, -1).mark().remaining()",
+      "jdk": "EXC:java.lang.IndexOutOfBoundsException",
+      "kaji": "EXC:java.lang.IllegalArgumentException"
+    },
+    {
+      "clase": "java.nio.IntBuffer",
+      "tipo": "otra excepción",
+      "java": "java.nio.IntBuffer.wrap(new int[] {-1, 0, 2147483647}, 255, 65535)",
+      "jdk": "EXC:java.lang.IndexOutOfBoundsException",
+      "kaji": "EXC:java.lang.IllegalArgumentException"
+    },
+    {
+      "clase": "java.nio.IntBuffer",
+      "tipo": "otro valor",
+      "java": "java.nio.IntBuffer.wrap(new int[] {-1, 0, 2147483647})",
+      "jdk": "java.nio.HeapIntBuffer[pos=0 lim=3 cap=3]",
+      "kaji": "IntBuffer[pos=0 lim=3 cap=3]"
+    },
+    {
+      "clase": "java.nio.IntBuffer",
+      "tipo": "otro valor",
+      "java": "java.nio.IntBuffer.allocate(32)",
+      "jdk": "java.nio.HeapIntBuffer[pos=0 lim=32 cap=32]",
+      "kaji": "IntBuffer[pos=0 lim=32 cap=32]"
+    },
+    {
+      "clase": "java.nio.IntBuffer",
+      "tipo": "otro valor",
+      "java": "java.nio.IntBuffer.wrap(new int[] {1})",
+      "jdk": "java.nio.HeapIntBuffer[pos=0 lim=1 cap=1]",
+      "kaji": "IntBuffer[pos=0 lim=1 cap=1]"
+    },
+    {
+      "clase": "java.nio.IntBuffer",
+      "tipo": "otra excepción",
+      "java": "java.nio.IntBuffer.wrap(new int[0], 2147483647, -1).arrayOffset()",
+      "jdk": "EXC:java.lang.IndexOutOfBoundsException",
+      "kaji": "EXC:java.lang.IllegalArgumentException"
+    },
+    {
+      "clase": "java.nio.IntBuffer",
+      "tipo": "otro valor",
+      "java": "java.nio.IntBuffer.wrap(new int[0])",
+      "jdk": "java.nio.HeapIntBuffer[pos=0 lim=0 cap=0]",
+      "kaji": "IntBuffer[pos=0 lim=0 cap=0]"
+    },
+    {
+      "clase": "java.nio.IntBuffer",
+      "tipo": "otra excepción",
+      "java": "java.nio.IntBuffer.wrap(new int[] {1}, -2147483648, 2147483647).reset()",
+      "jdk": "EXC:java.lang.IndexOutOfBoundsException",
+      "kaji": "EXC:java.lang.IllegalArgumentException"
+    },
+    {
+      "clase": "java.nio.IntBuffer",
+      "tipo": "otra excepción",
+      "java": "java.nio.IntBuffer.wrap(new int[] {1}, -128, 127).put(2, new int[] {1}).put(new int[] {-1, 0, 2147483647}, 255, 32)",
+      "jdk": "EXC:java.lang.IndexOutOfBoundsException",
+      "kaji": "EXC:java.lang.IllegalArgumentException"
+    },
+    {
+      "clase": "java.nio.IntBuffer",
+      "tipo": "otra excepción",
+      "java": "java.nio.IntBuffer.wrap(new int[0], 65535, 2).limit()",
+      "jdk": "EXC:java.lang.IndexOutOfBoundsException",
+      "kaji": "EXC:java.lang.IllegalArgumentException"
+    },
+    {
+      "clase": "java.nio.IntBuffer",
+      "tipo": "otra excepción",
+      "java": "java.nio.IntBuffer.wrap(new int[] {1}, 32, 1)",
+      "jdk": "EXC:java.lang.IndexOutOfBoundsException",
+      "kaji": "EXC:java.lang.IllegalArgumentException"
+    },
+    {
+      "clase": "java.nio.IntBuffer",
+      "tipo": "otro valor",
+      "java": "java.nio.IntBuffer.wrap(new int[0])",
+      "jdk": "java.nio.HeapIntBuffer[pos=0 lim=0 cap=0]",
+      "kaji": "IntBuffer[pos=0 lim=0 cap=0]"
+    },
+    {
+      "clase": "java.nio.IntBuffer",
+      "tipo": "otra excepción",
+      "java": "java.nio.IntBuffer.wrap(new int[] {-1, 0, 2147483647}, 65535, 255).put(-128, new int[] {1, 2, 3}).hasArray()",
+      "jdk": "EXC:java.lang.IndexOutOfBoundsException",
+      "kaji": "EXC:java.lang.IllegalArgumentException"
+    },
+    {
+      "clase": "java.nio.IntBuffer",
+      "tipo": "otro valor",
+      "java": "java.nio.IntBuffer.allocate(31)",
+      "jdk": "java.nio.HeapIntBuffer[pos=0 lim=31 cap=31]",
+      "kaji": "IntBuffer[pos=0 lim=31 cap=31]"
+    },
+    {
+      "clase": "java.nio.IntBuffer",
+      "tipo": "otro valor",
+      "java": "java.nio.IntBuffer.allocate(1).toString().stripTrailing()",
+      "jdk": "\"java.nio.HeapIntBuffer[pos=0 lim=1 cap=1]\"",
+      "kaji": "\"IntBuffer[pos=0 lim=1 cap=1]\""
+    },
+    {
+      "clase": "java.nio.IntBuffer",
+      "tipo": "otra excepción",
+      "java": "java.nio.IntBuffer.wrap(new int[] {1, 2, 3}, 65535, 0)",
+      "jdk": "EXC:java.lang.IndexOutOfBoundsException",
+      "kaji": "EXC:java.lang.IllegalArgumentException"
+    },
+    {
+      "clase": "java.nio.IntBuffer",
+      "tipo": "otra excepción",
+      "java": "java.nio.IntBuffer.wrap(new int[] {1, 2, 3}, -2147483648, 0)",
+      "jdk": "EXC:java.lang.IndexOutOfBoundsException",
+      "kaji": "EXC:java.lang.IllegalArgumentException"
+    },
+    {
+      "clase": "java.nio.IntBuffer",
+      "tipo": "otro valor",
+      "java": "java.nio.IntBuffer.allocate(65535)",
+      "jdk": "java.nio.HeapIntBuffer[pos=0 lim=65535 cap=65535]",
+      "kaji": "IntBuffer[pos=0 lim=65535 cap=65535]"
+    },
+    {
+      "clase": "java.util.HashMap",
+      "tipo": "sin salida (crash o cuelgue)",
+      "java": "java.util.HashMap.newHashMap(7).equals(\"hola mundo\")",
+      "jdk": "false",
+      "kaji": null
+    },
+    {
+      "clase": "java.lang.foreign.MemoryLayout",
+      "tipo": "otro valor",
+      "java": "java.lang.foreign.MemoryLayout.paddingLayout(255L).name()",
+      "jdk": "Optional.empty",
+      "kaji": "<objeto>"
+    },
+    {
+      "clase": "java.lang.foreign.MemoryLayout",
+      "tipo": "otro valor",
+      "java": "java.lang.foreign.MemoryLayout.paddingLayout(4294967296L).hashCode()",
+      "jdk": "925475",
+      "kaji": "31"
+    },
+    {
+      "clase": "java.lang.foreign.MemoryLayout",
+      "tipo": "otro valor",
+      "java": "java.lang.foreign.MemoryLayout.paddingLayout(1L).hashCode()",
+      "jdk": "925475",
+      "kaji": "992"
+    },
+    {
+      "clase": "java.lang.foreign.MemoryLayout",
+      "tipo": "otro valor",
+      "java": "java.lang.foreign.MemoryLayout.paddingLayout(4294967296L).hashCode()",
+      "jdk": "925475",
+      "kaji": "31"
+    },
+    {
+      "clase": "java.lang.foreign.MemoryLayout",
+      "tipo": "otro valor",
+      "java": "java.lang.foreign.MemoryLayout.paddingLayout(4294967296L).name()",
+      "jdk": "Optional.empty",
+      "kaji": "<objeto>"
+    },
+    {
+      "clase": "java.time.MonthDay",
+      "tipo": "otra excepción",
+      "java": "java.time.MonthDay.parse(\"0\").isBefore(java.time.MonthDay.parse(\"\"))",
+      "jdk": "EXC:java.time.format.DateTimeParseException",
+      "kaji": "EXC:java.lang.StringIndexOutOfBoundsException"
+    },
+    {
+      "clase": "java.time.MonthDay",
+      "tipo": "otra excepción",
+      "java": "java.time.MonthDay.parse(\"-1\")",
+      "jdk": "EXC:java.time.format.DateTimeParseException",
+      "kaji": "EXC:java.lang.StringIndexOutOfBoundsException"
+    },
+    {
+      "clase": "java.time.MonthDay",
+      "tipo": "excepción contra valor",
+      "java": "java.time.MonthDay.parse(\"ABC abc\").getDayOfMonth()",
+      "jdk": "EXC:java.time.format.DateTimeParseException",
+      "kaji": "551"
+    },
+    {
+      "clase": "java.time.MonthDay",
+      "tipo": "otro valor",
+      "java": "java.time.MonthDay.now()",
+      "jdk": "--10-02",
+      "kaji": "--10-03"
+    },
+    {
+      "clase": "java.time.MonthDay",
+      "tipo": "otra excepción",
+      "java": "java.time.MonthDay.of(2, -2147483648).with(java.time.Month.valueOf(\"hola mundo\"))",
+      "jdk": "EXC:java.time.DateTimeException",
+      "kaji": "EXC:java.lang.IllegalArgumentException"
+    },
+    {
+      "clase": "java.time.MonthDay",
+      "tipo": "otra excepción",
+      "java": "java.time.MonthDay.parse(\"\\u03a3\")",
+      "jdk": "EXC:java.time.format.DateTimeParseException",
+      "kaji": "EXC:java.lang.StringIndexOutOfBoundsException"
+    },
+    {
+      "clase": "java.time.MonthDay",
+      "tipo": "otro valor",
+      "java": "java.time.MonthDay.now().toString()",
+      "jdk": "\"--10-02\"",
+      "kaji": "\"--10-03\""
+    },
+    {
+      "clase": "java.time.MonthDay",
+      "tipo": "excepción contra valor",
+      "java": "java.time.MonthDay.parse(\"1234567890\").isValidYear(255)",
+      "jdk": "EXC:java.time.format.DateTimeParseException",
+      "kaji": "true"
+    },
+    {
+      "clase": "java.time.MonthDay",
+      "tipo": "otra excepción",
+      "java": "java.time.MonthDay.parse(\" \")",
+      "jdk": "EXC:java.time.format.DateTimeParseException",
+      "kaji": "EXC:java.lang.StringIndexOutOfBoundsException"
+    },
+    {
+      "clase": "java.time.MonthDay",
+      "tipo": "otro valor",
+      "java": "java.time.MonthDay.now()",
+      "jdk": "--10-02",
+      "kaji": "--10-03"
+    },
+    {
+      "clase": "java.time.MonthDay",
+      "tipo": "otro valor",
+      "java": "java.time.MonthDay.now().getDayOfMonth()",
+      "jdk": "2",
+      "kaji": "3"
+    },
+    {
+      "clase": "java.time.MonthDay",
+      "tipo": "otra excepción",
+      "java": "java.time.MonthDay.parse(\"\\u03a3\")",
+      "jdk": "EXC:java.time.format.DateTimeParseException",
+      "kaji": "EXC:java.lang.StringIndexOutOfBoundsException"
+    },
+    {
+      "clase": "java.time.MonthDay",
+      "tipo": "otra excepción",
+      "java": "java.time.MonthDay.of(java.time.Month.of(-1), 32).getDayOfMonth()",
+      "jdk": "EXC:java.time.DateTimeException",
+      "kaji": "EXC:java.lang.ArrayIndexOutOfBoundsException"
+    },
+    {
+      "clase": "java.time.MonthDay",
+      "tipo": "excepción contra valor",
+      "java": "java.time.MonthDay.now().withDayOfMonth(-2147483648)",
+      "jdk": "EXC:java.time.DateTimeException",
+      "kaji": "--10-0-2147483648"
+    },
+    {
+      "clase": "java.time.MonthDay",
+      "tipo": "otro valor",
+      "java": "java.time.MonthDay.now()",
+      "jdk": "--10-02",
+      "kaji": "--10-03"
+    },
+    {
+      "clase": "java.time.MonthDay",
+      "tipo": "otra excepción",
+      "java": "java.time.MonthDay.of(31, 1).format(java.time.format.DateTimeFormatter.ofLocalizedPattern(\"1234567890\"))",
+      "jdk": "EXC:java.time.DateTimeException",
+      "kaji": "EXC:java.lang.IllegalArgumentException"
+    },
+    {
+      "clase": "java.time.MonthDay",
+      "tipo": "otro valor",
+      "java": "java.time.MonthDay.now(java.time.Clock.systemDefaultZone()).withMonth(7)",
+      "jdk": "--07-02",
+      "kaji": "--07-03"
+    },
+    {
+      "clase": "java.time.MonthDay",
+      "tipo": "otra excepción",
+      "java": "java.time.MonthDay.parse(\" \").isBefore(java.time.MonthDay.now())",
+      "jdk": "EXC:java.time.format.DateTimeParseException",
+      "kaji": "EXC:java.lang.StringIndexOutOfBoundsException"
+    },
+    {
+      "clase": "java.time.MonthDay",
+      "tipo": "otra excepción",
+      "java": "java.time.MonthDay.parse(\"1234567890\").getMonth()",
+      "jdk": "EXC:java.time.format.DateTimeParseException",
+      "kaji": "EXC:java.lang.ArrayIndexOutOfBoundsException"
+    },
+    {
+      "clase": "java.time.MonthDay",
+      "tipo": "otra excepción",
+      "java": "java.time.MonthDay.now().withDayOfMonth(-1).format(java.time.format.DateTimeFormatter.ofLocalizedPattern(\"\\n\"))",
+      "jdk": "EXC:java.time.DateTimeException",
+      "kaji": "EXC:java.lang.IllegalArgumentException"
+    },
+    {
+      "clase": "java.time.MonthDay",
+      "tipo": "otra excepción",
+      "java": "java.time.MonthDay.of(-128, -128).format(java.time.format.DateTimeFormatter.ofLocalizedPattern(\"0\"))",
+      "jdk": "EXC:java.time.DateTimeException",
+      "kaji": "EXC:java.lang.IllegalArgumentException"
+    },
+    {
+      "clase": "java.time.MonthDay",
+      "tipo": "otra excepción",
+      "java": "java.time.MonthDay.now(java.time.ZoneId.of(\"ABC abc\")).getDayOfMonth()",
+      "jdk": "EXC:java.time.DateTimeException",
+      "kaji": "EXC:java.time.zone.ZoneRulesException"
+    },
+    {
+      "clase": "java.time.MonthDay",
+      "tipo": "excepción contra valor",
+      "java": "java.time.MonthDay.of(-1, 255).getDayOfMonth()",
+      "jdk": "EXC:java.time.DateTimeException",
+      "kaji": "255"
+    },
+    {
+      "clase": "java.time.MonthDay",
+      "tipo": "otro valor",
+      "java": "java.time.MonthDay.now()",
+      "jdk": "--10-02",
+      "kaji": "--10-03"
+    },
+    {
+      "clase": "java.time.MonthDay",
+      "tipo": "excepción contra valor",
+      "java": "java.time.MonthDay.now().compareTo(java.time.MonthDay.of(65535, 2))",
+      "jdk": "EXC:java.time.DateTimeException",
+      "kaji": "-65525"
+    },
+    {
+      "clase": "java.time.MonthDay",
+      "tipo": "otro valor",
+      "java": "java.time.MonthDay.now(java.time.ZoneId.systemDefault()).getDayOfMonth()",
+      "jdk": "2",
+      "kaji": "3"
+    },
+    {
+      "clase": "java.time.MonthDay",
+      "tipo": "otra excepción",
+      "java": "java.time.MonthDay.parse(\"\").withMonth(2)",
+      "jdk": "EXC:java.time.format.DateTimeParseException",
+      "kaji": "EXC:java.lang.StringIndexOutOfBoundsException"
+    },
+    {
+      "clase": "java.security.cert.CertPathBuilder",
+      "tipo": "otra excepción",
+      "java": "java.security.cert.CertPathBuilder.getInstance(java.lang.String.copyValueOf(new char[0], 7, 1)).getRevocationChecker()",
+      "jdk": "EXC:java.lang.StringIndexOutOfBoundsException",
+      "kaji": "EXC:java.security.NoSuchAlgorithmException"
+    },
+    {
+      "clase": "java.lang.classfile.attribute.NestHostAttribute",
+      "tipo": "otro valor",
+      "java": "java.lang.classfile.attribute.NestHostAttribute.of(java.lang.constant.ClassDesc.of(\"\\n\", \"0\")).attributeMapper()",
+      "jdk": "AttributeMapper[name=NestHost, allowMultiple=false, stability=CP_REFS]",
+      "kaji": "AttributeMapper[NestHost]"
+    },
+    {
+      "clase": "java.lang.classfile.attribute.NestHostAttribute",
+      "tipo": "excepción contra valor",
+      "java": "java.lang.classfile.attribute.NestHostAttribute.of(java.lang.constant.ClassDesc.ofDescriptor(\"-1\")).attributeName().width()",
+      "jdk": "EXC:java.lang.IllegalArgumentException",
+      "kaji": "1"
+    },
+    {
+      "clase": "java.lang.classfile.attribute.NestHostAttribute",
+      "tipo": "otro valor",
+      "java": "java.lang.classfile.attribute.NestHostAttribute.of(java.lang.constant.ClassDesc.of(\"\\u00df\", \"A\")).nestHost()",
+      "jdk": "7 ß/A",
+      "kaji": "class ß/A"
+    },
+    {
+      "clase": "java.lang.classfile.attribute.NestHostAttribute",
+      "tipo": "otro valor",
+      "java": "java.lang.classfile.attribute.NestHostAttribute.of(java.lang.constant.ClassDesc.of(\"ABC abc\", \"-1\")).attributeMapper()",
+      "jdk": "AttributeMapper[name=NestHost, allowMultiple=false, stability=CP_REFS]",
+      "kaji": "AttributeMapper[NestHost]"
+    },
+    {
+      "clase": "java.lang.classfile.attribute.NestHostAttribute",
+      "tipo": "excepción contra valor",
+      "java": "java.lang.classfile.attribute.NestHostAttribute.of(java.lang.constant.ClassDesc.of(\" \", \"\")).nestHost().asInternalName()",
+      "jdk": "EXC:java.lang.IllegalArgumentException",
+      "kaji": "\" /\""
+    },
+    {
+      "clase": "java.lang.classfile.attribute.NestHostAttribute",
+      "tipo": "otro valor",
+      "java": "java.lang.classfile.attribute.NestHostAttribute.of(java.lang.constant.ClassDesc.ofInternalName(\"a\"))",
+      "jdk": "Attribute[name=NestHost]",
+      "kaji": "<objeto>"
+    },
+    {
+      "clase": "java.lang.classfile.attribute.NestHostAttribute",
+      "tipo": "otro valor",
+      "java": "java.lang.classfile.attribute.NestHostAttribute.of(java.lang.constant.ClassDesc.of(\"abc\", \"-1\"))",
+      "jdk": "Attribute[name=NestHost]",
+      "kaji": "<objeto>"
+    },
+    {
+      "clase": "java.lang.classfile.attribute.NestHostAttribute",
+      "tipo": "otro valor",
+      "java": "java.lang.classfile.attribute.NestHostAttribute.of(java.lang.constant.ClassDesc.of(\"\\u00df\"))",
+      "jdk": "Attribute[name=NestHost]",
+      "kaji": "<objeto>"
+    },
+    {
+      "clase": "java.lang.classfile.attribute.NestHostAttribute",
+      "tipo": "otra excepción",
+      "java": "java.lang.classfile.attribute.NestHostAttribute.of(java.lang.constant.ClassDesc.ofDescriptor(\"\\u00df\")).attributeMapper()",
+      "jdk": "EXC:java.lang.IllegalArgumentException",
+      "kaji": "EXC:java.lang.StringIndexOutOfBoundsException"
+    },
+    {
+      "clase": "java.lang.classfile.attribute.NestHostAttribute",
+      "tipo": "otro valor",
+      "java": "java.lang.classfile.attribute.NestHostAttribute.of(java.lang.constant.ClassDesc.ofInternalName(\"abc\"))",
+      "jdk": "Attribute[name=NestHost]",
+      "kaji": "<objeto>"
+    },
+    {
+      "clase": "java.lang.classfile.attribute.NestHostAttribute",
+      "tipo": "otro valor",
+      "java": "java.lang.classfile.attribute.NestHostAttribute.of(java.lang.constant.ClassDesc.ofInternalName(\"ABC abc\"))",
+      "jdk": "Attribute[name=NestHost]",
+      "kaji": "<objeto>"
+    },
+    {
+      "clase": "java.lang.classfile.attribute.NestHostAttribute",
+      "tipo": "otro valor",
+      "java": "java.lang.classfile.attribute.NestHostAttribute.of(java.lang.constant.ClassDesc.of(\"ABC abc\", \"ABC abc\")).attributeMapper()",
+      "jdk": "AttributeMapper[name=NestHost, allowMultiple=false, stability=CP_REFS]",
+      "kaji": "AttributeMapper[NestHost]"
+    },
+    {
+      "clase": "java.lang.classfile.attribute.NestHostAttribute",
+      "tipo": "excepción contra valor",
+      "java": "java.lang.classfile.attribute.NestHostAttribute.of(java.lang.constant.ClassDesc.ofDescriptor(\"abc\")).nestHost()",
+      "jdk": "EXC:java.lang.IllegalArgumentException",
+      "kaji": "class b"
+    },
+    {
+      "clase": "java.lang.classfile.attribute.NestHostAttribute",
+      "tipo": "otra excepción",
+      "java": "java.lang.classfile.attribute.NestHostAttribute.of(java.lang.constant.ClassDesc.ofDescriptor(\" \")).attributeMapper().name()",
+      "jdk": "EXC:java.lang.IllegalArgumentException",
+      "kaji": "EXC:java.lang.StringIndexOutOfBoundsException"
+    },
+    {
+      "clase": "java.lang.classfile.attribute.NestHostAttribute",
+      "tipo": "otra excepción",
+      "java": "java.lang.classfile.attribute.NestHostAttribute.of(java.lang.constant.ClassDesc.ofDescriptor(\"\\u03a3\")).attributeName().index()",
+      "jdk": "EXC:java.lang.IllegalArgumentException",
+      "kaji": "EXC:java.lang.StringIndexOutOfBoundsException"
+    },
+    {
+      "clase": "java.lang.classfile.attribute.NestHostAttribute",
+      "tipo": "excepción contra valor",
+      "java": "java.lang.classfile.attribute.NestHostAttribute.of(java.lang.constant.ClassDesc.of(\"\")).attributeName().chars()",
+      "jdk": "EXC:java.lang.IllegalArgumentException",
+      "kaji": "<objeto>"
+    },
+    {
+      "clase": "java.lang.classfile.attribute.NestHostAttribute",
+      "tipo": "otra excepción",
+      "java": "java.lang.classfile.attribute.NestHostAttribute.of(java.lang.constant.ClassDesc.ofDescriptor(\"\\n\")).attributeMapper()",
+      "jdk": "EXC:java.lang.IllegalArgumentException",
+      "kaji": "EXC:java.lang.StringIndexOutOfBoundsException"
+    },
+    {
+      "clase": "java.lang.classfile.attribute.NestHostAttribute",
+      "tipo": "otro valor",
+      "java": "java.lang.classfile.attribute.NestHostAttribute.of(java.lang.constant.ClassDesc.of(\"\\u00df\", \"\\u00df\")).nestHost()",
+      "jdk": "7 ß/ß",
+      "kaji": "class ß/ß"
+    },
+    {
+      "clase": "java.lang.classfile.attribute.NestHostAttribute",
+      "tipo": "otro valor",
+      "java": "java.lang.classfile.attribute.NestHostAttribute.of(java.lang.constant.ClassDesc.of(\"1234567890\", \"\\u03a3\"))",
+      "jdk": "Attribute[name=NestHost]",
+      "kaji": "<objeto>"
+    },
+    {
+      "clase": "java.lang.classfile.attribute.NestHostAttribute",
+      "tipo": "otro valor",
+      "java": "java.lang.classfile.attribute.NestHostAttribute.of(java.lang.constant.ClassDesc.of(\"-1\", \"abc\")).nestHost().constantValue()",
+      "jdk": "ClassOrInterfaceDesc[abc]",
+      "kaji": "ClassDesc[abc]"
+    },
+    {
+      "clase": "java.lang.classfile.attribute.NestHostAttribute",
+      "tipo": "excepción contra valor",
+      "java": "java.lang.classfile.attribute.NestHostAttribute.of(java.lang.constant.ClassDesc.ofDescriptor(\"1234567890\")).nestHost()",
+      "jdk": "EXC:java.lang.IllegalArgumentException",
+      "kaji": "class 23456789"
+    },
+    {
+      "clase": "java.lang.classfile.attribute.NestHostAttribute",
+      "tipo": "otra excepción",
+      "java": "java.lang.classfile.attribute.NestHostAttribute.of(java.lang.constant.ClassDesc.ofDescriptor(\"\\u00df\"))",
+      "jdk": "EXC:java.lang.IllegalArgumentException",
+      "kaji": "EXC:java.lang.StringIndexOutOfBoundsException"
+    },
+    {
+      "clase": "java.lang.classfile.attribute.NestHostAttribute",
+      "tipo": "otro valor",
+      "java": "java.lang.classfile.attribute.NestHostAttribute.of(java.lang.constant.ClassDesc.ofInternalName(\" \")).nestHost()",
+      "jdk": "7  ",
+      "kaji": "class  "
+    },
+    {
+      "clase": "java.lang.classfile.attribute.NestHostAttribute",
+      "tipo": "otro valor",
+      "java": "java.lang.classfile.attribute.NestHostAttribute.of(java.lang.constant.ClassDesc.of(\"hola mundo\"))",
+      "jdk": "Attribute[name=NestHost]",
+      "kaji": "<objeto>"
+    },
+    {
+      "clase": "java.lang.classfile.attribute.NestHostAttribute",
+      "tipo": "otro valor",
+      "java": "java.lang.classfile.attribute.NestHostAttribute.of(java.lang.constant.ClassDesc.of(\"0\", \"ABC abc\")).nestHost().index()",
+      "jdk": "-2",
+      "kaji": "82"
+    },
+    {
+      "clase": "java.lang.classfile.attribute.NestHostAttribute",
+      "tipo": "otro valor",
+      "java": "java.lang.classfile.attribute.NestHostAttribute.of(java.lang.constant.ClassDesc.of(\"1234567890\", \"\\n\")).nestHost()",
+      "jdk": "7 1234567890/",
+      "kaji": "class 1234567890/"
+    },
+    {
+      "clase": "java.lang.classfile.attribute.NestHostAttribute",
+      "tipo": "otro valor",
+      "java": "java.lang.classfile.attribute.NestHostAttribute.of(java.lang.constant.ClassDesc.of(\"hola mundo\", \"a\")).attributeMapper()",
+      "jdk": "AttributeMapper[name=NestHost, allowMultiple=false, stability=CP_REFS]",
+      "kaji": "AttributeMapper[NestHost]"
+    },
+    {
+      "clase": "java.lang.classfile.attribute.NestHostAttribute",
+      "tipo": "otra excepción",
+      "java": "java.lang.classfile.attribute.NestHostAttribute.of(java.lang.constant.ClassDesc.ofDescriptor(\"\\u00df\"))",
+      "jdk": "EXC:java.lang.IllegalArgumentException",
+      "kaji": "EXC:java.lang.StringIndexOutOfBoundsException"
+    },
+    {
+      "clase": "java.lang.classfile.attribute.NestHostAttribute",
+      "tipo": "otro valor",
+      "java": "java.lang.classfile.attribute.NestHostAttribute.of(java.lang.constant.ClassDesc.ofInternalName(\"\\n\")).nestHost().index()",
+      "jdk": "-2",
+      "kaji": "78"
+    },
+    {
+      "clase": "java.lang.classfile.attribute.NestHostAttribute",
+      "tipo": "otro valor",
+      "java": "java.lang.classfile.attribute.NestHostAttribute.of(java.lang.constant.ClassDesc.of(\"ABC abc\")).nestHost()",
+      "jdk": "7 ABC abc",
+      "kaji": "class ABC abc"
+    }
+  ],
+  "reducidas": []
+}

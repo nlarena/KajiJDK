@@ -27,6 +27,8 @@ variable `OPENJDK` para esa carpeta.
 | `kajilibrary/BigInteger.java` | Copia de `KajiLibrary/java/math/BigInteger.java` |
 | `fuzzer/bigfuzz.py` | La campaña de fuzzing sobre `BigInteger` |
 | `fuzzer/strfuzz.py` | La campaña de fuzzing sobre `String` |
+| `fuzzer/genfuzz.py` | La campaña **genérica**: se le nombran clases y descubre la superficie solo |
+| `fuzzer/genfuzz-config.json` | Las semillas, las exclusiones y las fábricas de la campaña genérica |
 | `datos/` | Los datos de cada campaña, en JSON, y su registro |
 | `presentar.py` | Genera los informes a partir de `datos/` |
 | `informe.html` | Los resultados de la prueba de `BigInteger` |
@@ -78,6 +80,55 @@ Para correr las campañas, también desde la raíz del repo:
 python test-fuzzing/fuzzer/bigfuzz.py --jdk "$OPENJDK" --seed 1 --lotes 6 --por-lote 120 --reducir 8
 python test-fuzzing/fuzzer/strfuzz.py --jdk "$OPENJDK" --seed 1 --lotes 6 --por-lote 120 --reducir 8
 ```
+
+## La campaña genérica
+
+`bigfuzz.py` y `strfuzz.py` llevan escrita a mano la lista de métodos de su clase: un método nuevo
+en la biblioteca no entra nunca a una campaña. `genfuzz.py` **descubre la superficie** en vez de
+tenerla clavada, y se le nombran las clases:
+
+```bash
+python test-fuzzing/fuzzer/genfuzz.py --clases java.lang.String java.math.BigInteger \
+    --jdk "$OPENJDK" --seed 1 --lotes 6 --por-lote 400 --largo 2 --reducir 8
+python test-fuzzing/fuzzer/genfuzz.py --clases java.util.ArrayList --jdk "$OPENJDK" --solo-cobertura
+```
+
+Lee `javap -v` de los dos lados y se queda con la **intersección** de los miembros públicos con el
+mismo descriptor; lo que está de un solo lado sale en el informe de cobertura, no en las
+divergencias. **El lado de KajiLibrary se lee por ruta de archivo**: `javap -cp KajiLibrary
+java.lang.String` devuelve la clase de la *plataforma*, porque los paquetes `java.*` se resuelven
+desde los módulos del sistema antes que desde el classpath, y con eso la herramienta compara el
+JDK contra sí mismo y no lo dice.
+
+Un caso es una **secuencia** de declaraciones y no un árbol de expresiones, para que entren las
+clases con estado. Al final se imprimen todas las variables observables, no sólo la última.
+
+`--solo-cobertura` informa, sin correr nada, cuántas operaciones quedaron invocables y por qué se
+descartaron las otras. Eso es lo que hay que mirar antes de creerle a una campaña: una clase cuyos
+argumentos no se pueden fabricar aparece con cobertura baja en vez de aparecer sin errores.
+
+`--boot <dir>` apunta nuestra VM a otra biblioteca. Corriendo **la misma semilla** contra dos
+bibliotecas se sabe qué divergencias arregló un cambio, que es la única forma honesta de decir que
+un arreglo sirvió.
+
+### Lo que la firma no dice
+
+Descubrir que existe `shiftRight(int)` no dice que los valores interesantes son 1, 31, 63 y 64
+sobre un **negativo**. Un generador genérico reparte la probabilidad entre todas las operaciones y
+todo Unicode; uno específico la concentra en un vocabulario chico. Recuperar esa concentración sin
+volver a clavar nombres de métodos es la parte cara, y es lo que hacen tres mecanismos:
+
+* **semillas con significado** (`cadenas_utiles`), porque con texto Unicode al azar
+  `new BigInteger(String)` tira `NumberFormatException` casi siempre y la clase queda sin fuzzear;
+* **palabras de un solo alfabeto** (`rangos_palabra`), porque las reglas de mayúsculas que dependen
+  del contexto sólo se activan con letras alrededor;
+* **cobertura cruzada**: la operación gira rápido y el carácter focal gira lento, así cada método
+  se ve con cada borde. Sin esto la sigma final del griego no aparece: necesita que a
+  `toLowerCase` le toque justo una palabra griega terminada en Σ, y el producto de las dos
+  probabilidades no sale nunca por azar.
+
+Con las tres, una campaña contra una copia de la biblioteca anterior a los arreglos redescubre las
+cinco causas que están en `datos/diagnostico*.json`. Sin la tercera, redescubre cuatro.
 
 Los datos quedan en `test-fuzzing/datos/`, y se guardan después de cada lote y de cada reducción, así
 que una campaña cortada no pierde lo ya medido. Los programas generados quedan en

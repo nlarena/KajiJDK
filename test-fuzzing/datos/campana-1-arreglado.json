@@ -1,0 +1,97 @@
+{
+  "estado": "terminada",
+  "meta": {
+    "fecha": "2026-10-02T21:28:29",
+    "referencia": "Oracle Corporation 25.0.1",
+    "referencia_ruta": "C:\\Program Files\\Java\\jdk-25",
+    "bajo_prueba": "KajiJDK (run-headless) con KajiLibrary",
+    "binario_kaji_fecha": "2026-09-21T14:31:21",
+    "semilla": 1,
+    "lotes": 6,
+    "por_lote": 120
+  },
+  "stats": {
+    "expresiones": 720,
+    "coinciden": 720,
+    "divergen": 0,
+    "por_tipo": {},
+    "por_vista": {},
+    "ops_total": {
+      "pow": 76,
+      "divide": 54,
+      "min": 69,
+      "mod": 71,
+      "modPow": 119,
+      "multiply": 56,
+      "modInverse": 55,
+      "not": 82,
+      "and": 65,
+      "shiftRight": 84,
+      "subtract": 58,
+      "gcd": 69,
+      "max": 60,
+      "add": 59,
+      "negate": 92,
+      "or": 49,
+      "shiftLeft": 95,
+      "flipBit": 97,
+      "xor": 71,
+      "clearBit": 83,
+      "sqrt": 91,
+      "remainder": 43,
+      "andNot": 49,
+      "setBit": 80,
+      "abs": 89
+    },
+    "ops_divergentes": {},
+    "segundos_jdk": 0.6,
+    "segundos_kaji": 394.9,
+    "segundos_total": 405.2
+  },
+  "lotes": [
+    {
+      "lote": 0,
+      "salida_kaji": 0,
+      "stderr_kaji": "",
+      "segundos_jdk": 0.12,
+      "segundos_kaji": 82.03
+    },
+    {
+      "lote": 1,
+      "salida_kaji": 0,
+      "stderr_kaji": "",
+      "segundos_jdk": 0.1,
+      "segundos_kaji": 142.39
+    },
+    {
+      "lote": 2,
+      "salida_kaji": 0,
+      "stderr_kaji": "",
+      "segundos_jdk": 0.13,
+      "segundos_kaji": 11.99
+    },
+    {
+      "lote": 3,
+      "salida_kaji": 0,
+      "stderr_kaji": "",
+      "segundos_jdk": 0.09,
+      "segundos_kaji": 9.48
+    },
+    {
+      "lote": 4,
+      "salida_kaji": 0,
+      "stderr_kaji": "",
+      "segundos_jdk": 0.09,
+      "segundos_kaji": 6.07
+    },
+    {
+      "lote": 5,
+      "salida_kaji": 0,
+      "stderr_kaji": "",
+      "segundos_jdk": 0.1,
+      "segundos_kaji": 142.96
+    }
+  ],
+  "divergencias": [],
+  "reducidas": []
+}

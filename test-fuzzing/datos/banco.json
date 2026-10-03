@@ -1,0 +1,82 @@
+{
+  "meta": {
+    "clases": [
+      "java.lang.String",
+      "java.math.BigInteger"
+    ],
+    "semillas": 12,
+    "desde": 1000,
+    "variante": [],
+    "firma": "java.lang.String,java.math.BigInteger|2|400|2|50ce81c6|",
+    "casos_por_semilla": 800,
+    "largo": 2,
+    "vieja": "C:\\Users\\nicol\\Sources\\Larena\\KajiJVM\\KajiJDK\\repo\\test-fuzzing\\banco-vieja",
+    "vieja_ref": "50ce81c6",
+    "segundos": 412.5
+  },
+  "por_causa": {
+    "shiftRight": {
+      "semillas_con_deteccion": 1,
+      "semillas": 2,
+      "casos_hasta_detectar": [
+        390
+      ],
+      "mediana": 390,
+      "peor": 390
+    },
+    "testBit": {
+      "semillas_con_deteccion": 0,
+      "semillas": 2,
+      "casos_hasta_detectar": [],
+      "mediana": null,
+      "peor": null
+    },
+    "plegado": {
+      "semillas_con_deteccion": 1,
+      "semillas": 2,
+      "casos_hasta_detectar": [
+        412
+      ],
+      "mediana": 412,
+      "peor": 412
+    },
+    "indexOf-vacia": {
+      "semillas_con_deteccion": 0,
+      "semillas": 2,
+      "casos_hasta_detectar": [],
+      "mediana": null,
+      "peor": null
+    },
+    "sigma-final": {
+      "semillas_con_deteccion": 0,
+      "semillas": 2,
+      "casos_hasta_detectar": [],
+      "mediana": null,
+      "peor": null
+    }
+  },
+  "por_semilla": [
+    {
+      "semilla": 1000,
+      "casos": 799,
+      "divergen_vieja": 147,
+      "divergen_nueva": 146,
+      "repetidos": 0,
+      "primera_deteccion": {
+        "plegado": 412
+      },
+      "desaparecen_sin_causa": 0
+    },
+    {
+      "semilla": 1001,
+      "casos": 800,
+      "divergen_vieja": 125,
+      "divergen_nueva": 124,
+      "repetidos": 0,
+      "primera_deteccion": {
+        "shiftRight": 390
+      },
+      "desaparecen_sin_causa": 0
+    }
+  ]
+}
