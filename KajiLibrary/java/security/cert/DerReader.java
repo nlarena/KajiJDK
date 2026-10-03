@@ -94,20 +94,20 @@ final class DerReader {
         int n = b0 & 0x7f;
         // More than four bytes of length does not fit in an int, and nothing read here comes close.
         if (n > 4) {
-            throw new IOException("DER: largo demasiado grande");
+            throw new IOException("DER: length too large");
         }
         int v = 0;
         int i = 0;
         while (i < n) {
             if (this.pos >= this.end) {
-                throw new IOException("DER truncado: largo incompleto");
+                throw new IOException("DER truncated: incomplete length");
             }
             v = (v << 8) | (this.buf[this.pos] & 0xff);
             this.pos = this.pos + 1;
             i = i + 1;
         }
         if (v < 0) {
-            throw new IOException("DER: largo demasiado grande");
+            throw new IOException("DER: length too large");
         }
         return v;
     }
@@ -116,7 +116,7 @@ final class DerReader {
     int skip(int len) throws IOException {
         int from = this.pos;
         if (len < 0 || this.pos + len > this.end) {
-            throw new IOException("DER truncado: contenido incompleto");
+            throw new IOException("DER truncated: incomplete content");
         }
         this.pos = this.pos + len;
         return from;
@@ -152,7 +152,7 @@ final class DerReader {
     // 40 without looking at the range.
     String readOid(int from, int len) throws IOException {
         if (len <= 0) {
-            throw new IOException("DER: OID vacio");
+            throw new IOException("DER: empty OID");
         }
         int i = from;
         int to = from + len;
@@ -168,7 +168,7 @@ final class DerReader {
             }
             while (true) {
                 if (i >= to) {
-                    throw new IOException("DER: OID truncado");
+                    throw new IOException("DER: truncated OID");
                 }
                 int x = this.buf[i] & 0xff;
                 i = i + 1;
@@ -217,7 +217,7 @@ final class DerReader {
     // It reads a signed INTEGER, in two's complement and big-endian, as DER encodes it.
     java.math.BigInteger readInteger(int from, int len) throws IOException {
         if (len <= 0) {
-            throw new IOException("DER: INTEGER vacio");
+            throw new IOException("DER: empty INTEGER");
         }
         return new java.math.BigInteger(copy(from, len));
     }
@@ -234,7 +234,7 @@ final class DerReader {
     // apart. Everything in integers, without going through any date class.
     static long generalizedTime(byte[] buf, int from, int len) throws IOException {
         if (len < 15) {
-            throw new IOException("DER: GeneralizedTime demasiado corto");
+            throw new IOException("DER: GeneralizedTime too short");
         }
         String s = new String(buf, from, len, java.nio.charset.StandardCharsets.US_ASCII);
         if (s.charAt(s.length() - 1) != 'Z') {
@@ -327,7 +327,7 @@ final class DerReader {
             }
             if (cut == i) {
                 throw new IOException(
-                    "ObjectIdentifier() -- Invalid format: componente vacio en \"" + oid + "\"");
+                    "ObjectIdentifier() -- Invalid format: empty component in \"" + oid + "\"");
             }
             long v = 0;
             int j = i;
@@ -341,7 +341,7 @@ final class DerReader {
                 // It cuts before overflowing; no real OID comes close to this order.
                 if (v > 0x7fffffffL) {
                     throw new IOException(
-                        "ObjectIdentifier() -- componente demasiado grande en \"" + oid + "\"");
+                        "ObjectIdentifier() -- component too large in \"" + oid + "\"");
                 }
                 j = j + 1;
             }

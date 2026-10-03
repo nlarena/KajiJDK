@@ -237,7 +237,7 @@ public final class PKCS12Attribute implements KeyStore.Entry.Attribute {
 
     private static long arc(String s) {
         if (s.isEmpty()) {
-            throw new IllegalArgumentException("arco vacio");
+            throw new IllegalArgumentException("empty arc");
         }
         long v = 0;
         for (int i = 0; i < s.length(); i++) {
@@ -249,7 +249,7 @@ public final class PKCS12Attribute implements KeyStore.Entry.Attribute {
             // The ceiling is artificial but honest: with a `long` no more can be represented, and a
             // silent overflow would give an OID different from the one asked for.
             if (v > (1L << 56)) {
-                throw new IllegalArgumentException("arco demasiado grande: " + s);
+                throw new IllegalArgumentException("arc too large: " + s);
             }
         }
         return v;
@@ -312,7 +312,7 @@ public final class PKCS12Attribute implements KeyStore.Entry.Attribute {
                 return derToOid(data);
             case TAG_INTEGER:
                 if (data.length == 0) {
-                    throw new IllegalArgumentException("INTEGER vacio");
+                    throw new IllegalArgumentException("empty INTEGER");
                 }
                 return new BigInteger(data).toString();
             case TAG_BOOLEAN:
@@ -359,7 +359,7 @@ public final class PKCS12Attribute implements KeyStore.Entry.Attribute {
 
     private static String derToOid(byte[] c) {
         if (c.length == 0) {
-            throw new IllegalArgumentException("OID vacio");
+            throw new IllegalArgumentException("empty OID");
         }
         StringBuilder s = new StringBuilder();
         int i = 0;
@@ -383,7 +383,7 @@ public final class PKCS12Attribute implements KeyStore.Entry.Attribute {
         long v = 0;
         while (true) {
             if (i >= c.length) {
-                throw new IllegalArgumentException("OID truncado");
+                throw new IllegalArgumentException("truncated OID");
             }
             int b = c[i] & 0xff;
             v = (v << 7) | (b & 0x7f);
@@ -401,7 +401,7 @@ public final class PKCS12Attribute implements KeyStore.Entry.Attribute {
         while ((c[i] & 0x80) != 0) {
             i++;
             if (i >= c.length) {
-                throw new IllegalArgumentException("OID truncado");
+                throw new IllegalArgumentException("truncated OID");
             }
         }
         return i + 1;
@@ -515,7 +515,7 @@ public final class PKCS12Attribute implements KeyStore.Entry.Attribute {
             i++;
             int len = len();
             if (len > end - i) {
-                throw new IllegalArgumentException("largo " + len + " beyond the end");
+                throw new IllegalArgumentException("length " + len + " beyond the end");
             }
             Lec inside = new Lec(a, i, i + len);
             i += len;
@@ -527,14 +527,14 @@ public final class PKCS12Attribute implements KeyStore.Entry.Attribute {
             i++;
             int len = len();
             if (len > end - i) {
-                throw new IllegalArgumentException("largo " + len + " beyond the end");
+                throw new IllegalArgumentException("length " + len + " beyond the end");
             }
             i += len;
         }
 
         private int len() {
             if (i >= end) {
-                throw new IllegalArgumentException("largo truncado");
+                throw new IllegalArgumentException("truncated length");
             }
             int b = a[i++] & 0xff;
             if (b < 128) {
@@ -544,17 +544,17 @@ public final class PKCS12Attribute implements KeyStore.Entry.Attribute {
             // The indefinite form (0x80) does not exist in DER, and more than four octets does not
             // fit in an int: both are invalid inputs, not cases we know how to handle.
             if (octets == 0 || octets > 4) {
-                throw new IllegalArgumentException("largo mal formado");
+                throw new IllegalArgumentException("malformed length");
             }
             int v = 0;
             for (int k = 0; k < octets; k++) {
                 if (i >= end) {
-                    throw new IllegalArgumentException("largo truncado");
+                    throw new IllegalArgumentException("truncated length");
                 }
                 v = (v << 8) | (a[i++] & 0xff);
             }
             if (v < 0) {
-                throw new IllegalArgumentException("largo negativo");
+                throw new IllegalArgumentException("negative length");
             }
             return v;
         }
