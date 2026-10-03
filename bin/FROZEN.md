@@ -181,13 +181,13 @@ Los `.rs` con los arreglos del compilador siguen siendo los mismos de la tanda a
 
 | | |
 |---|---|
-| Commit | `099b348` |
-| Construido desde | el working tree, **verificado limpio para las fuentes Rust** (`git status --porcelain \| grep '\.rs$'` = 0 modificados y 0 sin seguir), así que es idéntico a `git archive HEAD`. Lo único sin commitear eran `.java`/`.class` de biblioteca (`java.util.function`), que no entran al binario |
-| Toolchain | `rustc 1.96.0 (ac68faa20 2026-05-25)`, host `x86_64-pc-windows-msvc` |
-| Perfil | `cargo build --release` |
-| Fecha | 2026-08-30 (regeneración: `bin/` había quedado con sólo este `.md`) |
+| Commit | `85263fc5`, **con una superposición** — ver la fila siguiente |
+| Construido desde | `git archive HEAD` a una copia limpia, con los **25 archivos de `src/` modificados** en el árbol de trabajo superpuestos encima (16 de `javac`, 4 de `burst`, 9 del intérprete). No hay archivos de `src/` sin seguir. Lo demás de la copia es exactamente `85263fc5`, así que **no es reproducible desde el historial solo**: hace falta el árbol |
+| Toolchain | `rustc 1.97.1 (8bab26f4f 2026-07-14)`, host `x86_64-pc-windows-msvc` |
+| Perfil | `cargo build --release` (50 s) |
+| Fecha | 2026-10-03 |
 | Herramientas | **11** |
-| Peso | 14 MB — toolchain `msvc` (el refresco anterior era `gnu`/61 MB); ver la nota de arriba sobre por qué el peso no es el argumento |
+| Peso | 16 MB — toolchain `msvc` |
 
 > **Regeneración 2026-08-30.** `bin/` se encontró vacío (sólo este `FROZEN.md`). Se reconstruyeron
 > las **11** herramientas con `cargo build --release` sobre el working tree —verificado limpio para
@@ -293,17 +293,17 @@ las diez herramientas.
 
 | Binario | SHA-256 | Qué es |
 |---|---|---|
-| `javac.exe` | `2a1f…cb62` | El compilador. `--emit X.java` → `X.class` |
-| `jvm.exe` | `656b…ea93` | El desensamblador estilo `javap` (Nivel 0) y CLI principal |
-| `run-headless.exe` | `ef5c…0543` | Corre `<File.class> <método>` con el intérprete (modo green) |
-| `jvm-step.exe` | `64ea…61a2` | El visor paso a paso del intérprete |
-| `javac-step.exe` | `61f2…b996` | El visor paso a paso del compilador |
-| `jdb.exe` | `f03d…945b` | El depurador (Fase I, JPDA) |
-| `jvm-jdwp.exe` | `4c0b…fa3b` | Servidor JDWP (`dt_socket`) sobre nuestra VM |
-| `jdi-attach.exe` | `6a09…9fee` | Cliente JDI de attach |
-| `jimage.exe` | `e488…6ed0` | Lector/escritor del contenedor `jimage` |
-| `jlink.exe` | `deb1…a4c6` | Enlazador de imágenes de runtime |
-| `javadoc.exe` | `6d46…7c02` | El generador de documentación |
+| `javac.exe` | `95df…f136` | El compilador. `--emit X.java` → `X.class` |
+| `jvm.exe` | `1f04…9806` | El desensamblador estilo `javap` (Nivel 0) y CLI principal |
+| `run-headless.exe` | `06af…f2d3` | Corre `<File.class> <método>` con el intérprete (modo green) |
+| `jvm-step.exe` | `3fe9…6c89` | El visor paso a paso del intérprete |
+| `javac-step.exe` | `cfd1…9e6b` | El visor paso a paso del compilador |
+| `jdb.exe` | `aa39…92a1` | El depurador (Fase I, JPDA) |
+| `jvm-jdwp.exe` | `9ee8…e577` | Servidor JDWP (`dt_socket`) sobre nuestra VM |
+| `jdi-attach.exe` | `b9c9…f2c7` | Cliente JDI de attach |
+| `jimage.exe` | `e479…ee2d` | Lector/escritor del contenedor `jimage` |
+| `jlink.exe` | `f405…2bdc` | Enlazador de imágenes de runtime |
+| `javadoc.exe` | `37c7…50e6` | El generador de documentación |
 
 Hashes completos: `sha256sum bin/*.exe` (o `Get-FileHash`).
 
@@ -445,6 +445,17 @@ cp /tmp/kaji-frozen-target/release/*.exe bin/
 
 Y actualizar la tabla de procedencia de arriba. Si el árbol de trabajo tiene cambios que el
 snapshot necesita, commitealos primero — no construyas desde el working tree.
+
+Dos trampas, las dos pisadas de verdad:
+
+- **Mover los hashes actuales a la entrada del refresco ANTES de escribir los nuevos.** La tabla de
+  «Las herramientas» es siempre la del snapshot vigente, y las de las entradas de refresco son el
+  registro de los superados. Un `sed`/`re.sub` por el patrón del hash abreviado toca **las dos** y
+  reescribe la historia: pasó el 2026-10-03, y se recuperó sólo porque los `.exe` viejos estaban
+  respaldados fuera del repo.
+- **Revisar que no haya `javac.exe` corriendo.** Otra sesión puede estar compilando la biblioteca en
+  lote; pisar el compilador a mitad de camino parte la salida entre dos compiladores, que es
+  exactamente lo que el snapshot existe para evitar. `Get-Process javac` antes de copiar.
 
 ## Verificado al congelar
 
@@ -696,3 +707,138 @@ que no existia. Hay que copiar tambien la `KajiLibrary` del arbol a la superposi
 
 `cargo test`: 1461 ok / 21 fallan, la lista identica a la de la tanda anterior. Prueba de
 comportamiento: `java/ClinitTest.java`, que da -1 contra el JDK 25 y contra `run-headless`.
+
+### Refresco 2026-09-21, la traduccion al ingles y el trabajo de javac en vuelo
+
+**Esta entrada no nombra un commit, y hay que decirlo de entrada.** Los refrescos anteriores se
+hicieron desde una copia limpia (`git archive HEAD`) justamente para poder prometer "esto es
+exactamente el commit tal". Este no: se construyo **desde el working tree**, por pedido explicito,
+con 4775 lineas sin commitear en 23 archivos de `src/` -- `javac/desugar.rs` (+1523),
+`attribute.rs` (+617), `enter.rs` (+525), `symbol.rs` (+323), `check.rs` (+303), el JIT de `burst/`
+y cuatro del interprete. El commit de base es `50ce81c6` ("Traduccion KajiLibrary"), pero los
+binarios llevan mas que eso. No es reproducible desde el historial.
+
+**Por que se congelo igual.** Se midio el arbol contra una copia limpia de HEAD, y el trabajo en
+vuelo es netamente mejor:
+
+| | pasan | fallan |
+|---|---:|---:|
+| HEAD limpio (`50ce81c6`) | 1500 | 38 |
+| Working tree (lo congelado) | 1526 | 22 |
+
+Arregla **17** pruebas de `javac` -- `attribute` (5), `enter` (3), `desugar` (3), `codegen` (3),
+`check` (2), `types` (1) -- y rompe **una**:
+
+- `javac::check::tests::an_external_class_ancestor_still_exempts`: una clase que hereda de un
+  ancestro del classpath dejo de estar exenta de implementar sus abstractos. Sale
+  `` `B` no es abstracta y no implementa `extra` de `Base` `` donde no deberia salir nada. **Queda
+  adentro de este snapshot.** Lo que acota el riesgo: los 4820 archivos de `KajiLibrary` compilan
+  igual con este javac, o sea que la forma que rompe no aparece en codigo real -- la construye la
+  prueba a mano.
+
+Las otras 21 que fallan **fallan igual en HEAD limpio**: los 14 de `gc::tests` (CompletableFuture,
+executors, method handles, delay queue), 2 de `class_file`, 2 de `burst::jit_tests`, y uno cada uno
+de `parser::reader`, `verifier` y `metaspace`. Son preexistentes.
+
+**Dos sitios de prueba habia que arreglar para que `cargo test` siquiera compilara**, porque habian
+quedado desfasados de la produccion: `NestedCall` sin el campo `args` (#558) y
+`generate_lambda_class` sin el parametro `impl_kind` (#552). Los valores salen del texto de las
+propias pruebas: la anidada del primero es `empty()`, sin argumentos; el segundo dice "forwarding to
+a **static**", y la doc de la firma dice que `6` es `invokestatic`.
+
+**Bateria de comportamiento** (`tools/suite.py`): **221 invocaciones, 2 rotas**. La referencia
+anterior eran 132 con 2 rotas, y `UtilAuditTest` --una de aquellas dos-- se arreglo: ahora corre y da
+-1. Las dos de hoy:
+
+- `ParseTest` TIMEOUT, que es la conocida y anotada (el `Double.toString` cuadratico);
+- `MhLayoutTest` `panic: field_offset: field not found in the class or its superclasses`, que **no
+  es regresion**: falla identico con los binarios de Sep 4. Es la misma familia que los cuatro
+  `method_handle_*` de `cargo test`.
+
+**Lo que este refresco NO hizo, y hace falta:** regenerar los `.class` de `KajiLibrary`. Sobre una
+muestra de 12 archivos, **3 salieron distintos** con este javac (`HashMap`, `IntStreamImpl`,
+`JComponent`), asi que los 4820 `.class` versionados ya no son lo que este compilador emite. Hasta
+que se regeneren, un `.class` distinto puede significar "cambio la fuente" **o** "cambio el
+compilador", que es justo lo que el snapshot existe para evitar.
+
+| Binario | SHA-256 | |
+|---|---|---|
+| `javac.exe` | `7e57…7e3b` | 4382720 bytes |
+| `jvm.exe` | `a682…8394` | 462336 bytes |
+| `run-headless.exe` | `19d4…75e0` | 1712640 bytes |
+| `javac-step.exe` | `6b63…e879` | |
+| `jvm-step.exe` | `ac8f…6f92` | |
+| `javadoc.exe` | `0697…d229` | |
+| `jdb.exe` | `9a81…174c` | |
+| `jvm-jdwp.exe` | `166d…f7f7` | |
+| `jdi-attach.exe` | `34da…6fbf` | |
+| `jimage.exe` | `de5e…907c` | |
+| `jlink.exe` | `9e13…9120` | |
+
+Los once anteriores (Sep 4) quedaron respaldados fuera del repo antes de pisarlos, porque `bin/*`
+esta en `.gitignore` y no se recuperan desde git.
+
+### Refresh 2026-10-03 — all eleven tools rebuilt on request
+
+**Base.** `git archive HEAD` (`85263fc5`, "Traduccion: IoTest y dos de java.security") into a clean
+copy, with the **25 modified `src/` files** from the working tree overlaid: 16 under `javac/`, 4 under
+`burst/`, and 9 in the interpreter. No untracked `src/` files, so nothing was left out by judgement.
+`rustc 1.97.1`, `--release`, 50 s. As in the previous refresh, the provenance is **not a commit
+alone** — reproducing these binaries needs the tree.
+
+**What this refresh does NOT invalidate, and it is the headline.** The previous entry had to warn
+that the versioned `.class` files were no longer what the compiler emits. This one does not: the old
+and the new `javac` were run over a 12-file sample of `KajiLibrary` (`String`, `HashMap`,
+`BigInteger`, `TreeMap`, `Duration`, `ArrayList`, `StringBuilder`, `Collectors`, `JComponent`,
+`DecimalFormat`, `Deflater`, `SequenceInputStream`) and the **106 resulting `.class` files are
+byte-identical**. The in-flight javac work changes what *resolves and type-checks*, not what gets
+emitted — consistent with `desugar`/`attribute`/`enter`/`symbol` carrying most of the diff. It is a
+sample and not a proof, so a wholesale divergence elsewhere is not excluded; it does mean the usual
+obligation to recompile the tree does not apply here.
+
+**The debt from the previous refresh is still open, though, and it is measured.** Of those same 106
+`.class` files, **14 differ from the versioned ones in the tree**. That staleness is inherited from
+the 2026-09-21 refresh and not created by this one — and it is being paid off right now: another
+session recompiled the 4822 sources with the frozen compiler while this freeze was happening.
+
+**The suite at the moment of freezing.** `cargo test javac:: --lib`: **792 pass, 1 fails, 1 ignored**
+(348 s). The single failure is `javac::check::tests::an_external_class_ancestor_still_exempts`, and
+**the test is what is wrong**, not the compiler: for
+`abstract class Base extends Thread { abstract void extra(); } class B extends Base { }` ours reports
+``B` no es abstracta y no implementa `extra` de `Base`` and the real `javac` reports *"B is not
+abstract and does not override abstract method extra() in Base"*. The test was written when the
+abstract-completeness check exempted any hierarchy touching a classpath type; the overlaid work made
+it precise and the `ok(...)` became the lie. It was already failing in the previous snapshot, where
+it is described as a regression — that description is retracted here.
+
+**A defect that goes INTO this snapshot, known and reproduced.** The emitted `StackMapTable` is
+rejected by a real JVM when a local slot is reused across `catch` scopes. Twenty lines are enough:
+
+```java
+try { ... throw new IllegalStateException(); } catch (IllegalStateException a) { i++; }
+try { StringBuilder b = new StringBuilder(); ... } catch (NumberFormatException c) { i++; }
+```
+
+`a`, `b` and `c` share slot 2. The frame of the second handler comes out
+`[B, int, IllegalStateException]` where the real compiler emits `[B, int]`: it carries the type of a
+**dead** local. `java` refuses the class with `VerifyError: Stack map does not match the one at
+exception handler`. `close_scope` restores `next_free` but never clears `locals_t`, and the handler
+frame is captured from `entry_locals` on entering the `try`, before the new declaration overwrites
+the slot. It is what makes `KajiLibrary/java/IoTest.class` unloadable on the real JDK. **Our own
+verifier accepts it** — the probe runs on `run-headless` and answers correctly — so
+`cross_check_stackmap` does not police handler frames. Neither does `tools/emitdiff`, which
+disassembles with `javap -p -c` and therefore never sees a stack map at all.
+
+**A lock worth writing down.** `bin/javac.exe` could not be replaced on the first attempt: **another
+session was in the middle of recompiling all of KajiLibrary with it**, one process per file, at
+~4200/4822. The other ten tools were already swapped; the copy waited 105 s for that batch to finish
+(`rc=0`) and only then replaced the compiler. Had it been swapped mid-run, half of that output would
+have come from each compiler — exactly what this snapshot exists to prevent. Before any refresh,
+check for live `javac.exe` processes.
+
+**Smoke test** (the one this file prescribes): `javac --emit -cp KajiLibrary` on `finding_09.java`
+emits `MyList.class`; `jvm java/Add.class` disassembles; `run-headless java/Add.class main` answers
+6; the other nine start and print their usage. 16 MB in total, `msvc`.
+
+The previous eleven were backed up outside the repo before being overwritten, since `bin/*` is in
+`.gitignore` and does not come back from git.

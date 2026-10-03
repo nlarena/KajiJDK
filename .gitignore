@@ -5,6 +5,10 @@
 /corpus/
 /.corpus_tmp/
 
+# El fuente reescrito que `tools/difnum.py` le da de comer al JDK 25 (el mismo de `java/texto/`
+# con los nombres binarios deshechos y un `main` agregado). Derivado y se regenera en cada corrida.
+/.texto_tmp/
+
 # float/double differential battery (generated from real Java)
 /.float_battery.txt
 /.jdk25_tmp/
@@ -53,3 +57,30 @@
 # partir de la medicion, cambia entero en cada tanda y no se puede diffear -- el mismo argumento por
 # el que `bin/*.exe` tampoco se commitea. Lo que hace falta guardar es el generador, que si esta.
 /docs/completitud.html
+
+# Papers bajados para leer. Son material de terceros --cada uno con su licencia y su copyright--
+# que no es fuente de este proyecto y no tiene por que viajar en su historia: se bajan de nuevo
+# cuando hagan falta. Lo que si vale la pena versionar, si alguna vez se escribe, es la nota de
+# que se saco de cada uno -- y eso vive en `papers/upgrades/`, que por eso se exceptua.
+/papers/*
+!/papers/upgrades/
+
+# La biblioteca de referencia del banco de `test-fuzzing/fuzzer/banco.py`: una copia de
+# KajiLibrary con unas pocas clases vueltas a un commit anterior, para medir si el fuzzer
+# encuentra errores que ya sabemos que estan ahi. Son 76 MB derivados: `banco.py` la reconstruye
+# sola desde git cuando falta.
+/test-fuzzing/banco-vieja/
+/test-fuzzing/banco-corridas/
+
+# El mapa de la superficie comparable de KajiLibrary, que produce
+# `test-fuzzing/fuzzer/surface.py` leyendo con javap los dos lados. Es derivado y grande: se
+# regenera en un par de minutos y cambia entero cada vez que se recompila la biblioteca.
+/test-fuzzing/fuzzer/surface.json
+
+# Cache de bytecode de Python. Derivado, y cambia con la version del interprete.
+__pycache__/
+
+# El cursor de reanudacion de una corrida del fuzzer (`{"at": N, "total": M}`): estado de una
+# corrida en curso, no del proyecto. Se reescribe cada pocos segundos.
+/test-fuzzing/fuzzer/cursor*.json
+
