@@ -617,12 +617,20 @@ impl Analyzer {
             // Un `instanceof` con **pattern** (`o instanceof String s`) liga su variable **cuando es
             // verdadero** (§16.1.7): en la rama true, `s` queda *definitely assigned*; en la false no.
             // Sin esto, usar `s` en el `then`/`&&` daba "puede no haber sido inicializada".
-            ExprKind::InstanceOf { expr, slot, .. } => {
+            ExprKind::InstanceOf { expr, slot, deconstruct, .. } => {
                 let f = self.expr_after(flow, expr);
                 let mut t = f.clone();
                 if let Some(s) = slot {
                     t.da.insert(*s);
                     t.du.remove(s);
+                }
+                // Las variables de una **deconstrucción** quedan asignadas en la rama verdadera, por
+                // la misma razón que la de la forma simple: las liga el propio match.
+                for pat in deconstruct.iter().flatten() {
+                    for s in pattern_slots(pat) {
+                        t.da.insert(s);
+                        t.du.remove(&s);
+                    }
                 }
                 Cond { t, f }
             }

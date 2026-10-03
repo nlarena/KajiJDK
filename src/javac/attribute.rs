@@ -1640,7 +1640,7 @@ fn attrib_expr_to(env: &mut Env, expr: &mut Expr, target: Option<&RType>) -> RTy
             attrib_expr(env, expr);
             (resolve_rtype(env.table, env.class_scope, ty), None)
         }
-        ExprKind::InstanceOf { expr, ty, binding, slot } => {
+        ExprKind::InstanceOf { expr, ty, binding, slot, deconstruct } => {
             attrib_expr(env, expr);
             // `e instanceof T v` declara `v` (§14.30.2). El alcance real es "donde la condición es
             // verdadera"; acá se declara en el ámbito en curso — más amplio, pero suficiente.
@@ -1648,6 +1648,13 @@ fn attrib_expr_to(env: &mut Env, expr: &mut Expr, target: Option<&RType>) -> RTy
                 let rt = resolve_rtype(env.table, env.class_scope, ty);
                 let n = n.clone();
                 *slot = Some(env.define(&n, rt));
+            }
+            // La deconstrucción declara **las variables de sus componentes**, por el mismo
+            // `bind_pattern` que usa el `switch`, y en el mismo ámbito en curso que la forma simple.
+            if let Some(comps) = deconstruct {
+                for c in comps.iter_mut() {
+                    bind_pattern(env, c);
+                }
             }
             (RType::Prim(PrimType::Boolean), None)
         }

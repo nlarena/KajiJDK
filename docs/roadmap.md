@@ -383,11 +383,83 @@ el nuestro + nuestra VM, y **el nuestro + JVM real** —el más duro, porque es 
 `StackMapTable`—. Y no cambia la emisión de lo que ya compilaba: 45 archivos de `KajiLibrary` que
 usan `switch`, **66 `.class`, cero diferencias** contra el compilador anterior al cambio.
 
-- [ ] **Lo que queda:** la forma **`case X:`** con patrones. El bajado junta los brazos sólo de la
-  forma flecha, porque con dos puntos hay caída de un grupo al siguiente y la cadena de
-  `if (instanceof)` no la modela. El diagnóstico ahora lo dice así en vez de culpar al generador
+**La forma `case X:` también, y por normalización en vez de por un segundo bajado.** Se convierte a
+la forma de flecha antes de que corra el bajado de patrones, y de ahí sigue por la misma cadena de
+`instanceof`. Lo que la conversión resuelve son las dos cosas que la forma de dos puntos agrega:
+
+- el **`break` del grupo**, que apunta al switch y en la cadena de `if` se quedaría sin destino (o,
+  peor, agarraría un bucle de más afuera). `retarget_breaks` lo reorienta a la etiqueta, y **no**
+  baja a lo que captura un `break` propio —bucles y otro `switch`—, porque ahí ya tiene el suyo;
+- la **caída** de un grupo al siguiente, que §14.11.1 acota a una sola posibilidad: hacia el
+  `default`, porque caer en una etiqueta con **patrón** es error de compilación. Esa caída se
+  materializa copiándole el cuerpo del `default` al final del grupo.
+
+Esa caída ilegal **ahora se reporta con su nombre**. Antes daba *"el generador no soporta la forma
+`case X:`"* —un mensaje sobre el compilador para un problema del programa—; hoy dice *caída ilegal a
+un patrón (§14.11.1): al `case` anterior le falta un `break`*, y por un camino de error que no lleva
+el "todavía no soporta". El `javac` real apunta al `case` culpable y nosotros al `switch`: **la
+posición sigue siendo más gruesa**, y eso queda anotado.
+
+La prueba de los tres caminos es [`java/ColonTest.java`](../java/ColonTest.java), 14 valores. El que
+importa de sus cinco métodos es `breakDeBucle`: da **1003** porque el `break` de su `for` **no** se
+reorientó —si se hubiera reorientado daría 3—, y es lo único de esta parte que no se puede ver
+compilando. Emisión: 60 archivos de `KajiLibrary` con `switch`, **114 `.class`, cero diferencias**.
 - [ ] **El `bin/` congelado queda atrás de esta funcionalidad**: `PatTest.java` no compila con él. Si
   la biblioteca llega a usar un `switch` de patrones, hace falta refrescarlo primero
+
+### Hito B8 · `instanceof` con deconstrucción de `record` 🟣 — ✅ hecho (2026-10-03)
+
+> La simetría que faltaba: desde B7 el `switch` deconstruye records, y `instanceof` no los parseaba
+> siquiera. La gramática del patrón es **una sola** —la parsea el mismo `try_pattern`—, así que lo
+> nuevo no es el patrón sino dónde viven sus variables.
+
+**El problema no es el test sino el alcance.** En un `switch` cada brazo es su propio ámbito y las
+variables se declaran adentro; en un `instanceof` tienen que seguir visibles en el `then` y, si la
+condición sigue con `&&`, también a la derecha. Por eso el bajado no las declara adentro:
+
+```text
+if (E instanceof R(int a, int b) && a > b) THEN else ELSE
+───→
+T $o = E;  boolean $m = false;  int a = 0;  int b = 0;
+if ($o instanceof R) { R $r = (R) $o; a = $r.x(); b = $r.y(); $m = true; }
+if ($m && a > b) THEN else ELSE
+```
+
+Se declaran **afuera** con su valor por defecto, el match las **asigna**, y el `instanceof` se
+reemplaza en la condición por una **bandera**. Que arranquen en su valor por defecto no se puede
+observar: la asignación definitiva (§16.2) prohibe leerlas donde el match pudo fallar. El operando se
+hoistea a `$o`, así que se evalúa **una sola vez**.
+
+Tres detalles de implementación que vale dejar escritos:
+
+- `match_pattern` ganó un flag `declare`: el `switch` sigue **declarando** y el `instanceof`
+  **asigna**. El temporal del record se declara siempre, porque es sintetizado y no una variable del
+  programa.
+- El bajado corre desde `block` y **no** desde `stmt`, porque las declaraciones hoisteadas tienen que
+  caer en el bloque que contiene al `if`. Es el mismo lugar donde el desugar ya parte en dos un
+  `T v = switch(…)`, y el único con un bloque padre garantizado.
+- El emisor tiene una **guarda contra la cara muda**: una deconstrucción que el desugar no bajó no se
+  emite. Sin ella, sus variables quedaban declaradas y nunca asignadas, y el método contestaba con
+  los valores por defecto —medido: **0 donde el JDK da 7**—. Es la familia de #261.
+
+**Verificación.** [`java/IofTest.java`](../java/IofTest.java), 10 valores, los tres caminos
+coinciden: `javac` real + JVM real, el nuestro + nuestra VM, y el nuestro + JVM real. `unaVez()` es
+el que custodia la evaluación única: da **1**, y daría 2 si el operando se reevaluara. Emisión: 80
+archivos de `KajiLibrary` con `instanceof` o `switch`, **125 `.class`, cero diferencias** —comparando
+**release contra release**, que no es un detalle: la primera medición dio una divergencia que era del
+binario de *debug* desbordando la pila en un archivo grande, no del cambio.
+
+- [ ] **Lo que queda:** la deconstrucción tiene que estar en lo **primero que se evalúa** de la
+  condición —sola, bajo `!`, o a la izquierda de un `&&`/`||`— y el `if` tiene que ser hijo directo de
+  un bloque. Más a la derecha de un `&&` el operando no se evalúa siempre y hoistearlo cambiaría el
+  programa; un `while` tampoco, porque su condición se reevalúa por iteración. Las dos cortan en el
+  emisor con su diagnóstico, no en silencio
+
+**Dos findings salieron de hacer esto**, los dos de la forma **simple** y anteriores a este trabajo
+(verificado con el javac congelado): **#561**, que `e instanceof T v` evalúa el operando **dos
+veces** —alta, porque la respuesta sale mal en silencio—, y **#562**, que el alcance de una variable
+de patrón es *el `if`* y no *donde la condición vale* (§6.3.1), lo que rechaza el idiom de guarda
+`if (!(e instanceof T v)) return;` que el real acepta.
 
 ---
 

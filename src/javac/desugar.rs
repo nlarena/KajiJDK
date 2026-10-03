@@ -1524,6 +1524,11 @@ impl Desugarer<'_> {
                 s.kind = self.switch_to_stmt(init.unwrap(), name(&var));
             }
             self.stmt(&mut s); // baja el switch-sentencia resultante (y su azúcar interna)
+            // `if (e instanceof R(p1, p2))`: el hoisteo va **antes** de la sentencia y en **este**
+            // bloque, para que las variables del patrón sigan visibles después del `if`.
+            for previa in self.lower_instanceof_deconstruct(&mut s) {
+                out.push(previa);
+            }
             out.push(s);
         }
         block.0 = out;
@@ -1950,7 +1955,95 @@ impl Desugarer<'_> {
         }
     }
 
+    /// Baja un `if` cuya condición **empieza** con una deconstrucción de `record`
+    /// (`e instanceof R(p1, p2)`, §14.30.1).
+    ///
+    /// El problema no es el test sino el **alcance**: las variables del patrón tienen que seguir
+    /// visibles en el `then` y, si la condición sigue con `&&`, también en lo que viene después. Por
+    /// eso no se puede bajar a un `if` anidado con las variables declaradas adentro: se declaran
+    /// **afuera** con su valor por defecto, el match las **asigna**, y el `instanceof` se reemplaza
+    /// en la condición por una **bandera**:
+    ///
+    /// ```text
+    /// if (E instanceof R(int a, int b) && a > b) THEN else ELSE
+    /// ───→
+    /// {   T $o = E;  boolean $m = false;  int a = 0;  int b = 0;
+    ///     if ($o instanceof R) { R $r = (R) $o; a = $r.x(); b = $r.y(); $m = true; }
+    ///     if ($m && a > b) THEN else ELSE
+    /// }
+    /// ```
+    ///
+    /// Que las variables arranquen en su valor por defecto no se puede observar: la asignación
+    /// definitiva (§16.2) prohibe leerlas donde el match pudo fallar, y por eso el `javac` real
+    /// tampoco necesita inicializarlas.
+    ///
+    /// **El operando se hoistea a `$o` siempre.** Sin eso habría que evaluarlo dos veces —una para el
+    /// test y otra para el cast—, que es el bug que la forma simple todavía tiene.
+    ///
+    /// **Alcance:** la deconstrucción tiene que estar en lo **primero que se evalúa** de la
+    /// condición —sola, bajo `!`, o a la izquierda de un `&&`/`||`—. Más a la derecha de un `&&` el
+    /// operando no se evalúa siempre, y hoistearlo cambiaría el programa; eso corta en el emisor con
+    /// su diagnóstico. Un `while` tampoco: su condición se reevalúa por iteración.
+    ///
+    /// Devuelve las sentencias que van **antes** del `if`, para que el llamador las ponga en el
+    /// bloque que lo contiene. No se envuelven en un bloque propio a propósito: eso sacaría las
+    /// variables del patrón de alcance justo donde el idiom de guarda las usa —después del `if`—.
+    /// Por eso esto corre desde [`Self::block`] y no desde `stmt`: es el único lugar con un bloque
+    /// padre garantizado. Un `if` que no es hijo directo de un bloque no se baja, y corta el emisor.
+    fn lower_instanceof_deconstruct(&mut self, s: &mut Stmt) -> Vec<Stmt> {
+        let StmtKind::If { cond, .. } = &s.kind else { return Vec::new() };
+        if !leftmost_deconstruct(cond) {
+            return Vec::new();
+        }
+        let flag = self.fresh("m");
+        let ovar = self.fresh("o");
+        let StmtKind::If { cond, then, els } =
+            std::mem::replace(&mut s.kind, StmtKind::Empty)
+        else {
+            unreachable!()
+        };
+        let mut cond = cond;
+        let Some((operando, ty, comps)) = take_leftmost_deconstruct(&mut cond, &flag) else {
+            // No debería pasar (`leftmost_deconstruct` dijo que sí), pero si pasa se repone el `if`
+            // tal cual y corta el emisor, en vez de perder la sentencia.
+            s.kind = StmtKind::If { cond, then, els };
+            return Vec::new();
+        };
+
+        let o_ty = match &operando.ty {
+            Some(rt) => rtype_to_type(self.table, rt),
+            None => Type::Var,
+        };
+        let mut stmts = vec![
+            local(o_ty, ovar.clone(), operando),
+            local(Type::Prim(PrimType::Boolean), flag.clone(), ex(ExprKind::BoolLit(false))),
+        ];
+        // Las variables del patrón, declaradas afuera con su valor por defecto.
+        let pat = Pattern::Record { ty, components: comps };
+        for (vty, vname) in pattern_vars(&pat) {
+            let d = default_value(&vty);
+            stmts.push(local(vty, vname, d));
+        }
+        // El match, que asigna en vez de declarar y prende la bandera al final.
+        let prende = st(StmtKind::Expr(assign_expr(name(&flag), ex(ExprKind::BoolLit(true)))));
+        let m = self.match_pattern_binding(&pat, name(&ovar), prende, false);
+        stmts.push(m);
+        s.kind = StmtKind::If { cond, then, els };
+        stmts
+    }
+
     fn pattern_switch_here(&mut self, s: &mut Stmt) {
+        let StmtKind::Switch { cases, .. } = &s.kind else { return };
+        // La forma de **dos puntos** se normaliza a flecha y sigue por el mismo camino. La etiqueta
+        // se saca acá porque la conversión la necesita para reorientar los `break`, y tiene que ser
+        // la misma que después envuelve la cadena.
+        let label = self.fresh("m");
+        if is_colon_pattern_switch(cases) {
+            let StmtKind::Switch { cases, .. } = &mut s.kind else { unreachable!() };
+            if !colon_pattern_switch_to_arrow(cases, &label) {
+                return; // corta el emisor, con su diagnóstico
+            }
+        }
         let StmtKind::Switch { cases, .. } = &s.kind else { return };
         if !is_pattern_switch(cases) {
             return;
@@ -1959,7 +2052,6 @@ impl Desugarer<'_> {
             unreachable!()
         };
         let tvar = self.fresh("t");
-        let label = self.fresh("m");
 
         // Se reparten los brazos: el de `null`, el `default`, y los patterns (en orden).
         let mut null_body: Option<Stmt> = None;
@@ -2037,15 +2129,36 @@ impl Desugarer<'_> {
     /// el patrón repita el tipo declarado del componente, que es el habitual. Un componente con un
     /// tipo **más angosto** todavía no se chequea.
     fn match_pattern(&mut self, pat: &Pattern, src: Expr, inner: Stmt) -> Stmt {
+        self.match_pattern_binding(pat, src, inner, true)
+    }
+
+    /// Igual que [`Self::match_pattern`], pero con `declare` eligiendo cómo quedan las variables del
+    /// patrón: **declaradas** adentro del `if` (lo que necesita el `switch`, donde cada brazo es su
+    /// propio alcance) o **asignadas** a locales que el llamador ya declaró afuera (lo que necesita
+    /// el `instanceof`, donde las variables tienen que seguir visibles después de la condición).
+    fn match_pattern_binding(
+        &mut self,
+        pat: &Pattern,
+        src: Expr,
+        inner: Stmt,
+        declare: bool,
+    ) -> Stmt {
+        let bind_var = |ty: &Type, var: &str, valor: Expr| -> Stmt {
+            if declare {
+                local(ty.clone(), var.to_string(), valor)
+            } else {
+                st(StmtKind::Expr(assign_expr(name(var), valor)))
+            }
+        };
         match pat {
             Pattern::Type { ty, name: var, .. } => {
-                let bind = local(
-                    ty.clone(),
-                    var.clone(),
+                let bind = bind_var(
+                    ty,
+                    var,
                     ex(ExprKind::Cast { ty: ty.clone(), expr: Box::new(src.clone()) }),
                 );
                 st(StmtKind::If {
-                    cond: ex(ExprKind::InstanceOf { expr: Box::new(src), ty: ty.clone(), binding: None, slot: None }),
+                    cond: ex(ExprKind::InstanceOf { expr: Box::new(src), ty: ty.clone(), binding: None, slot: None, deconstruct: None }),
                     then: Box::new(st(StmtKind::Block(Block(vec![bind, inner])))),
                     els: None,
                 })
@@ -2061,24 +2174,26 @@ impl Desugarer<'_> {
                     body = match c {
                         // Componente simple: se bindea directo, sin volver a testear el tipo.
                         Pattern::Type { ty: cty, name: cvar, .. } => st(StmtKind::Block(Block(vec![
-                            local(
-                                cty.clone(),
-                                cvar.clone(),
+                            bind_var(
+                                cty,
+                                cvar,
                                 ex(ExprKind::Cast { ty: cty.clone(), expr: Box::new(getter) }),
                             ),
                             body,
                         ]))),
                         // Componente que vuelve a deconstruir: recursión (y sí testea el tipo).
-                        nested => self.match_pattern(nested, getter, body),
+                        nested => self.match_pattern_binding(nested, getter, body, declare),
                     };
                 }
+                // El temporal del record **siempre** se declara: es sintetizado nuestro, no una
+                // variable del programa, así que `declare` no lo gobierna.
                 let bind = local(
                     ty.clone(),
                     rvar,
                     ex(ExprKind::Cast { ty: ty.clone(), expr: Box::new(src.clone()) }),
                 );
                 st(StmtKind::If {
-                    cond: ex(ExprKind::InstanceOf { expr: Box::new(src), ty: ty.clone(), binding: None, slot: None }),
+                    cond: ex(ExprKind::InstanceOf { expr: Box::new(src), ty: ty.clone(), binding: None, slot: None, deconstruct: None }),
                     then: Box::new(st(StmtKind::Block(Block(vec![bind, body])))),
                     els: None,
                 })
@@ -5050,12 +5165,170 @@ fn completes_normally(s: &Stmt) -> bool {
     }
 }
 
-/// ¿Es un `switch` con *type patterns*? Basta con que algún `case` traiga un pattern; exigimos que
-/// todos los brazos sean de **flecha** (Java no deja caer en un `case` con pattern, así que la forma
-/// de dos puntos no aporta *fall-through* acá).
+/// ¿Lo **primero que se evalúa** de la condición es una deconstrucción de `record`?
+///
+/// Se baja por la izquierda de `&&`/`||` y a través de `!`, que son los operadores que no cambian
+/// *qué* se evalúa primero. Cualquier otra posición se evalúa condicionalmente y no se puede
+/// hoistear sin cambiar el programa.
+fn leftmost_deconstruct(cond: &Expr) -> bool {
+    match &cond.kind {
+        ExprKind::InstanceOf { deconstruct: Some(_), .. } => true,
+        ExprKind::Binary { op: BinOp::And | BinOp::Or, lhs, .. } => leftmost_deconstruct(lhs),
+        ExprKind::Unary { op: UnOp::Not, expr, .. } => leftmost_deconstruct(expr),
+        _ => false,
+    }
+}
+
+/// Saca la deconstrucción de la posición que [`leftmost_deconstruct`] encontró, la reemplaza por el
+/// nombre de la bandera, y devuelve sus tres partes: el operando, el tipo del record y los patrones
+/// de sus componentes.
+fn take_leftmost_deconstruct(cond: &mut Expr, flag: &str) -> Option<(Expr, Type, Vec<Pattern>)> {
+    match &mut cond.kind {
+        ExprKind::InstanceOf { deconstruct: Some(_), .. } => {
+            let ExprKind::InstanceOf { expr, ty, deconstruct, .. } =
+                std::mem::replace(&mut cond.kind, ExprKind::Name(flag.to_string()))
+            else {
+                unreachable!()
+            };
+            Some((*expr, ty, deconstruct.unwrap()))
+        }
+        ExprKind::Binary { op: BinOp::And | BinOp::Or, lhs, .. } => {
+            take_leftmost_deconstruct(lhs, flag)
+        }
+        ExprKind::Unary { op: UnOp::Not, expr, .. } => take_leftmost_deconstruct(expr, flag),
+        _ => None,
+    }
+}
+
+/// Las variables de un patrón con su tipo escrito, bajando por la deconstrucción. El temporal del
+/// record no está acá: lo declara el propio match.
+fn pattern_vars(p: &Pattern) -> Vec<(Type, String)> {
+    match p {
+        Pattern::Type { ty, name, .. } => vec![(ty.clone(), name.clone())],
+        Pattern::Record { components, .. } => components.iter().flat_map(pattern_vars).collect(),
+    }
+}
+
+/// El valor por defecto de un tipo (§4.12.5), para declarar afuera una variable que el match asigna.
+fn default_value(ty: &Type) -> Expr {
+    match ty {
+        Type::Prim(PrimType::Boolean) => ex(ExprKind::BoolLit(false)),
+        Type::Prim(PrimType::Long) => ex(ExprKind::LongLit(0)),
+        Type::Prim(PrimType::Float) => ex(ExprKind::FloatLit(0.0)),
+        Type::Prim(PrimType::Double) => ex(ExprKind::DoubleLit(0.0)),
+        Type::Prim(PrimType::Char) => ex(ExprKind::CharLit(0)),
+        Type::Prim(_) => ex(ExprKind::IntLit(0)),
+        _ => ex(ExprKind::Null),
+    }
+}
+
+/// ¿Es un `switch` con *type patterns*? Basta con que algún `case` traiga un pattern.
+///
+/// Se exige que todos los brazos sean de **flecha**, y eso **no** es una restricción de alcance: la
+/// forma de dos puntos la convierte a flecha [`colon_pattern_switch_to_arrow`] antes de llegar acá.
+/// Lo que la exigencia custodia es que el bajado no vea nunca un grupo con caída, porque la cadena
+/// de `if (instanceof)` a la que baja no la modela.
 fn is_pattern_switch(cases: &[SwitchCase]) -> bool {
     cases.iter().any(|c| c.labels.iter().any(|l| matches!(l, CaseLabel::Pattern { .. })))
         && cases.iter().all(|c| matches!(c.body, SwitchBody::Arrow(_)))
+}
+
+/// ¿Es un `switch` de patrones escrito con **dos puntos**? Es el que
+/// [`colon_pattern_switch_to_arrow`] normaliza; `is_pattern_switch` lo rechaza a propósito.
+fn is_colon_pattern_switch(cases: &[SwitchCase]) -> bool {
+    cases.iter().any(|c| c.labels.iter().any(|l| matches!(l, CaseLabel::Pattern { .. })))
+        && cases.iter().any(|c| matches!(c.body, SwitchBody::Colon(_)))
+}
+
+/// Reorienta a `label` los `break` **sin etiqueta** de un cuerpo que deja de estar dentro de un
+/// `switch`.
+///
+/// En la forma de dos puntos un `break` pelado sale del switch; cuando el switch se vuelve un bloque
+/// etiquetado con una cadena de `if`, ese `break` se queda sin destino (y lo que es peor, podría
+/// agarrar un bucle de más afuera). No se baja a lo que **captura** un `break` propio --bucles y
+/// otro `switch`--, porque ahí el `break` ya tiene su destino y retocarlo cambiaría el programa.
+fn retarget_breaks(s: &mut Stmt, label: &str) {
+    match &mut s.kind {
+        StmtKind::Break(none @ None) => *none = Some(label.to_string()),
+        // Capturan el `break` sin etiqueta: su interior no se toca (§14.15).
+        StmtKind::While { .. }
+        | StmtKind::Do { .. }
+        | StmtKind::For { .. }
+        | StmtKind::ForEach { .. }
+        | StmtKind::Switch { .. } => {}
+        StmtKind::Block(b) => b.0.iter_mut().for_each(|x| retarget_breaks(x, label)),
+        StmtKind::If { then, els, .. } => {
+            retarget_breaks(then, label);
+            if let Some(e) = els {
+                retarget_breaks(e, label);
+            }
+        }
+        StmtKind::Labeled { body, .. } => retarget_breaks(body, label),
+        StmtKind::Synchronized { body, .. } => {
+            body.0.iter_mut().for_each(|x| retarget_breaks(x, label))
+        }
+        StmtKind::Try { resources, body, catches, finally } => {
+            resources.iter_mut().for_each(|x| retarget_breaks(x, label));
+            body.0.iter_mut().for_each(|x| retarget_breaks(x, label));
+            for c in catches.iter_mut() {
+                c.body.0.iter_mut().for_each(|x| retarget_breaks(x, label));
+            }
+            if let Some(f) = finally {
+                f.0.iter_mut().for_each(|x| retarget_breaks(x, label));
+            }
+        }
+        _ => {}
+    }
+}
+
+/// Convierte un `switch` de patrones de **dos puntos** a **flecha**, o devuelve `false` sin tocar
+/// nada si alguna forma no se puede convertir con seguridad.
+///
+/// Son equivalentes salvo en una cosa, la **caída** de un grupo al siguiente, y Java la acota
+/// fuerte: es error de compilación que un grupo que puede completar normalmente sea seguido por una
+/// etiqueta con **patrón** (§14.11.1). O sea que un grupo que cae soló puede caer en el `default`,
+/// y esa caída se materializa copiándole el cuerpo del `default` al final.
+///
+/// Se niega --y deja el diagnóstico claro del emisor-- si un grupo que cae es seguido por otra cosa:
+/// es un programa que el `javac` real rechaza, y preferimos no emitir nada antes que adivinar.
+fn colon_pattern_switch_to_arrow(cases: &mut Vec<SwitchCase>, label: &str) -> bool {
+    // El cuerpo del `default`, por si hay que materializar una caída hacia él.
+    let default_stmts: Vec<Stmt> = cases
+        .iter()
+        .find(|c| c.is_default)
+        .map(|c| match &c.body {
+            SwitchBody::Colon(ss) => ss.clone(),
+            SwitchBody::Arrow(st) => vec![(**st).clone()],
+        })
+        .unwrap_or_default();
+
+    // Primero mirar, después tocar: o se convierten todos los grupos, o ninguno.
+    for (i, c) in cases.iter().enumerate() {
+        let SwitchBody::Colon(ss) = &c.body else { continue };
+        let cae = ss.last().is_none_or(completes_normally);
+        if !cae {
+            continue;
+        }
+        match cases.get(i + 1) {
+            None => {}                                  // último grupo: caer es salir del switch
+            Some(n) if n.is_default => {}               // la única caída que Java permite acá
+            Some(_) => return false,                    // caería en un patrón: el real lo rechaza
+        }
+    }
+
+    for i in 0..cases.len() {
+        let SwitchBody::Colon(ss) = &cases[i].body else { continue };
+        let mut stmts = ss.clone();
+        let cae = stmts.last().is_none_or(completes_normally);
+        let hacia_default = cae && cases.get(i + 1).is_some_and(|n| n.is_default);
+        if hacia_default {
+            stmts.extend(default_stmts.iter().cloned());
+        }
+        let mut body = st(StmtKind::Block(Block(stmts)));
+        retarget_breaks(&mut body, label);
+        cases[i].body = SwitchBody::Arrow(Box::new(body));
+    }
+    true
 }
 
 /// El `String.hashCode()` de Java, **calculado en tiempo de compilación** para emitirlo como la

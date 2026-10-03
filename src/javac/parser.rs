@@ -1982,8 +1982,30 @@ impl Parser {
                 self.bump();
                 let ty = self.parse_type()?;
                 let type_annos = self.take_type_annos(); // `e instanceof @A T` — target 0x43
-                // `e instanceof T v` — *pattern* (§14.30.2): el identificador que sigue bindea.
-                let binding = if self.at(TokenKind::Identifier) {
+                // `e instanceof R(p1, p2)` — **deconstrucción** de un record (§14.30.1). Los
+                // componentes son patrones y pueden volver a deconstruir, así que los parsea el
+                // mismo `try_pattern` que usa el `switch`: la gramática del patrón es una sola.
+                let mut deconstruct = None;
+                if self.at(TokenKind::LParen) {
+                    self.bump();
+                    let mut components = Vec::new();
+                    if !self.at(TokenKind::RParen) {
+                        loop {
+                            let Some(p) = self.try_pattern()? else {
+                                return Err(self.error("se esperaba un patrón de componente"));
+                            };
+                            components.push(p);
+                            if !self.eat(TokenKind::Comma) {
+                                break;
+                            }
+                        }
+                    }
+                    self.expect(TokenKind::RParen)?;
+                    deconstruct = Some(components);
+                }
+                // `e instanceof T v` — *pattern* (§14.30.2): el identificador que sigue bindea. Un
+                // record pattern no nombra al record, así que las dos formas no se cruzan.
+                let binding = if deconstruct.is_none() && self.at(TokenKind::Identifier) {
                     Some(self.bump().text)
                 } else {
                     None
@@ -1991,7 +2013,7 @@ impl Parser {
                 let pos = lhs.pos;
                 lhs = Expr::new(
                     pos,
-                    ExprKind::InstanceOf { expr: Box::new(lhs), ty, binding, slot: None },
+                    ExprKind::InstanceOf { expr: Box::new(lhs), ty, binding, slot: None, deconstruct },
                 )
                 .with_type_annos(type_annos);
                 continue;

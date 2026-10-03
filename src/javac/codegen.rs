@@ -4377,6 +4377,14 @@ impl<'a> Emitter<'a> {
         ));
     }
 
+    /// Un error **del programa** detectado en la emisión, que no es un límite del generador y por eso
+    /// no lleva el "todavía no soporta": anunciarlo así manda a arreglar el compilador en vez del
+    /// código. Lo usa la caída ilegal a un patrón, que es la única forma por la que el desugar se
+    /// niega a normalizar un `switch` de patrones escrito con dos puntos.
+    fn program_error(&mut self, pos: Pos, what: &str) {
+        self.errors.push(Error::new(what.to_string(), pos.line, pos.col));
+    }
+
     fn ty_of(&self, e: &Expr) -> RType {
         e.ty.clone().unwrap_or(RType::Prim(PrimType::Int))
     }
@@ -4695,9 +4703,16 @@ impl<'a> Emitter<'a> {
             // Decirlo así, y no "el selector no es int", le ahorra a quien lo lea buscar en el
             // generador un problema que está en el desugar.
             if cases.iter().flat_map(|c| &c.labels).any(|l| matches!(l, CaseLabel::Pattern(_))) {
-                self.unsupported(
+                // La forma `case X:` **sí** se soporta: la normaliza a flecha el desugar. Si un
+                // switch de patrones llegó hasta ací es porque esa normalización se negó, y se niega
+                // por una sola cosa: un grupo que puede completar normalmente seguido por una
+                // etiqueta que **no** es el `default`. Eso es la *caída ilegal a un patrón* de
+                // §14.11.1, que el `javac` real reporta como "illegal fall-through to a pattern".
+                // Decirlo con su nombre, y no "la forma no se soporta", es la diferencia entre un
+                // mensaje que manda a arreglar el programa y uno que manda a arreglar el compilador.
+                self.program_error(
                     pos,
-                    "un `switch` de patrones en la forma `case X:` (sólo la forma `case X ->`)",
+                    "caída ilegal a un patrón (§14.11.1): al `case` anterior le falta un `break`",
                 );
                 return None;
             }
@@ -5468,7 +5483,17 @@ impl<'a> Emitter<'a> {
                 self.push(elem);
             }
             ExprKind::NewArray { dims, init, .. } => self.new_array(e, dims, init),
-            ExprKind::InstanceOf { expr: inner, ty, .. } => {
+            ExprKind::InstanceOf { expr: inner, ty, deconstruct, .. } => {
+                // **Guarda contra la cara muda.** Una deconstrucción que llega hasta ací es una que
+                // el desugar no bajó: sus variables de componente quedarían declaradas y **nunca
+                // asignadas**, y el método contestaría con los valores por defecto en vez de fallar
+                // --medido: `o instanceof P(int a, int b)` daba 0 donde el JDK da 7--. Es la familia
+                // de #261: antes que emitir algo mudo y roto, se corta.
+                if deconstruct.is_some() {
+                    self.unsupported(e.pos, "una deconstrucción de `record` en esta posición (la baja el desugar)");
+                    self.push(VType::Int);
+                    return;
+                }
                 self.expr(inner);
                 let internal = match vtype_of_type(self.table, self.scope, ty) {
                     VType::Object(n) => n,
@@ -5959,6 +5984,10 @@ impl<'a> Emitter<'a> {
             // `x instanceof T t`: además del test, la rama **verdadera** liga el pattern (recargar el
             // operando, `checkcast T`, `astore t`), justo donde javac lo emite (§14.30.2). Sin pattern
             // (slot `None`) cae al caso genérico de abajo, que solo emite el test booleano.
+            // Misma guarda que en el camino de expresión: una deconstrucción sin bajar no se emite.
+            ExprKind::InstanceOf { deconstruct: Some(_), .. } => {
+                self.unsupported(cond.pos, "una deconstrucción de `record` en esta posición (la baja el desugar)");
+            }
             ExprKind::InstanceOf { expr: operand, ty, slot: Some(slot), .. } => {
                 let internal = match vtype_of_type(self.table, self.scope, ty) {
                     VType::Object(n) => n,
@@ -10865,6 +10894,144 @@ mod tests {
                 classes.iter().map(|(n, _)| n).collect::<Vec<_>>(),
             );
         }
+    }
+
+    /// La forma `case X:` de un switch de patrones: compila, y por el camino de la normalizacion a
+    /// flecha. Las dos formas que esa conversion tiene que resolver son el `break` del grupo y la
+    /// caida al `default`; la tercera --que un `break` de un bucle de ADENTRO del grupo no se
+    /// reoriente-- no se puede ver compilando, y la custodia `java/ColonTest.java` por los tres
+    /// caminos (el valor 1003 es exactamente ese: si el `break` se reorientara, saldria 3).
+    #[test]
+    fn a_colon_form_pattern_switch_compiles() {
+        let classes = compile_all(
+            "class U { \
+                 static int con_break(Object o) { \
+                     int acc = 0; \
+                     switch (o) { \
+                         case Integer i: acc = i; break; \
+                         case String s: acc = s.length(); break; \
+                         default: acc = -1; \
+                     } \
+                     return acc; \
+                 } \
+                 static int cae_al_default(Object o) { \
+                     int acc = 0; \
+                     switch (o) { \
+                         case Integer i: acc = 100; break; \
+                         case String s: acc = 7; \
+                         default: acc = acc + 10; \
+                     } \
+                     return acc; \
+                 } \
+                 static int con_guarda(Object o) { \
+                     int acc = 0; \
+                     switch (o) { \
+                         case Integer i when i > 10: acc = 1; break; \
+                         case Integer i: acc = 2; break; \
+                         default: acc = 3; \
+                     } \
+                     return acc; \
+                 } \
+             }",
+        );
+        assert!(
+            classes.iter().any(|(n, _)| n.ends_with("U")),
+            "la clase U debe emitirse: {:?}",
+            classes.iter().map(|(n, _)| n).collect::<Vec<_>>(),
+        );
+    }
+
+    /// Y la caida que Java **prohibe** se rechaza, con el diagnostico que la nombra. Antes de que la
+    /// forma de dos puntos se soportara, este programa daba el mensaje de que la forma no estaba
+    /// soportada --un mensaje sobre el compilador para un problema del programa--.
+    #[test]
+    fn an_illegal_fall_through_to_a_pattern_is_rejected_by_name() {
+        let e = crate::javac::compile(
+            "class U { static int f(Object o) { \
+                 int acc = 0; \
+                 switch (o) { \
+                     case Integer i: acc = 1; \
+                     case String s: acc = 2; break; \
+                     default: acc = 3; \
+                 } \
+                 return acc; } }",
+        )
+        .expect_err("una caida ilegal a un patron no puede emitirse");
+        assert!(
+            e.message.contains("ca\u{ed}da ilegal a un patr\u{f3}n"),
+            "el mensaje debe nombrar la caida ilegal, salio: {}",
+            e.message,
+        );
+        assert!(
+            !e.message.contains("no soporta"),
+            "no debe anunciarse como limite del generador: {}",
+            e.message,
+        );
+        // **Control positivo, y es lo que le da sentido al test.** Sin él, desactivar la
+        // normalización entera lo deja pasando: con la forma de dos puntos sin soportar, *todo*
+        // colon da este mismo error. Lo que hay que comprobar es que se rechaza **esta** forma y no
+        // la forma de dos puntos: el mismo programa con el `break` que falta compila.
+        let classes = compile_all(
+            "class U { static int f(Object o) {                  int acc = 0;                  switch (o) {                      case Integer i: acc = 1; break;                      case String s: acc = 2; break;                      default: acc = 3;                  }                  return acc; } }",
+        );
+        assert!(classes.iter().any(|(n, _)| n.ends_with("U")), "el control positivo debe compilar");
+    }
+
+    // ---- `instanceof` con deconstruccion de records ----
+
+    /// Las formas que se soportan compilan. Lo que NO se puede ver compilando --que el operando se
+    /// evalue una sola vez, y que los valores sean los del JDK-- lo custodia `java/IofTest.java`
+    /// por los tres caminos.
+    #[test]
+    fn an_instanceof_record_pattern_compiles_in_the_supported_shapes() {
+        let classes = compile_all(
+            "record Pt(int x, int y) {} \
+             record Caja(Pt dentro, String etiqueta) {} \
+             class U { \
+                 static int simple(Object o) { \
+                     if (o instanceof Pt(int a, int b)) return a + b; else return -1; \
+                 } \
+                 static int con_guarda(Object o) { \
+                     if (o instanceof Pt(int a, int b) && a > b) return 1; \
+                     return 0; \
+                 } \
+                 static int negada(Object o) { \
+                     if (!(o instanceof Pt(int a, int b))) return -1; else return a * 100 + b; \
+                 } \
+                 static String anidado(Object o) { \
+                     if (o instanceof Caja(Pt(int a, int b), String et)) return et; \
+                     return \"no\"; \
+                 } \
+             }",
+        );
+        for esperada in ["U", "Pt", "Caja"] {
+            assert!(
+                classes.iter().any(|(n, _)| n.ends_with(esperada)),
+                "falta la clase {esperada}: {:?}",
+                classes.iter().map(|(n, _)| n).collect::<Vec<_>>(),
+            );
+        }
+    }
+
+    /// **La guarda contra la cara muda.** Una deconstruccion que el desugar no baja no se emite: sus
+    /// variables de componente quedarian declaradas y nunca asignadas, y el metodo contestaria con
+    /// los valores por defecto en vez de fallar --medido antes de poner la guarda: daba 0 donde el
+    /// JDK da 7--. La posicion que no se baja es la que no esta en lo primero que se evalua de la
+    /// condicion, porque hoistear el operando ahi cambiaria cuando se evalua.
+    #[test]
+    fn a_deconstruction_the_desugar_cannot_lower_is_not_emitted_silently() {
+        let e = crate::javac::compile(
+            "record Pt(int x, int y) {} \
+             class U { static int f(Object o, boolean c) { \
+                 if (c && o instanceof Pt(int a, int b)) return a + b; \
+                 return -1; } }",
+        )
+        .expect_err("una deconstruccion sin bajar no se puede emitir");
+        assert!(
+            e.message.contains("deconstrucci") && e.message.contains("posici"),
+            "el mensaje debe nombrar la deconstruccion y la posicion: {}",
+            e.message,
+        );
     }
 
     // ---- APT fase 4: el mecanismo del Filer ----

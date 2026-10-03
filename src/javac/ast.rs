@@ -496,7 +496,19 @@ pub enum ExprKind {
     Cast { ty: Type, expr: Box<Expr> },
     /// `e instanceof T` o, con *pattern* (§14.30.2), `e instanceof T v`: `binding` es el nombre de la
     /// variable y `slot` su decoración (pasada 2), como en un `case T v`.
-    InstanceOf { expr: Box<Expr>, ty: Type, binding: Option<String>, slot: Option<u16> },
+    /// `e instanceof T`, `e instanceof T v` (*type pattern*) o `e instanceof R(p1, p2)`
+    /// (deconstrucción de un `record`, §14.30.1).
+    ///
+    /// Las tres comparten el `ty`. La forma con nombre lo trae en `binding`/`slot`; la
+    /// deconstrucción trae en `deconstruct` los patrones de los componentes --y entonces `binding`
+    /// es `None`, porque un record pattern no nombra al record--. Son excluyentes.
+    InstanceOf {
+        expr: Box<Expr>,
+        ty: Type,
+        binding: Option<String>,
+        slot: Option<u16>,
+        deconstruct: Option<Vec<Pattern>>,
+    },
     /// Un **literal de clase**, `C.class` (§15.8.2): su valor es el `Class<C>` del tipo.
     ClassLit(Type),
     /// `Outer.this` (§15.8.4): la **instancia envolvente** cualificada de una clase interna — el
