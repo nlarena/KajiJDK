@@ -17,7 +17,7 @@
 //! produces is a static `lambda$…`, and a `Class::staticMethod` reference is static too. Instance
 //! method references (kind 5) would load the captured receiver and `invokevirtual`; not yet.
 
-use crate::javac::class_writer::{ClassFile, FieldInfo, MethodInfo};
+use crate::javac::class_writer::{ClassFile, ConstantPool, FieldInfo, MethodInfo};
 
 const ACC_PUBLIC: u16 = 0x0001;
 const ACC_SUPER: u16 = 0x0020;
@@ -37,6 +37,10 @@ pub fn generate_lambda_class(
     impl_class: &str,
     impl_name: &str,
     impl_descriptor: &str,
+    // El *kind* del `MethodHandle` de la implementacion (JVMS §4.4.8). Decide con que opcode se
+    // reenvia: `6` es `invokestatic`, `5` `invokevirtual`, `7` `invokespecial`, `9`
+    // `invokeinterface`. Finding #552.
+    impl_kind: u8,
     captures: &[String],
 ) -> Vec<u8> {
     let mut cf = ClassFile::new();
@@ -96,21 +100,68 @@ pub fn generate_lambda_class(
     // --- SAM method: load captures (from fields) then arguments, forward to the impl, return. ---
     let (sam_params, sam_return) = split_descriptor(sam_descriptor);
     let impl_ref = cf.pool.methodref(impl_class, impl_name, impl_descriptor);
+    let (impl_params, impl_return) = split_descriptor(impl_descriptor);
+    // **A donde va cada valor.** Un handle de instancia (kinds 5, 7 y 9) recibe el receptor primero
+    // y el descriptor de la implementacion **no** lo incluye, asi que se antepone. Finding #552.
+    let instancia = matches!(impl_kind, 5 | 7 | 9);
+    let mut destinos: Vec<String> = Vec::new();
+    if instancia {
+        destinos.push(format!("L{impl_class};"));
+    }
+    destinos.extend(impl_params.iter().cloned());
+    // **De donde sale cada uno**: primero las capturas, despues los argumentos del SAM.
+    let fuentes: Vec<String> = captures.iter().chain(sam_params.iter()).cloned().collect();
+    let adaptable = fuentes.len() == destinos.len();
+
     let mut sam = Vec::new();
     let mut depth = 0u16;
-    for (field_ref, descriptor) in field_refs.iter().zip(captures) {
-        sam.push(0x2a); // aload_0
-        push_u16(&mut sam, 0xb4, *field_ref); // getfield cap<i>
-        depth += slot_width(descriptor) as u16;
+    let mut arg_slot = 1u8; // despues de `this`
+    // Una **referencia a constructor** (`ArrayList::new`, kind 8) aloca primero y deja una copia
+    // debajo de los argumentos: el `<init>` no devuelve nada, asi que lo que queda en la pila para
+    // el `areturn` es esa copia. Finding #552.
+    if impl_kind == 8 {
+        let c = cf.pool.class(impl_class);
+        push_u16(&mut sam, 0xbb, c); // new
+        sam.push(0x59); // dup
+        depth += 2;
     }
-    let mut arg_slot = 1u8; // after `this`
-    for descriptor in &sam_params {
-        sam.push(load_opcode(descriptor));
-        sam.push(arg_slot);
-        arg_slot += slot_width(descriptor);
-        depth += slot_width(descriptor) as u16;
+    for (i, fuente) in fuentes.iter().enumerate() {
+        if i < field_refs.len() {
+            sam.push(0x2a); // aload_0
+            push_u16(&mut sam, 0xb4, field_refs[i]); // getfield cap<i>
+        } else {
+            sam.push(load_opcode(fuente));
+            sam.push(arg_slot);
+            arg_slot += slot_width(fuente);
+        }
+        depth += slot_width(fuente) as u16;
+        // El descriptor del SAM esta **borrado** (`Function.apply` dice `(Object)Object`), asi que
+        // un primitivo que la implementacion pide hay que desempaquetarlo, y uno que entrega hay que
+        // empaquetarlo. Sin esto, `BiFunction<Integer, Long, Integer> f = C::suma` con
+        // `suma(int, long)` reventaba con *"conversion: expected a long, found Reference"*.
+        if adaptable {
+            adaptar(&mut sam, &mut cf.pool, fuente, &destinos[i]);
+        }
     }
-    push_u16(&mut sam, 0xb8, impl_ref); // invokestatic <impl>
+    // **El reenvio va con el opcode que pida el kind.** Antes era siempre `invokestatic`, y un
+    // `assert` cortaba lo demas: no corria aca **ninguna** referencia a un metodo de instancia
+    // (`String::length`, kind 5) ni **ninguna** lambda que tocara `this` (kind 7).
+    match impl_kind {
+        5 => push_u16(&mut sam, 0xb6, impl_ref), // invokevirtual
+        7 | 8 => push_u16(&mut sam, 0xb7, impl_ref), // invokespecial (el 8 es sobre el `new` de arriba)
+        9 => {
+            // `invokeinterface` lleva dos bytes mas: la cuenta de argumentos --el receptor
+            // incluido-- y un cero (JVMS §6.5).
+            let cuenta: u8 = 1 + impl_params.iter().map(|d| slot_width(d)).sum::<u8>();
+            push_u16(&mut sam, 0xb9, impl_ref);
+            sam.push(cuenta);
+            sam.push(0);
+        }
+        _ => push_u16(&mut sam, 0xb8, impl_ref), // invokestatic
+    }
+    // Y el retorno, por lo mismo: `String::length` devuelve `int` donde `Function.apply` declara
+    // `Object`. Sin empaquetarlo, el `checkcast Integer` del **llamador** encontraba un `int`.
+    adaptar(&mut sam, &mut cf.pool, &impl_return, &sam_return);
     sam.push(return_opcode(&sam_return));
     let sam_name_index = cf.pool.utf8(sam_name);
     let sam_desc_index = cf.pool.utf8(sam_descriptor);
@@ -170,6 +221,51 @@ fn slot_width(descriptor: &str) -> u8 {
 
 /// Splits a method descriptor `"(params)ret"` into the list of parameter descriptors and the
 /// return descriptor.
+/// Escribe la conversion que lleva un valor de `fuente` a `destino`, si hace falta (§5.3): el
+/// **boxeo** de un primitivo que va a una referencia, y el **desempaquetado** --con su `checkcast`
+/// previo, porque el descriptor del SAM esta borrado-- de una referencia que va a un primitivo.
+///
+/// Entre dos referencias no se escribe nada: esta clase no se verifica y el despacho es por el
+/// objeto real. Entre dos primitivos tampoco: el emisor ya los dejo del ancho que corresponde.
+/// Finding #552.
+fn adaptar(code: &mut Vec<u8>, pool: &mut ConstantPool, fuente: &str, destino: &str) {
+    let primitivo = |d: &str| !d.starts_with('L') && !d.starts_with('[');
+    match (primitivo(fuente), primitivo(destino)) {
+        (true, false) => {
+            if let Some((envoltorio, _)) = envoltorio_de(fuente) {
+                let desc = format!("({fuente})L{envoltorio};");
+                let m = pool.methodref(envoltorio, "valueOf", &desc);
+                push_u16(code, 0xb8, m); // invokestatic Envoltorio.valueOf
+            }
+        }
+        (false, true) => {
+            if let Some((envoltorio, metodo)) = envoltorio_de(destino) {
+                let c = pool.class(envoltorio);
+                push_u16(code, 0xc0, c); // checkcast Envoltorio
+                let desc = format!("(){destino}");
+                let m = pool.methodref(envoltorio, metodo, &desc);
+                push_u16(code, 0xb6, m); // invokevirtual Envoltorio.xxxValue
+            }
+        }
+        _ => {}
+    }
+}
+
+/// El envoltorio de un primitivo y el nombre de su metodo de desempaquetado.
+fn envoltorio_de(descriptor: &str) -> Option<(&'static str, &'static str)> {
+    Some(match descriptor {
+        "I" => ("java/lang/Integer", "intValue"),
+        "J" => ("java/lang/Long", "longValue"),
+        "D" => ("java/lang/Double", "doubleValue"),
+        "F" => ("java/lang/Float", "floatValue"),
+        "S" => ("java/lang/Short", "shortValue"),
+        "B" => ("java/lang/Byte", "byteValue"),
+        "C" => ("java/lang/Character", "charValue"),
+        "Z" => ("java/lang/Boolean", "booleanValue"),
+        _ => return None,
+    })
+}
+
 fn split_descriptor(descriptor: &str) -> (Vec<String>, String) {
     let bytes = descriptor.as_bytes();
     let mut i = 1; // skip '('
@@ -220,6 +316,7 @@ mod tests {
             "Host",
             "lambda$0",
             "(II)I",
+            6, // invokestatic: reenvia al estatico `Host.lambda$0`
             &["I".to_string()],
         );
         // The VM's own parser must accept what the writer emitted.

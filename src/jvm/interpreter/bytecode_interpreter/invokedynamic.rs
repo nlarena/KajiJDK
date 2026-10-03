@@ -268,25 +268,37 @@ pub(super) fn invokedynamic(&mut self, cp_index: u16) {
             // vale igual, porque donde importa —la biblioteca completa, que es lo que el JIT ve—
             // `StringBuilder` siempre está. Lo que haría innecesaria esta bifurcación es meter
             // `StringBuilder` en `boot/`, y eso es trabajo de biblioteca, no de acá.
-            // **DESACTIVADO (2026-09-06), y no por estar mal sino por costar sin rendir.**
+            // **Apagado, y con el diagnóstico corregido dos veces.**
             //
-            // El camino spinado está entero y probado —`concat_factory` emite la clase, el resolver
-            // del JIT la encuentra, y el resultado coincide con el intérprete y con el `java` real—
-            // pero **medido, hoy es pura pérdida**: sobre `java/JcCat` da **784.672 opcodes
-            // interpretados contra 73.743** del intrínseco, o sea **10,6× más trabajo**, y el JIT no
-            // lo compensa.
+            // El camino spinado está entero y probado: `concat_factory` emite la clase, el resolver
+            // del JIT la encuentra, el `0xba` entró al rango de invokes, y el resultado coincide con
+            // el intérprete y con el `java` real. Lo que no rinde es prenderlo: cuesta **784.672
+            // opcodes interpretados contra 73.743** del intrínseco de Rust, 10,6× más trabajo.
             //
-            // La razón por la que no compensa no es de este archivo: el `concat` spinado **aloca**
-            // (el `StringBuilder` y el `String`), y un callee que aloca mantiene su registro en cero
-            // porque su log vive en su propia región del buffer y sólo se replaya el de la raíz. Con
-            // lo cual `run` compila, emite la llamada nativa, y **rebota**: 11.821 deopts sobre
-            // 13.825 llamadas.
+            // **La primera explicación era que el `concat` rebotaba por alocar** — un callee que
+            // aloca no podía ser llamado desde nativo, y `concat` aloca dos veces. Encajaba con la
+            // restricción documentada, así que se dio por buena. **Era una inferencia, no una
+            // medición**: se vio "aloca" y "los que alocan no son llamables" y se unieron sin
+            // comprobar que ésa fuera la causa del deopt.
             //
-            // **El disparador para volver a prenderlo es concreto: el log compartido entre frames.**
-            // Esa restricción se había medido como poco rentable (21 sitios de llamada) cuando la
-            // concatenación se resolvía en Rust y por lo tanto no competía; con la concatenación
-            // compilable, es lo único que separa a este trabajo de rendir. Cuando exista, esto es
-            // una línea: cambiar el `false` por el `get_or_load`.
+            // El log compartido levantó esa restricción y los números quedaron **idénticos**
+            // (11.821 deopts sobre 13.825), lo que la refutó. La causa real, ya medida, es otra y
+            // es de fondo:
+            //
+            // **La cadena de `StringBuilder` termina en un método `native`.** Los seis métodos de
+            // `StringBuilder` compilan, pero delegan en `AbstractStringBuilder`, y todo camino de
+            // `append` pasa por `grow` o por `getChars` — que llaman a **`System.arraycopy`**, que
+            // es `native` y por lo tanto no tiene bytecode que compilar. Un wrapper compilado que
+            // llama a un cuerpo no compilado es **peor** que no compilar ninguno de los dos: paga
+            // el cruce de frontera y no ejecuta nada nativo.
+            //
+            // Por eso esto no se destraba con trabajo de JIT. Reemplazar un intrínseco de Rust (la
+            // concatenación) por código Java que a su vez termina en otro intrínseco de Rust
+            // (`arraycopy`) cambia **un** cruce de frontera por N. Para que rindiera habría que
+            // compilar `arraycopy` —o darle a `AbstractStringBuilder` un camino que no lo use—, y
+            // eso es trabajo de VM y de biblioteca, no de acá.
+            //
+            // Prenderlo es cambiar este `false` por `get_or_load("java/lang/StringBuilder")`.
             let hay_builder = false;
             let _ = concat_factory::generate_concat_class; // el generador sigue vivo y testeado
             if !hay_builder {
@@ -358,12 +370,9 @@ pub(super) fn invokedynamic(&mut self, cp_index: u16) {
             implementation_name,
             implementation_descriptor,
         } => {
-            // Every lambda body and static method reference javac emits is a static implementation.
-            assert_eq!(
-                *implementation_kind, 6,
-                "metafactory: only REF_invokeStatic implementations are spun so far \
-                 (an instance method reference is kind {implementation_kind})"
-            );
+            // El *kind* del handle decide el opcode del reenvio, y la clase sintetica adapta el
+            // boxing de los argumentos y del retorno; lo resuelve `generate_lambda_class` (#552).
+            // Antes un `assert` cortaba todo lo que no fuera `REF_invokeStatic`.
 
             // One spun class per **call site** — stable, so a lambda created in a loop doesn't mint
             // a class per iteration. Its captured values live in each *instance* (fields), which is
@@ -378,6 +387,7 @@ pub(super) fn invokedynamic(&mut self, cp_index: u16) {
                     implementation_class,
                     implementation_name,
                     implementation_descriptor,
+                    *implementation_kind,
                     &params,
                 );
                 let class = crate::jvm::class_file::ClassFile::from_bytes(&bytes)
@@ -422,8 +432,15 @@ pub(super) fn invokedynamic(&mut self, cp_index: u16) {
             self.call_java(ctor, ctor_args, &widths);
             // The constructor is real code and can throw; a parked exception means there is no
             // object to push (the `0xba` handler delivers it instead of stepping over the call).
-            if self.threw() {
+            //
+            // Ojo con el orden: `call_java` aparca la excepcion ENCIMA del objeto estacionado, asi
+            // que un `pop` a secas sacaba la excepcion y dejaba el objeto aparcado en su lugar — el
+            // `0xba` terminaba lanzando la instancia del lambda (un `StackOverflowError` en el
+            // `<init>` salia como `Exception in thread "main" Clase$$IntSupplier$$N`). Se saca la
+            // excepcion, se descarta el objeto a medio construir y se la vuelve a aparcar.
+            if let Some(exception) = self.take_parked_exception() {
                 self.top().pop();
+                self.park_exception(exception);
             }
         }
         Bootstrap::ObjectMethods { method, record_class, components } => {

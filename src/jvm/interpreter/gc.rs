@@ -1623,8 +1623,8 @@ mod tests {
     /// stack trace into — that field is **our own convention**, and
     /// `KajiLibrary/java/lang/Throwable` declares only `message` and `cause`
     /// (COMPILER_FINDINGS #227). The VM assumed `boot/`'s shape, so **any** uncaught exception
-    /// took the whole VM down with `field_offset: field not found in the class or its
-    /// superclasses` — before printing the report it exists to print.
+    /// took the whole VM down with `field_offset: 'backtrace' is not in
+    /// 'java/lang/Throwable' …` — before printing the report it exists to print.
     ///
     /// The thread ends with no value (JVMS §2.10); what this pins is that the VM survives to say
     /// so, with or without a trace to show.
@@ -2791,6 +2791,24 @@ mod tests {
 
     #[test]
     fn method_handle_constructor() {
+        // **ROJO CONOCIDO, con una pista concreta (2026-09-06).** Los cuatro tests de
+        // `MethodHandle` fallan hoy, y una auditoría sólo pudo describirlos por sus síntomas —
+        // tres modos de falla distintos entre sí, "huele a bug de VM real".
+        //
+        // La pista salió de un experimento que **no** era sobre esto: al pre-resolver los targets
+        // estáticamente ligados antes de compilar, los cuatro **pasaron**. Y pasaron *sólo con el
+        // JIT prendido* — con `JVM_JIT=0` seguían fallando. O sea que la pre-resolución no los
+        // arreglaba: **poblaba de casualidad el mapa de métodos ya resueltos que este camino
+        // consulta**.
+        //
+        // De ahí el diagnóstico: **la resolución de `MethodHandle` depende del orden**. Busca en
+        // el mapa de lo ya resuelto en vez de resolver por sí misma, así que anda o no según quién
+        // haya corrido antes. El arreglo está en ese camino, no en el JIT.
+        //
+        // (El experimento se revirtió, y no por no servir: hacía que la suite diera **16 fallos con
+        // el JIT y 21 sin él**. Un JIT que cambia el comportamiento observable es exactamente lo
+        // que el oráculo `green ≡ os-gil ≡ os` existe para detectar.)
+        //
         // MH-d (kind 8, newInvokeSpecial): `findConstructor(Box, (int)void).invoke(42)` allocates a
         // Box, runs its `<init>`, and hands back the new object; `b.get()` → 42. Vs real `java`.
         assert_eq!(run_int("java/MHCtor.class"), 42);

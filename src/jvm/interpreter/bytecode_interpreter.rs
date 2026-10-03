@@ -20,7 +20,7 @@ use std::fmt::Write as _;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex, RwLock};
 use std::thread;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use super::apt;
 use super::frame::{Frame, Value};
@@ -186,7 +186,9 @@ pub struct GreenThread {
     pub wait_reacquire: Option<(usize, usize)>,
     /// Set while blocked in `join`: the index of the thread whose termination we await.
     pub joining_on: Option<usize>,
-    /// Set while in `sleep`: the logical step (opcode clock) at which to wake.
+    /// Set while in a timed `wait(ms)` / `join(ms)` / `parkNanos`: the logical step (opcode
+    /// clock) at which to wake. `Thread.sleep` ya no lo usa: su plazo es de reloj real y vive en
+    /// `SharedVm::sleep_real` (#296).
     pub sleep_until: Option<usize>,
     /// Set when the thread was **interrupted out of** an interruptible block
     /// (`sleep`/`join`/`wait`): on resume it throws `InterruptedException` instead of
@@ -424,6 +426,12 @@ struct SharedVm {
     /// Logical clock: opcodes executed so far. The allocation-rate trigger measures
     /// "time" in opcodes (we have no wall clock), and a safepoint is polled per step.
     steps: usize,
+    /// #296: el plazo de cada hilo dormido en `Thread.sleep`, en **reloj real** y por indice de
+    /// hilo. Va aparte de `GreenThread::sleep_until`, que sigue en pasos para `wait(ms)`,
+    /// `join(ms)` y `parkNanos`: el sleep es lo que el codigo compara con `currentTimeMillis`, y
+    /// contar pasos ahi daba un `sleep(120)` de 0 ms. Se borra la entrada en los dos caminos por
+    /// los que un sleep termina: el plazo (`expire_timed_block`) y la interrupcion.
+    sleep_real: std::collections::HashMap<usize, Instant>,
     /// The clock / used-bytes snapshot taken at the **last** collection — the
     /// baseline the automatic triggers compare against (so a GC that frees nothing
     /// doesn't re-fire every opcode).
@@ -547,6 +555,7 @@ impl JVM {
                 uncaught_entry: None,
                 gc_policy: gc::GcPolicy::from_env(),
                 steps: 0,
+                sleep_real: std::collections::HashMap::new(),
                 last_gc_step: 0,
                 last_gc_used: 0,
                 gc_requested: false,
@@ -1504,6 +1513,7 @@ impl Exec<'_> {
         // Pull it out of whatever it's parked in. For `wait`, keep `wait_reacquire` so the
         // resume re-acquires the monitor *before* throwing; just remove it from the wait-set.
         self.shared.threads[idx].sleep_until = None;
+        self.shared.sleep_real.remove(&idx);
         self.shared.threads[idx].joining_on = None;
         if let Some((obj, _)) = self.shared.threads[idx].wait_reacquire {
             if let Some(mon) = self.shared.monitors.get_mut(&obj) {
@@ -2718,17 +2728,39 @@ impl Exec<'_> {
         )
     }
 
-    /// `Thread.sleep(ms)`: park the current thread until `ms` opcode-ticks pass (our
-    /// clock is the opcode count — there's no wall clock). Other threads run meanwhile;
-    /// the sleeper is woken in `step` once the clock reaches its wake time.
+    /// `Thread.sleep(ms)`: park the current thread until `ms` **milisegundos de reloj real**
+    /// pasan (#296; antes eran pasos de opcode, y un `sleep(120)` duraba 0 ms contra
+    /// `currentTimeMillis`). Other threads run meanwhile; the sleeper is woken by
+    /// `wake_sleepers` (or, in OS mode, by its own driver) once the deadline lapses.
     fn thread_sleep(&mut self, ms: i64) -> Step {
         let current = self.running.current;
+        // #539: `sleep` es un punto de interrupcion **tambien al entrar**, con cualquier plazo
+        // (cero incluido). Si la bandera ya esta puesta, el JDK lanza `InterruptedException` y la
+        // limpia sin dormir; `thread_interrupt` solo despierta a quien ya esta bloqueado, asi que
+        // sin esto la bandera previa se ignoraba y la cancelacion se perdia. Se lanza desde el pc
+        // de la llamada (no se avanzo), para que el `try` que la envuelve la atrape.
+        let obj = self.shared.threads[current].thread_obj;
+        if obj != 0 {
+            let at = obj + objects_operations::field_offset(&mut self.shared.metaspace, "java/lang/Thread", "interrupted");
+            if self.shared.heap.read_u32(at) != 0 {
+                self.clear_interrupt_flag(current);
+                return self.throw_exception("java/lang/InterruptedException");
+            }
+        }
         // Remember the call site so an interrupt throws `InterruptedException` from here,
         // not from the (advanced) instruction after the call.
         self.shared.threads[current].block_call_pc = self.frame().pc();
         // `sleep(ms)` has a deadline — `TimedWaiting`, not `Blocked`. (This was `Blocked`.)
         self.block(current, ThreadStatus::TimedWaiting);
-        self.shared.threads[current].sleep_until = Some(self.shared.steps + ms.max(0) as usize);
+        // Un plazo negativo no llega aca: `invokestatic` lo deja caer al cuerpo Java, que lanza la
+        // `IAE` del JDK (#296). El `max(0)` queda como red, no como politica.
+        // `checked_add` por si la plataforma no representa un `Instant` tan lejano (un
+        // `sleep(Long.MAX_VALUE)`): en ese caso ~136 años hacen de "nunca".
+        let ahora = Instant::now();
+        let plazo = ahora
+            .checked_add(Duration::from_millis(ms.max(0) as u64))
+            .unwrap_or_else(|| ahora + Duration::from_secs(1 << 32));
+        self.shared.sleep_real.insert(current, plazo);
         self.advance_past_call();
         Step::Continue
     }
@@ -2759,8 +2791,8 @@ impl Exec<'_> {
     /// whole point: emulating the timeout in Java would need a second permit system, and an
     /// `unpark` (which the VM keeps) would only touch one of the two.
     ///
-    /// **The deadline is on the opcode clock**, like every other timed block in this VM
-    /// (`Thread.sleep`, `Object.wait(ms)`, `join(ms)`): there is no wall clock here. Nanoseconds
+    /// **The deadline is on the opcode clock**, like `Object.wait(ms)` and `join(ms)` (no asi
+    /// `Thread.sleep`, que desde el #296 cuenta milisegundos de reloj real). Nanoseconds
     /// come in and are read as the millisecond-equivalent tick count, with a floor of one tick for
     /// any positive request — a sub-millisecond park that returned at once would be legal (the
     /// contract allows early returns) and useless.
@@ -2813,6 +2845,7 @@ impl Exec<'_> {
     /// self-`notify`. (A plain `sleep` has no monitor and just becomes runnable.)
     fn expire_timed_block(&mut self, idx: usize) {
         self.shared.threads[idx].sleep_until = None;
+        self.shared.sleep_real.remove(&idx);
         // Un `parkNanos` que llega a su plazo deja de estar estacionado. Sin limpiar la bandera, un
         // `unpark` posterior creeria que hay a quien despertar --y llamaria a `make_runnable` sobre
         // un hilo que ya corre-- en vez de guardarle el permiso.
@@ -2843,6 +2876,31 @@ impl Exec<'_> {
         self.make_runnable(idx);
     }
 
+    /// #296: el `Thread.sleep` del hilo actual dentro de un [`Self::call_java`], que no puede
+    /// ceder: espera el plazo bloqueando y lo vence. Mientras tanto no corre ningun otro hilo --en
+    /// verde porque la llamada anidada no conmuta, en SO porque se duerme con el lock tomado--, y
+    /// por eso tampoco puede llegarle un `interrupt`: es el mismo limite que ya tenia la llamada
+    /// anidada con cualquier bloqueo, no uno nuevo.
+    fn dormir_anidado(&mut self) {
+        let current = self.running.current;
+        if let Some(&at) = self.shared.sleep_real.get(&current) {
+            let ahora = Instant::now();
+            if at > ahora {
+                thread::sleep(at - ahora);
+            }
+            self.expire_timed_block(current);
+        }
+    }
+
+    /// #296: vence el `Thread.sleep` de `idx` **solo si su plazo real ya paso**. Lo llama el driver
+    /// de SO al volver de `park_timeout`, que puede volver antes (un `unpark` espurio, o el del
+    /// `interrupt`, que ya saco al hilo y borro el plazo): en esos casos no hay nada que vencer.
+    fn expire_real_sleep_if_due(&mut self, idx: usize) {
+        if matches!(self.shared.sleep_real.get(&idx), Some(&at) if Instant::now() >= at) {
+            self.expire_timed_block(idx);
+        }
+    }
+
     /// Wakes any thread whose timed block (`sleep` or `wait(ms)`) has come due. If *every*
     /// thread is parked on a deadline (no one to advance the opcode clock), the clock jumps
     /// to the earliest wake time so the program can't deadlock on `sleep`/`wait` alone.
@@ -2853,16 +2911,33 @@ impl Exec<'_> {
                 self.shared.threads.iter().filter_map(|t| t.sleep_until).min()
             {
                 self.shared.steps = self.shared.steps.max(earliest);
+            } else if !self.shared.mode.uses_os_threads() {
+                // #296: en verde, si todos duermen en reloj real no hay nadie que corra mientras
+                // tanto, asi que el planificador espera de verdad hasta el primer plazo. (En modo
+                // SO cada hilo espera en su propio driver; dormir aca seria hacerlo con el lock.)
+                if let Some(&at) = self.shared.sleep_real.values().min() {
+                    let ahora = Instant::now();
+                    if at > ahora {
+                        thread::sleep(at - ahora);
+                    }
+                }
             }
         }
         let now = self.shared.steps;
-        let due: Vec<usize> = self
+        let mut due: Vec<usize> = self
             .shared.threads
             .iter()
             .enumerate()
             .filter(|(_, t)| matches!(t.sleep_until, Some(at) if now >= at))
             .map(|(i, _)| i)
             .collect();
+        // Los dormidos de `Thread.sleep`, contra el reloj real. Esto corre en cada paso, y leer la
+        // hora en cada uno costaba ~70% del interprete mientras hubiera un dormido (medido,
+        // `JVM_JIT=0`): se mira cada 256 pasos, o siempre que nadie mas pueda correr.
+        if !self.shared.sleep_real.is_empty() && (!any_runnable || self.shared.steps % 256 == 0) {
+            let ahora = Instant::now();
+            due.extend(self.shared.sleep_real.iter().filter(|(_, &at)| ahora >= at).map(|(&i, _)| i));
+        }
         for i in due {
             self.expire_timed_block(i);
         }
@@ -3977,6 +4052,14 @@ impl Exec<'_> {
         // can't interleave another thread in the middle of a VM-initiated call.
         while self.running.frames.len() > base {
             self.run_one();
+            // #296: un `Thread.sleep` dentro de la llamada anidada (un `<clinit>`, un
+            // `Method.invoke`, el `toString()` de una concatenacion) no puede ceder al planificador
+            // --este bucle no lo mira--, asi que se duerme aca mismo. Sin esto el metodo seguia
+            // corriendo de inmediato y la espera se hacia recien al volver, cuando lo que medía ya
+            // habia corrido. `is_empty` primero: este bucle es caliente y casi nunca hay dormidos.
+            if !self.shared.sleep_real.is_empty() {
+                self.dormir_anidado();
+            }
         }
         self.running.exception_floor.pop();
 
@@ -4519,9 +4602,13 @@ enum OsTick {
     Yield,
     /// Blocked on a monitor / join / wait: park until `unpark` (poll-capped as a backstop).
     Park,
-    /// Sleeping: in OS mode `Thread.sleep` is **real wall time** (the opcode clock can stall
-    /// when every thread is blocked), capped so tests stay quick.
+    /// A timed `wait(ms)` / `join(ms)` / `parkNanos`: in OS mode its remaining opcode-ticks are
+    /// slept as millis (the opcode clock can stall when every thread is blocked), capped so tests
+    /// stay quick. (`Thread.sleep` va por `SleepReal`.)
     Sleep(u64),
+    /// #296: dormido en `Thread.sleep`, con plazo de reloj real. El driver espera hasta ahi con
+    /// `park_timeout` --un `interrupt` lo despierta con `unpark`-- y vence el plazo solo si ya paso.
+    SleepReal(Instant),
 }
 
 /// One thread's run loop on its own OS thread. Owns a thread-local [`RunningCtx`]; locks the
@@ -4583,21 +4670,46 @@ fn os_thread_loop(shared_arc: &Arc<Mutex<SharedVm>>, idx: usize) -> Option<Value
                 // sleep done, or timed wait expired → re-acquire
                 Exec { running: &mut running, shared: &mut guard }.expire_timed_block(idx);
             }
+            OsTick::SleepReal(at) => {
+                esperar_plazo_real(at);
+                let mut guard = shared_arc.lock().unwrap();
+                Exec { running: &mut running, shared: &mut guard }.expire_real_sleep_if_due(idx);
+            }
         }
     }
 }
 
+/// #296: la espera de un `Thread.sleep` en modo SO, hasta `at` o hasta un `unpark`. Con lo que
+/// falta largo se usa `park_timeout`, que un `interrupt` corta; pero en Windows ese reloj tiene la
+/// granularidad del tick del sistema (~15 ms), y un `sleep(1)` --el sondeo de los sockets-- costaba
+/// eso cada vez. Lo corto va con `thread::sleep`, que es de alta resolucion: una interrupcion
+/// espera como mucho esos 20 ms. Puede volver antes; el llamador solo vence el plazo si ya paso.
+fn esperar_plazo_real(at: Instant) {
+    let ahora = Instant::now();
+    if at <= ahora {
+        return;
+    }
+    let falta = at - ahora;
+    if falta <= Duration::from_millis(20) {
+        thread::sleep(falta);
+    } else {
+        thread::park_timeout(falta - Duration::from_millis(10));
+    }
+}
+
 /// Classify a thread that didn't (or couldn't) run this turn: still runnable → yield;
-/// sleeping → real sleep of the remaining ticks-as-millis (capped); otherwise park.
+/// `Thread.sleep` → wait for its real deadline; other timed blocks → real sleep of the remaining
+/// ticks-as-millis (capped); otherwise park.
 fn os_block_tick(shared: &SharedVm, idx: usize) -> OsTick {
     match shared.threads[idx].status {
         ThreadStatus::Runnable => OsTick::Yield,
         // The state *is* the answer now: only a deadline state (`sleep`/`wait(ms)`) sleeps
         // for its remaining ticks-as-millis. Before, the driver peeked at `sleep_until` to
         // guess timed-ness because `sleep` and `wait(ms)` both hid under `Blocked`/`Waiting`.
-        ThreadStatus::TimedWaiting => match shared.threads[idx].sleep_until {
-            Some(at) => OsTick::Sleep((at.saturating_sub(shared.steps)).min(200) as u64),
-            None => OsTick::Park,
+        ThreadStatus::TimedWaiting => match (shared.sleep_real.get(&idx), shared.threads[idx].sleep_until) {
+            (Some(&at), _) => OsTick::SleepReal(at),
+            (None, Some(at)) => OsTick::Sleep((at.saturating_sub(shared.steps)).min(200) as u64),
+            (None, None) => OsTick::Park,
         },
         // An indefinite block — monitor contention or `wait()`/`join()` — parks until unparked.
         ThreadStatus::Blocked | ThreadStatus::Waiting => OsTick::Park,
@@ -5196,6 +5308,11 @@ fn os_parallel_loop(
                 thread::sleep(Duration::from_millis(ms));
                 let mut g = shared_arc.write().unwrap();
                 Exec { running: &mut running, shared: &mut g }.expire_timed_block(idx);
+            }
+            OsTick::SleepReal(at) => {
+                esperar_plazo_real(at);
+                let mut g = shared_arc.write().unwrap();
+                Exec { running: &mut running, shared: &mut g }.expire_real_sleep_if_due(idx);
             }
         }
     }

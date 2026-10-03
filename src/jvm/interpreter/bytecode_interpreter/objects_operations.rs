@@ -420,9 +420,16 @@ fn total_slots(fields: &[(String, String)]) -> usize {
 /// is the class named in the `FieldRef`, which may only *inherit* the field; the layout puts
 /// superclass fields first, so folding [`place_field`] over the super-first field list lands
 /// each field (and its 8-alignment padding) exactly where the object stores it.
+/// Panics **naming both**, which is not decoration: this panic's whole job is to be read once, by
+/// whoever is holding a VM that just died, and the nameless version of it ("field not found in the
+/// class or its superclasses") cost an hour on 2026-10-03. The field was `owner` and the class
+/// `java/lang/invoke/MethodHandle` — which says it immediately: the `MethodHandle` intrinsic fell
+/// back to the direct-handle path, so the vtable lookup above it had missed. Without the two names
+/// the same panic is indistinguishable from any of the ~40 other callers.
 pub fn field_offset(metaspace: &mut MetaspaceService, named_class: &str, field: &str) -> usize {
-    try_field_offset(metaspace, named_class, field)
-        .expect("field_offset: field not found in the class or its superclasses")
+    try_field_offset(metaspace, named_class, field).unwrap_or_else(|| {
+        panic!("field_offset: '{field}' is not in '{named_class}' nor in any of its superclasses")
+    })
 }
 
 /// The fallible half of [`field_offset`]: `None` when neither the class nor any superclass
@@ -776,6 +783,25 @@ pub fn atomic_cas_read(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// The panic names **both** the field and the class. What this pins is the message, not the
+    /// failure: a nameless "field not found in the class or its superclasses" is produced by any of
+    /// the ~40 callers of [`field_offset`], and on 2026-10-03 it cost an hour to find out which one
+    /// (`owner` on `java/lang/invoke/MethodHandle` — which names the cause by itself: the
+    /// `MethodHandle` intrinsic had fallen back to the direct-handle path because a vtable lookup
+    /// missed). `java/lang/Throwable` is a stable choice of victim: it declares `message` and
+    /// `cause`, and no superclass but `Object`.
+    #[test]
+    #[should_panic(expected = "'noSuchField' is not in 'java/lang/Throwable'")]
+    fn a_missing_field_panics_naming_the_field_and_the_class() {
+        use std::path::PathBuf;
+        let mut ms = MetaspaceService::new(vec![PathBuf::from("KajiLibrary")], vec![]);
+        // The fallible twin degrades on the same input instead of dying — that is the whole point
+        // of the pair (COMPILER_FINDINGS #227), and a test that only panicked would not say so.
+        assert_eq!(try_field_offset(&mut ms, "java/lang/Throwable", "noSuchField"), None);
+        assert!(try_field_offset(&mut ms, "java/lang/Throwable", "message").is_some());
+        field_offset(&mut ms, "java/lang/Throwable", "noSuchField");
+    }
 
     /// The 8-alignment rule: a `long`/`double` field always lands on an even slot, so its byte
     /// offset (`HEADER_SIZE + slot*4`, with `HEADER_SIZE` = 8) is 8-aligned — the precondition for

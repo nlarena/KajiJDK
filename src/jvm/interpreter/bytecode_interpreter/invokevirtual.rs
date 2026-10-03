@@ -449,9 +449,9 @@ impl Exec<'_> {
         args: &[Value],
     ) -> Option<SignatureId> {
         let (name, desc) = match args.first() {
-            Some(Value::Long(_)) => ("aplicarLong", "(J[J)J"),
+            Some(Value::Long(_)) => ("applyLong", "(J[J)J"),
             Some(Value::Reference(_)) => (
-                "aplicarSegmento",
+                "applySegment",
                 "(Ljava/lang/Object;J[J)Ljava/lang/foreign/MemorySegment;",
             ),
             _ => return None,
@@ -571,10 +571,28 @@ impl Exec<'_> {
             .to_string();
         let target_name = self.text_of(name_ref);
         let target_desc = self.text_of(desc_ref);
+        // Los argumentos llegan en un `Vec` de Rust (se sacaron de la pila para despachar), y el
+        // `<clinit>` del duenio es codigo real que puede alocar y disparar una minor: una variable
+        // de Rust no es raiz, asi que un argumento referencia quedaba con el offset viejo (#288;
+        // un `findStatic(...).invoke(arr)` sobre una clase con `<clinit>` que aloca leia otro
+        // arreglo). Se estacionan en la pila de operandos mientras corre la inicializacion y se
+        // releen despues, donde el GC los haya dejado.
+        let cantidad = args.len();
+        for value in args {
+            self.top().push(*value);
+        }
         self.ensure_initialized(&owner_class);
+        // Si el `<clinit>` lanzo, la excepcion quedo aparcada ENCIMA de los argumentos.
+        let excepcion = self.take_parked_exception();
+        let mut releidos: Vec<Value> = (0..cantidad).map(|_| self.top().pop()).collect();
+        releidos.reverse();
+        if let Some(exception) = excepcion {
+            self.park_exception(exception);
+        }
         if let Some(step) = self.take_pending_throw() {
             return step; // <clinit> failed → throw instead of invoking the handle target
         }
+        let args = releidos.as_slice();
 
         // kind 8 (`newInvokeSpecial`): construct. Allocate, run `<init>` to completion, hand back
         // the new object — which is the handle's result, *not* the constructor's `void`.
@@ -588,8 +606,24 @@ impl Exec<'_> {
             widths.extend(MetaspaceService::param_slot_widths(&target_desc));
             let mut init_args = vec![Value::Reference(object)];
             init_args.extend(args.iter().cloned());
-            self.call_java(ctor, init_args, &widths);
+            // **El objeto se estaciona en la pila de operandos antes de correr el `<init>`** (#288,
+            // mismo agujero que #311 en el metafactory). `object` es un offset crudo, y una variable
+            // de Rust no es raiz del GC: si el `<init>` aloca y cae una minor, el objeto se mueve y
+            // empujarlo despues empuja la direccion vieja. El sintoma era el de #288 — un
+            // `young_info[&obj]` sin la clave en `evacuate`, o un `ArrayStoreException` al guardar el
+            // resultado — y con un `<init>` que aloque fallaba en cualquier tamano de eden.
             self.top().push(Value::Reference(object));
+            self.call_java(ctor, init_args, &widths);
+            if self.threw() {
+                // La excepcion quedo aparcada ENCIMA del objeto estacionado: sacarla, sacar el
+                // objeto a medio construir y volver a aparcarla, con la pila como estaba.
+                if let Some(exception) = self.take_parked_exception() {
+                    self.top().pop();
+                    self.park_exception(exception);
+                }
+                return self.take_pending_throw().unwrap_or(Step::Continue);
+            }
+            // El resultado es el objeto, ya en la pila y releido de donde el GC lo dejo.
             self.advance_past_call();
             return Step::Continue;
         }
@@ -783,13 +817,13 @@ fn varhandle_helper(name: &str, descriptor: &str) -> Option<(String, String)> {
         // helper propio que lee y tira el resultado.
         if ret == "V" {
             return Some((
-                "leerYDescartar".to_string(),
+                "readAndDiscard".to_string(),
                 "(Ljava/lang/Object;J[J)V".to_string(),
             ));
         }
         let carrier = sufijo_carrier(ret)?;
         return Some((
-            format!("leer{carrier}"),
+            format!("read{carrier}"),
             format!("(Ljava/lang/Object;J[J){ret}"),
         ));
     }
@@ -797,7 +831,7 @@ fn varhandle_helper(name: &str, descriptor: &str) -> Option<(String, String)> {
         let ultimo = ultimo_tipo(params)?;
         let carrier = sufijo_carrier(&ultimo)?;
         return Some((
-            format!("escribir{carrier}"),
+            format!("write{carrier}"),
             format!("(Ljava/lang/Object;J[J{ultimo})V"),
         ));
     }

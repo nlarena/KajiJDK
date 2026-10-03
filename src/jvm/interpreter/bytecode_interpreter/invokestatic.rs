@@ -321,12 +321,20 @@ impl Exec<'_> {
             }
             // `Thread.sleep(ms)`: park the current thread (scheduler op) — handled here, not
             // the native bridge, since it suspends the thread.
+            //
+            // Un plazo **negativo** no se intercepta: se deja caer al cuerpo Java, que lanza la
+            // `IllegalArgumentException("timeout value is negative")` del JDK. Asi el mensaje sale
+            // de Java --la VM no sabe ponerle `detailMessage` a lo que sintetiza-- y el orden queda
+            // como en el JDK: la IAE va **antes** de mirar la bandera de interrupcion, que queda
+            // puesta (el chequeo del #539 vive en `thread_sleep` y no se llega a correr). #296.
             Intrinsic::ThreadSleep => {
                 let ms = match args.first() {
                     Some(Value::Long(v)) => *v,
                     _ => 0,
                 };
-                return self.thread_sleep(ms);
+                if ms >= 0 {
+                    return self.thread_sleep(ms);
+                }
             }
             // `Thread.yield()`: a cooperative scheduler already switches every opcode, so this is
             // a no-op beyond stepping past the call.

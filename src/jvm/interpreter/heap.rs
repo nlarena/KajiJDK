@@ -70,11 +70,31 @@ pub struct Allocation {
 
 /// Default byte size of **Eden** — where new objects are allocated. Env:
 /// `JVM_GC_EDEN_SIZE`.
-const DEFAULT_EDEN_SIZE: usize = 256;
+///
+/// **Eran 256 bytes, y eso colgaba programas enteros.** Con ese tamaño el minor se dispara cada
+/// ~190 bytes asignados: 139 colecciones por cada `Double.toString(3.0)`. Y como el survivor era de
+/// 64 B, casi todo se promovía antes de poder morir --219 objetos por llamada--, Old crecía sin parar
+/// y cada minor siguiente costaba más: el total salía **cuadrático**. `ParseTest` no terminaba.
+///
+/// Medido con 200 `Double.toString`, mismo resultado en los tres casos:
+///
+/// | eden | survivor | tiempo | GCs |
+/// |---|---|---|---|
+/// | 256 B | 64 B | 25.53 s | 27838 |
+/// | **64 KB** | **16 KB** | **0.72 s** | **115** |
+/// | 1 MB | 256 KB | 0.73 s | 7 |
+///
+/// 64 KB es la rodilla: toda la mejora, y siguen quedando colecciones de sobra para que el colector
+/// se ejercite en una corrida real (un Eden de 1 MB daba 7 en toda la prueba). Los tests que llenan
+/// Eden lo hacen contra `eden_capacity()`, no contra una constante, así que siguen valiendo.
+const DEFAULT_EDEN_SIZE: usize = 64 * 1024;
 
 /// Default byte size of **each** survivor space (`S0`, `S1`). Env:
 /// `JVM_GC_SURVIVOR_SIZE`.
-const DEFAULT_SURVIVOR_SIZE: usize = 64;
+///
+/// Un cuarto de Eden: lo bastante para que un objeto joven tenga dónde morir en vez de promoverse de
+/// prepo (ver la nota de [`DEFAULT_EDEN_SIZE`]).
+const DEFAULT_SURVIVOR_SIZE: usize = 16 * 1024;
 
 /// A reclaimed, currently-free run of bytes — a hole left by a swept object,
 /// available for reuse by a later `malloc`. The free list is the set of these.

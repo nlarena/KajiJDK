@@ -365,14 +365,25 @@ pub fn jit_static_field(
     // and how many bytes the emitted access touches. `place_field` gives a `J` two slots and starts
     // it on an even one, so its eight bytes are the pair beginning at the address computed below.
     let (kind, width) = match descriptor {
-        "I" => (crate::burst::compile::Kind::Int, SLOT_SIZE),
+        // **`B`, `C`, `S` and `Z` are `Int`s, at four bytes.** They used to be refused here on the
+        // belief that they were stored narrower; they are not. `field_slots` gives every
+        // descriptor but `J`/`D` one slot, `getstatic` reads anything that is not `F`/`L`/`[` back
+        // with `read_u32 as i32`, and `putstatic` stores a `Value::Int` with `write_u32` — so the
+        // interpreter itself holds a `byte` static exactly as it holds an `int` one, and the
+        // compiled 4-byte `movsxd`/`mov` is the same access. The instance-field resolver
+        // (`objects_operations::field_kind`) has always answered them this way.
+        //
+        // The value in the slot is already in range: javac narrows before the store (`i2b`,
+        // `i2c`, `i2s`, or a `0`/`1` for a `boolean`), and neither tier truncates at `putstatic`.
+        // That last clause is a shared property rather than a JIT one — JVMS §6.5 asks `putstatic`
+        // to mask a `boolean` with `& 1`, and the interpreter does not — so compiled code agreeing
+        // with it is the invariant this project tests, and the masking is the interpreter's to add.
+        "I" | "B" | "C" | "S" | "Z" => (crate::burst::compile::Kind::Int, SLOT_SIZE),
         "F" => (crate::burst::compile::Kind::Float, SLOT_SIZE),
         "J" => (crate::burst::compile::Kind::Long, 2 * SLOT_SIZE),
         "D" => (crate::burst::compile::Kind::Double, 2 * SLOT_SIZE),
         // A reference static: one 4-byte slot holding a heap **offset**, exactly as `putstatic`
-        // writes it (`heap.write_u32(at, r as u32)`). Every other descriptor — `B`, `C`, `S`, `Z`
-        // — is refused, not because it could not be read but because `place_field`/`write_u32`
-        // give it a width this pair has never agreed on.
+        // writes it (`heap.write_u32(at, r as u32)`).
         d if d.starts_with('L') || d.starts_with('[') => (crate::burst::compile::Kind::Reference, SLOT_SIZE),
         _ => return None,
     };
