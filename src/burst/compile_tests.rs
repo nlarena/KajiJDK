@@ -132,12 +132,20 @@ fn call_at(compiled: &CompiledCode, locals: &[i32], entry_pc: i64) -> (Outcome, 
 fn call_at_raw(compiled: &CompiledCode, locals: &[i64], entry_pc: i64) -> (Outcome, Vec<i64>) {
     let mem = ExecMem::from_code(&compiled.code).expect("map the code W^X");
     // The extra trailing slot keeps `as_mut_ptr` non-dangling for a zero-local program.
-    let mut buffer: Vec<i64> = locals.to_vec();
+    // **Un slot al frente, como el que arma `JitCache::enter`** (F3-H4). El código emitido lee el
+    // puntero al log compartido en `LOCALS - 8`; un callee lo encuentra en la región de quien lo
+    // llamó, y la raíz — que es lo que este arnés simula — en el slot que se reserva corriendo el
+    // buffer. Sin él, la primera alocación escribe fuera del `Vec` y el proceso se cae.
+    //
+    // Es exactamente el motivo por el que este arnés existe: si el contrato del buffer cambia y el
+    // arnés no lo espeja, los tests dejan de probar lo que la VM hace de verdad.
+    let mut buffer: Vec<i64> = vec![0];
+    buffer.extend_from_slice(locals);
     // **The buffer's second half.** Since F3 step 6 a deopt spills the live operand stack into the
     // slots past the locals, so the contract is `buffer_slots` long, not `max_locals` long — a
     // buffer sized the old way would be written past its end by the very first null check. The one
     // extra slot keeps `as_mut_ptr` non-dangling for a zero-local, zero-stack program.
-    buffer.resize(buffer.len().max(compiled.buffer_slots as usize) + 1, 0);
+    buffer.resize(buffer.len().max(1 + compiled.buffer_slots as usize) + 1, 0);
     // SAFETY: `compile` emits exactly one `extern "system" fn(*mut i64, i64) -> i64` at offset 0,
     // built from `x64::Frame`, restoring every non-volatile register and ending in `ret`. The
     // buffer is a live, initialised `[i64]` at least `locals.len()` long, which is the marshalling
@@ -146,17 +154,25 @@ fn call_at_raw(compiled: &CompiledCode, locals: &[i64], entry_pc: i64) -> (Outco
     let f: extern "system" fn(*mut i64, i64, i64) -> i64 = unsafe { mem.as_fn() };
     // The frame budget: generous, because no program here makes a real call. The one group that
     // does builds its own harness, where the number is the thing under test.
-    let raw = f(buffer.as_mut_ptr(), entry_pc, 16);
+    // El puntero al log compartido apunta al área de alocación de esta (única) región, y el
+    // buffer que ve el código arranca un slot adentro.
+    let log_addr = unsafe { buffer.as_mut_ptr().add(1 + compiled.alloc_base as usize) } as i64;
+    buffer[0] = log_addr;
+    let raw = f(unsafe { buffer.as_mut_ptr().add(1) }, entry_pc, 16);
     // The boundary contract in one line: the status word says *how* it ended, and the result slot
     // holds *what* it handed back. Reading them together here is what keeps every assertion below
     // reading as one fact.
     let outcome = match Status::unpack(raw) {
-        RawOutcome::Returned => Outcome::Returned(buffer[compiled.result_base as usize]),
+        RawOutcome::Returned => Outcome::Returned(buffer[1 + compiled.result_base as usize]),
         RawOutcome::Deopt(key) => Outcome::Deopt(key),
         RawOutcome::Safepoint(key) => Outcome::Safepoint(key),
         RawOutcome::AllocFailed(key) => Outcome::AllocFailed(key),
     };
-    (outcome, buffer)
+    // **Se devuelve la vista que ve el código compilado**, sin el slot del puntero. Así cada
+    // aserción de abajo indexa por el número que aparece en `CompiledCode` —`result_base`,
+    // `stack_base`, el `link` de una llamada— y no por ése más uno. El corrimiento es un detalle
+    // del arnés y muere acá.
+    (outcome, buffer[1..].to_vec())
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -266,22 +282,28 @@ fn caller_calling(
 /// chain of these calls can stack up.
 fn call_native(caller: &CompiledCode, callee: &Called, locals: &[i64], budget: i64) -> (Outcome, Vec<i64>) {
     let mem = ExecMem::from_code(&caller.code).expect("map the caller W^X");
-    let mut buffer: Vec<i64> = locals.to_vec();
+    // El slot del puntero al log compartido va primero, igual que en `call_at_raw` y en
+    // `JitCache::enter`: el código emitido lo lee en `LOCALS - 8`.
+    let mut buffer: Vec<i64> = vec![0];
+    buffer.extend_from_slice(locals);
     // The caller's whole region, then one per level below it — generously, since the deepest chain
     // here is three and the assertions index only the first two regions.
     let need = 4 * (caller.buffer_slots as usize + callee.compiled.buffer_slots as usize) + 8;
-    buffer.resize(buffer.len().max(need), 0);
+    buffer.resize(buffer.len().max(1 + need), 0);
     // SAFETY: as `call_at_raw`, plus the second region a real call writes into — which is why the
     // buffer is sized for a whole chain of compilations rather than for one.
     let f: extern "system" fn(*mut i64, i64, i64) -> i64 = unsafe { mem.as_fn() };
-    let raw = f(buffer.as_mut_ptr(), 0, budget);
+    let log_addr = unsafe { buffer.as_mut_ptr().add(1 + caller.alloc_base as usize) } as i64;
+    buffer[0] = log_addr;
+    let raw = f(unsafe { buffer.as_mut_ptr().add(1) }, 0, budget);
     let outcome = match Status::unpack(raw) {
-        RawOutcome::Returned => Outcome::Returned(buffer[caller.result_base as usize]),
+        RawOutcome::Returned => Outcome::Returned(buffer[1 + caller.result_base as usize]),
         RawOutcome::Deopt(key) => Outcome::Deopt(key),
         RawOutcome::Safepoint(key) => Outcome::Safepoint(key),
         RawOutcome::AllocFailed(key) => Outcome::AllocFailed(key),
     };
-    (outcome, buffer)
+    // Como en `call_at_raw`: se devuelve la vista del código, sin el slot del puntero.
+    (outcome, buffer[1..].to_vec())
 }
 
 /// The site a real call comes back through when its callee could not finish.
@@ -2579,20 +2601,25 @@ fn the_write_back_says_nothing_at_all_about_a_conflicted_slot() {
 }
 
 #[test]
-fn a_conflict_inside_an_inlined_callee_refuses_the_compilation() {
-    // **The frames inlining removed get no skip, and this is the test that says so out loud.**
+fn a_conflict_inside_an_inlined_callee_compiles_and_names_the_dead_slot() {
+    // **The frames inlining removed get no skip — but they do get an answer.**
     //
     // The root frame exists already, so a conflicted slot in it can be left alone. An *inlined*
     // frame does not exist at all until a deopt materialises it, so every one of its slots has to
-    // be written — and `Conflict` is precisely the kind that has nothing to write. There is no
-    // third answer, so the whole compilation is refused, which is the same answer step 8 gave every
-    // method with a conflict anywhere in it.
+    // be written. This test used to say that `Conflict` has nothing to write, that there is no
+    // third answer, and that the compilation is therefore refused whole.
     //
-    // It matters that this is a **compile-time** refusal rather than a run-time one. Before step 9
-    // the equivalent case was a `debug_assert!(false)` inside `JitCache::resume_state` whose
-    // release behaviour was to return `None` — "the JIT declined", *after* native code had run and
-    // written to the heap, which would have made the interpreter re-run the method and apply every
-    // one of those writes twice. A compilation that is never installed cannot do that.
+    // **The third answer turned up later, in this same code base.** When real calls landed, the
+    // root frame of a *called* compilation became a frame that does not exist yet either, and
+    // `JitValue::of_frame` writes both untypable kinds back as `Int(0)`: an `Opaque` slot holds the
+    // zero the call put there, a `Conflict` slot is dead, and neither answer can fabricate a
+    // reference. An expansion zeroes the callee's non-argument slots exactly as a call does, so the
+    // argument transfers word for word — and refusing here was costing the census methods whose only
+    // fault was a javac-reused slot in an inlined callee.
+    //
+    // What the old test also said still holds, and is why the answer lives in the type map rather
+    // than at run time: the reconstruction on the far side stays **total**. A compilation is still
+    // refused if an *operand* is untypable, because an operand has neither a skip nor an answer.
     //
     // The callee is the same program as the group above, plus a guard: an `idiv` after the merge,
     // which is a resume site at a pc where slot 2 is conflicted.
@@ -2657,9 +2684,24 @@ fn a_conflict_inside_an_inlined_callee_refuses_the_compilation() {
     assert_eq!(call_at(&ok, &[4, 264], 0).0, Outcome::Returned(25));
     assert!(matches!(call_at(&ok, &[0, 264], 0).0, Outcome::Deopt(_)), "a zero divisor still deopts");
 
-    // And with the conflict, at the *site*, the compilation is refused whole.
-    let err = inlining(&conflicted, 3).unwrap_err();
-    assert!(matches!(err, Ineligible::Unrebuildable { .. }), "{err:?}");
+    // And with the conflict at the site it compiles too, runs, and still deopts on a zero divisor.
+    let compiled = inlining(&conflicted, 3).expect("a conflicted slot in an inlined frame is dead, not unrebuildable");
+    assert_eq!(call_at(&compiled, &[4, 264], 0).0, Outcome::Returned(25));
+    assert!(matches!(call_at(&compiled, &[0, 264], 0).0, Outcome::Deopt(_)), "a zero divisor still deopts");
+    // **What the resume map hands back for that frame**: the two arguments, and slot 2 as the
+    // conflict it is — `Int` on the fall-through path, `Reference` after `astore_2`. The interpreter
+    // side writes it as `Int(0)` (`JitValue::of_frame`); this pins that the kind reaching it is the
+    // honest one and not a guess.
+    let guard = compiled
+        .resume_sites
+        .iter()
+        .find(|site| !site.inlined.is_empty())
+        .expect("the `idiv` inside the callee is a resume site with one inlined frame");
+    assert_eq!(
+        guard.inlined[0].locals.iter().map(|&(_, kind)| kind).collect::<Vec<_>>(),
+        vec![Kind::Int, Kind::Reference, Kind::Conflict],
+        "the callee's frame at its guard: two arguments and one dead slot"
+    );
 }
 
 #[test]
@@ -3143,11 +3185,7 @@ fn new_bumps_eden_writes_the_header_and_logs_the_object() {
     assert_eq!(compiled.alloc_records, super::compile::ALLOC_LOG_RECORDS, "the method allocates");
     // The result slot sits between the last body's region and the log — see the boundary contract.
     assert_eq!(compiled.result_base, compiled.stack_base + compiled.stack_slots);
-    // **Y entre los dos va el puntero al log compartido** (F3-H4): una compilación que aloca tiene
-    // un log que compartir, así que reserva el slot por el que ese log viaja hacia sus callees. Una
-    // que no aloca, no escribe referencias y no llama a nadie no lo paga — de ahí que este número
-    // sea `+2` acá y siga siendo `+1` en los tests de métodos simples.
-    assert_eq!(compiled.alloc_base, compiled.result_base + 2);
+    assert_eq!(compiled.alloc_base, compiled.result_base + 1);
 
     let (outcome, buffer) = call_at(&compiled, &[0, 0], 0);
     // The first object starts at arena-local 0, i.e. the heap offset `NULL_PAGE` — and it is a
@@ -4080,8 +4118,8 @@ fn the_stack_shuffles_refuse_a_category_2_value() {
     // JVMS defines all ten shuffles in **slots**, while this map and the interpreter both count
     // *entries* — a `Value::Long` is one. So "the top two slots" is one entry or two depending on
     // what is in them, and there is no opcode-level way to tell. Rather than re-derive the shape,
-    // every shuffle over a category-2 value is refused.
-    for op in [POP, 0x58, DUP, 0x5a, 0x5b, 0x5c, 0x5d, 0x5e, SWAP] {
+    // every shuffle over a category-2 value is refused — **but `pop2`**, which has its own test.
+    for op in [POP, DUP, 0x5a, 0x5b, 0x5c, 0x5d, 0x5e, SWAP] {
         let code = [LCONST_1, LCONST_1, LCONST_1, LCONST_1, op, LCONST_0, LRETURN];
         assert!(
             matches!(compile_long(&code, 0, "()J", &[]), Err(Ineligible::WrongType { .. })),
@@ -4090,6 +4128,31 @@ fn the_stack_shuffles_refuse_a_category_2_value() {
     }
     // The control that keeps this from being a blanket ban: `pop2` over two `int`s still compiles.
     assert_eq!(run_long(&[ICONST_1, ICONST_1, 0x58, LCONST_1, LRETURN], &[], "()J", &[]), Some(1));
+}
+
+#[test]
+fn pop2_drops_one_category_2_value_or_two_category_1_ones() {
+    // **Its two readings, told apart by the kind on top**, and one program per reading that the
+    // other reading cannot run. Over `[1L, 0L]` the top is category-2: taking two entries leaves
+    // nothing for `lreturn`. Over `[1L, 2, 3]` the top is category-1: taking one entry leaves an
+    // `int` where `lreturn` wants a `long`. The first is the shape javac emits to discard a returned
+    // `long` or `double`.
+    //
+    // (A first version used `[1, 0L]` for the second reading, and a sabotage that always took one
+    // entry passed it — its top is a `long`, so one entry *is* the right answer there. It stays as
+    // the mixed case it actually is: a category-1 value under a category-2 one survives the pop.)
+    assert_eq!(run_long(&[LCONST_1, LCONST_0, 0x58, LRETURN], &[], "()J", &[]), Some(1));
+    assert_eq!(run_long(&[LCONST_1, ICONST_1, ICONST_1, 0x58, LRETURN], &[], "()J", &[]), Some(1));
+    assert_eq!(run_long(&[ICONST_1, LCONST_0, 0x58, I2L, LRETURN], &[], "()J", &[]), Some(1));
+    // And the form JVMS does not have: a category-1 value on top of a category-2 one. Reading the
+    // top as category-1 means taking the `long` as the second half, which `pop_any` refuses.
+    assert!(
+        matches!(
+            compile_long(&[LCONST_1, ICONST_1, 0x58, LCONST_0, LRETURN], 0, "()J", &[]),
+            Err(Ineligible::WrongType { .. })
+        ),
+        "`[long, int]` is not a `pop2` form and must be refused"
+    );
 }
 
 #[test]

@@ -180,9 +180,11 @@ impl JitValue {
         }
     }
 
-    /// The same read, for a kind that is **known to name a value** — every operand-stack position
-    /// and every slot of an inlined frame, both guaranteed by [`compile`]'s rebuildability check
-    /// ([`Ineligible::Unrebuildable`][crate::burst::compile::Ineligible::Unrebuildable]).
+    /// The same read, for a kind that is **known to name a value** — every operand-stack position,
+    /// guaranteed by [`compile`]'s rebuildability check
+    /// ([`Ineligible::Unrebuildable`][crate::burst::compile::Ineligible::Unrebuildable]). An inlined
+    /// frame's locals used to be under that guarantee too; they go through
+    /// [`of_frame`][JitValue::of_frame] now, which has an answer for the two kinds that name no value.
     ///
     /// This exists so those two call sites have no `None` arm to invent a fallback for. The old
     /// shape returned `Option` everywhere and its callers answered a `None` with "the JIT declined"
@@ -225,7 +227,7 @@ impl JitValue {
             _ => match JitValue::of(kind, raw) {
                 Some(value) => value,
                 None => {
-                    unreachable!("compile refuses a resume site whose operands or inlined frames are untypable")
+                    unreachable!("compile refuses a resume site whose operands are untypable")
                 }
             },
         }
@@ -774,6 +776,22 @@ impl JitCache {
     /// `max_locals` is the callee's, and sizes the scratch buffer. A compile error, or a failure to
     /// map the pages, leaves the method permanently interpreted — the pessimistic entry
     /// `on_entry` already wrote.
+    /// **Cuántos slots del scratch van ANTES del buffer que ve el código compilado** (F3-H4).
+    ///
+    /// Uno, y es el que lleva el puntero al **log compartido**. El código emitido lo lee en
+    /// `LOCALS - 8`: para un callee ese slot es el último de la región de quien lo llamó, pero la
+    /// raíz no tiene a nadie arriba, así que se lo provee acá corriendo el buffer un lugar.
+    ///
+    /// Existe como constante y con accesor propio en vez de un `+ 1` repartido por veinte
+    /// indexaciones porque olvidarse de uno **no falla ruidosamente**: desplaza una lectura del
+    /// deopt y devuelve el valor del slot vecino, que es un número plausible.
+    const PRE: usize = 1;
+
+    /// Lee el slot `i` **del buffer que ve el código compilado**.
+    fn cell(&self, i: usize) -> i64 {
+        self.scratch[Self::PRE + i]
+    }
+
     pub fn install(&mut self, key: usize, result: Result<CompiledCode, Ineligible>, max_locals: usize) {
         let Ok(compiled) = result else { return };
         let Ok(native) = native::Native::map(&compiled.code) else { return };
@@ -791,14 +809,23 @@ impl JitCache {
         let slots = compiled.buffer_slots as usize;
         let native_sites = compiled.native_sites as usize;
         let room = slots.saturating_mul(Self::NATIVE_FRAME_BUDGET + 1);
-        self.scratch.resize(self.scratch.len().max(room).max(1), 0);
-        // **The record a compiled caller jumps through.** Filled here and never again — but only
-        // when this code is one a native caller may enter, which means carrying **no logs**: the
-        // allocation and write-barrier records live in this compilation's own buffer region, and
-        // only the *outermost* excursion's are replayed by `enter`, so an object allocated in a
-        // nested frame would be one the collector never hears about. A callee that allocates
-        // therefore keeps `code` at zero and is called by the interpreter alone.
-        if compiled.alloc_records == 0 && compiled.barrier_records == 0 {
+        self.scratch.resize(self.scratch.len().max(Self::PRE + room).max(Self::PRE + 1), 0);
+        // **The record a compiled caller jumps through.** Filled here and never again — y desde
+        // el **log compartido** (F3-H4) se llena para *toda* compilación, sin condición.
+        //
+        // Hasta ahora decía: sólo si este código **no lleva logs**, porque los registros de
+        // alocación y de barrier vivían en la región de cada compilación y `enter` replicaba sólo
+        // los de la más externa — así que un objeto alocado en un frame anidado era uno que el
+        // colector nunca conocía. Un callee que alocaba se quedaba con `code` en cero y lo llamaba
+        // únicamente el intérprete.
+        //
+        // **Esa premisa dejó de ser cierta.** Ahora todos los frames de la cadena anotan en el
+        // mismo log —el de la raíz, alcanzado por el puntero que viaja en `LOCALS - 8`— y es ése
+        // el que `enter` vacía al entrar y replica al salir. No hay registros que se pierdan,
+        // porque no hay más de un log donde perderlos. Levantar la condición es el punto de todo
+        // el hito: lo que estaba afuera eran justamente los métodos que alocan o guardan
+        // referencias, que en Java real son la mayoría.
+        {
             let mut records = self.records.borrow_mut();
             let record = records.entry(key).or_default();
             record.code = native.address();
@@ -936,9 +963,10 @@ impl JitCache {
     ///
     /// So the two ways it used to be able to fail were closed rather than handled:
     ///
-    ///  - an operand or an inlined frame with an untypable kind is refused at **compile** time
+    ///  - an operand with an untypable kind is refused at **compile** time
     ///    ([`Ineligible::Unrebuildable`][crate::burst::compile::Ineligible::Unrebuildable]), so such
-    ///    a compilation is never installed;
+    ///    a compilation is never installed. An inlined frame's *locals* are not refused: they are
+    ///    written back through [`JitValue::of_frame`], which has an answer for both untypable kinds;
     ///  - `key` and `site_key` name an entry this cache installed and a site that entry declared —
     ///    the site key is an immediate *this compiler wrote into the stub that just returned it*.
     ///    A miss is memory corruption or a compiler bug, and the honest response to either is to
@@ -953,13 +981,13 @@ impl JitCache {
         let locals = touched
             .iter()
             .zip(&site.locals)
-            .filter_map(|(&i, &kind)| JitValue::of(kind, self.scratch[i as usize]).map(|value| (i, value)))
+            .filter_map(|(&i, &kind)| JitValue::of(kind, self.cell(i as usize)).map(|value| (i, value)))
             .collect();
         let stack = site
             .stack
             .iter()
             .enumerate()
-            .map(|(k, &kind)| JitValue::of_value(kind, self.scratch[stack_base + k]))
+            .map(|(k, &kind)| JitValue::of_value(kind, self.cell(stack_base + k)))
             .collect();
         // **The frames inlining removed** (step 8). Each carries the buffer slot of every value it
         // needs, so this is a read rather than a layout calculation — where a frame's locals and
@@ -977,13 +1005,16 @@ impl JitCache {
         site.inlined
             .iter()
             .map(|frame| {
-                let read =
-                    |&(slot, kind): &(u32, Kind)| JitValue::of_value(kind, self.scratch[base + slot as usize]);
+                let cell = |slot: u32| self.cell(base + slot as usize);
                 VirtualState {
                     unit: frame.unit,
                     pc: frame.pc,
-                    locals: frame.locals.iter().map(read).collect(),
-                    stack: frame.stack.iter().map(read).collect(),
+                    // Locals through `of_frame`: this frame does not exist yet, so an `Opaque` slot is
+                    // the zero the expansion wrote and a `Conflict` one is dead (see
+                    // `ResumeSite::is_rebuildable`). Operands have no such answer, and `compile`
+                    // refuses a site where one is untypable.
+                    locals: frame.locals.iter().map(|&(slot, kind)| JitValue::of_frame(kind, cell(slot))).collect(),
+                    stack: frame.stack.iter().map(|&(slot, kind)| JitValue::of_value(kind, cell(slot))).collect(),
                 }
             })
             .collect()
@@ -1007,7 +1038,7 @@ impl JitCache {
     /// of — see [`JitCache::NATIVE_FRAME_BUDGET`].
     fn linked(&self, site: &ResumeSite, base: usize, buffer_slots: usize, out: &mut Vec<VirtualState>) -> usize {
         let Some(link) = site.native else { return 0 };
-        let raw = self.scratch[base + link.link as usize];
+        let raw = self.cell(base + link.link as usize);
         let sub_key = raw as u32;
         let sub_base = base + buffer_slots;
         let Some(Entry::Compiled { resume, stack_base, buffer_slots: sub_slots, .. }) =
@@ -1027,13 +1058,13 @@ impl JitCache {
                 .frame_locals
                 .iter()
                 .enumerate()
-                .map(|(i, &kind)| JitValue::of_frame(kind, self.scratch[sub_base + i]))
+                .map(|(i, &kind)| JitValue::of_frame(kind, self.cell(sub_base + i)))
                 .collect(),
             stack: sub
                 .stack
                 .iter()
                 .enumerate()
-                .map(|(k, &kind)| JitValue::of_value(kind, self.scratch[sub_base + stack_base + k]))
+                .map(|(k, &kind)| JitValue::of_value(kind, self.cell(sub_base + stack_base + k)))
                 .collect(),
         });
         out.extend(self.expanded(sub, sub_base));
@@ -1127,10 +1158,10 @@ impl JitCache {
         let result_base = *result_base;
         let (alloc_base, alloc_records) = (*alloc_base, *alloc_records);
         let (barrier_base, barrier_records) = (*barrier_base, *barrier_records);
-        debug_assert!(self.scratch.len() >= *slots, "the scratch buffer was sized at install time");
+        debug_assert!(self.scratch.len() >= Self::PRE + *slots, "the scratch buffer was sized at install time");
         for &i in touched {
             match local(i) {
-                Some(v) => self.scratch[i as usize] = v,
+                Some(v) => self.scratch[Self::PRE + i as usize] = v,
                 // A slot the code reads holds something that is not an `int` (an unused `this`,
                 // say, that turned out to be used). Fall back rather than reinterpret it.
                 None => {
@@ -1147,14 +1178,14 @@ impl JitCache {
         // objects that no longer exist — and after a collection has recycled Eden, that is a
         // reference to nothing at all logged as live.
         if alloc_records > 0 {
-            self.scratch[alloc_base] = 0;
+            self.scratch[Self::PRE + alloc_base] = 0;
         }
         // The barrier log starts empty for the same reason, with a different failure mode behind
         // it: a stale count would replay pairs from the previous excursion, and after a collection
         // has moved things those are two offsets that no longer name what they named — a holder
         // remembered for a store that is not there.
         if barrier_records > 0 {
-            self.scratch[barrier_base] = 0;
+            self.scratch[Self::PRE + barrier_base] = 0;
         }
         // SAFETY: `scratch` is a live, initialised `Vec<i64>` of at least `locals` elements (sized
         // in `install`, and every index in `touched` is `< max_locals` by construction — `compile`
@@ -1167,21 +1198,30 @@ impl JitCache {
         // for. Clamping is not a correctness compromise — a site that cannot pay hands the call
         // back to the interpreter, which counts frames exactly.
         let budget = headroom.min(Self::NATIVE_FRAME_BUDGET) as i64;
-        let raw = unsafe { native.call(self.scratch.as_mut_ptr(), entry_pc as i64, budget) };
+        // **El puntero al log compartido, para la raíz** (F3-H4). El código emitido lo lee en
+        // `LOCALS - 8`; un callee encuentra ahí el último slot de quien lo llamó, y la raíz lo
+        // encuentra acá porque el buffer que se le pasa arranca `PRE` slots adentro del `scratch`.
+        //
+        // Apunta al **log de esta excursión**, que es el de la raíz: el primer slot de su área de
+        // alocación. Toda la cadena de frames nativos va a anotar ahí, que es de lo que se trata.
+        let log_addr = unsafe { self.scratch.as_mut_ptr().add(Self::PRE + alloc_base) } as i64;
+        self.scratch[Self::PRE - 1] = log_addr;
+        let buffer = unsafe { self.scratch.as_mut_ptr().add(Self::PRE) };
+        let raw = unsafe { native.call(buffer, entry_pc as i64, budget) };
         // **Before anything else**, and on every outcome: replay what native code allocated into the
         // heap's pending log. This is the fourth quarter of an Eden allocation (see the `new` arm in
         // `compile`), deferred exactly as far as it can be and no further — the interpreter has not
         // run an opcode since the call returned, so no collection has had a chance to look at a heap
         // holding objects it does not know about.
         if alloc_records > 0 {
-            let count = (self.scratch[alloc_base] as usize).min(alloc_records);
+            let count = (self.cell(alloc_base) as usize).min(alloc_records);
             debug_assert!(
-                self.scratch[alloc_base] as usize <= alloc_records,
+                self.cell(alloc_base) as usize <= alloc_records,
                 "compiled code logged more allocations than the buffer holds"
             );
             for r in 0..count {
                 let at = alloc_base + 1 + 2 * r;
-                allocated(self.scratch[at] as usize, self.scratch[at + 1] as usize);
+                allocated(self.cell(at) as usize, self.cell(at + 1) as usize);
             }
         }
         // **And the write barrier, on the same terms and in the same window.** Compiled code wrote
@@ -1195,14 +1235,14 @@ impl JitCache {
         // wrong is to keep too little — which is why the emitted inequalities are written the same
         // way round as the VM's.
         if barrier_records > 0 {
-            let count = (self.scratch[barrier_base] as usize).min(barrier_records);
+            let count = (self.cell(barrier_base) as usize).min(barrier_records);
             debug_assert!(
-                self.scratch[barrier_base] as usize <= barrier_records,
+                self.cell(barrier_base) as usize <= barrier_records,
                 "compiled code logged more reference stores than the buffer holds"
             );
             for r in 0..count {
                 let at = barrier_base + 1 + 2 * r;
-                remembered(self.scratch[at] as usize, self.scratch[at + 1] as usize);
+                remembered(self.cell(at) as usize, self.cell(at + 1) as usize);
             }
         }
         match Status::unpack(raw) {
@@ -1216,7 +1256,7 @@ impl JitCache {
                 // hand the interpreter whatever the previous excursion left there.
                 true => Some(OsrResult::Returned(None)),
                 false => {
-                    let raw = self.scratch[result_base];
+                    let raw = self.cell(result_base);
                     Some(OsrResult::Returned(Some(JitValue::of_value(returns, raw))))
                 }
             },

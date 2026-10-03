@@ -18,7 +18,7 @@
 //! | conversions & compares | `i2l`, `l2i`, `i2f`, `i2d`, `l2f`, `l2d`, `f2d`, `d2f`; `lcmp`, `fcmpl`, `fcmpg`, `dcmpl`, `dcmpg` |
 //! | give-up-and-resume | `frem`, `drem` — compiled to an unconditional deopt, since SSE has no scalar remainder; `athrow`, `monitorenter`, `monitorexit` — the same shape, for the reasons in "Group 5" below |
 //! | control flow | `if_icmp<cond>`, `if<cond>`, `if_acmpeq`, `if_acmpne`, `ifnull`, `ifnonnull`, `goto`, `tableswitch`, `lookupswitch` |
-//! | stack | `nop`, `pop`, `pop2`, `dup`, `dup_x1`, `dup_x2`, `dup2`, `dup2_x1`, `dup2_x2`, `swap` — **category-1 operands only** |
+//! | stack | `nop`, `pop`, `pop2`, `dup`, `dup_x1`, `dup_x2`, `dup2`, `dup2_x1`, `dup2_x2`, `swap` — **category-1 operands only**, except `pop2`, which also drops one category-2 value |
 //! | heap (read) | `getstatic` **of any primitive or reference, in an already-initialised class**; `getfield` **of any primitive or reference**, `volatile` included; `arraylength`; `iaload`; `aaload` |
 //! | heap (write) | `putstatic` and `putfield` under the same conditions as their reading twins, **references included** — a reference `putfield` carries the deferred write barrier ([`CompiledCode::barrier_base`]), a reference `putstatic` owes none; `iastore`; `aastore` **of a site whose array class the interpreter has profiled**, guarded on exact classes ([`ArrayStore`]) |
 //! | type checks | `checkcast` and `instanceof` — **exact class or deopt**, and `null` never deopts |
@@ -279,11 +279,17 @@
 //!
 //! **The `long` step is where it came back, and the answer is a refusal.** A `Value::Long` is one
 //! entry on the interpreter's operand stack and one position in this map (see [`Kind::Long`]), so
-//! "the top two slots" is one position or two depending on what is in them. Rather than re-derive
-//! the shape from the type map for six opcodes, [`State::pop_any`] refuses **any** shuffle over a
-//! category-2 value and the method is not compiled. It is conservative and nearly free: the shapes
-//! `javac` emits a `dup2` for are compound assignments to `long` array elements and fields, and
-//! `laload`/`lastore` are outside the subset anyway.
+//! "the top two slots" is one position or two depending on what is in them. [`State::pop_any`]
+//! refuses a shuffle over a category-2 value and the method is not compiled.
+//!
+//! **Except `pop2`**, and the exception was measured into existence. The refusal was sold as
+//! nearly free, on the grounds that `javac` emits the shape-dependent forms for compound
+//! assignments to `long` array elements and fields. It missed the commonest one: a call whose
+//! `long` or `double` result is thrown away is `invokestatic …J; pop2`, and that was **14 of the
+//! census's 17 `StackUnderflow` refusals** — reported as underflow rather than as a type refusal,
+//! because the decoder declared two pops and the stack held one entry. `pop2` is also the cheap
+//! case: it emits nothing, so the type map reading the kind on top is the whole of the change.
+//! The `dup` forms would need the emitter to read it too, and none of them appeared.
 //!
 //! ## `tableswitch` / `lookupswitch`
 //!
@@ -1432,8 +1438,10 @@ impl Kind {
     ///
     /// The two negative cases are different claims with the same consequence: `Opaque` says
     /// compiled code never wrote the slot, `Conflict` says two paths wrote it differently. Where a
-    /// value may be *skipped* (the root frame's locals) both are skipped; where it may not (an
-    /// operand, an inlined frame's slot) both make the site unrebuildable and the method ineligible.
+    /// value may be *skipped* (the root frame's locals) both are skipped; where the frame does not
+    /// exist yet (an inlined frame's locals, or the root of a called compilation) both are written
+    /// as `Int(0)`; and where neither is possible — an **operand** — both make the site
+    /// unrebuildable and the method ineligible.
     pub fn names_a_value(self) -> bool {
         matches!(
             self,
@@ -2403,14 +2411,18 @@ pub enum Ineligible {
     /// where a conflict is still this error — see [`State::join_from`] for why the walk cannot prove
     /// the slot dead there.
     TypeMismatch { pc: usize },
-    /// A [`ResumeSite`] carries a value the interpreter could not put back: an operand-stack
-    /// position or an **inlined frame's** slot whose kind is [`Kind::Opaque`] or
-    /// [`Kind::Conflict`], neither of which names a `Value`.
+    /// A [`ResumeSite`] carries a value the interpreter could not put back: an **operand-stack**
+    /// position whose kind is [`Kind::Opaque`] or [`Kind::Conflict`], neither of which names a
+    /// `Value`.
     ///
-    /// Unlike the root frame's locals, these have no skip: an operand's position is its identity,
-    /// and an inlined frame does not exist yet, so every one of its slots has to be written. A
-    /// compilation with such a site is refused **here**, at compile time, which is what makes the
-    /// reconstruction on the other side of the boundary total — see [`CompiledCode::resume_sites`].
+    /// An operand has no skip — its position is its identity — and no stand-in either, since it is
+    /// live by definition. A compilation with such a site is refused **here**, at compile time,
+    /// which is what makes the reconstruction on the other side of the boundary total — see
+    /// [`CompiledCode::resume_sites`].
+    ///
+    /// **It used to cover an inlined frame's locals too**, and no longer does: an inlined frame does
+    /// not exist yet, so its slots have to be written, but for both untypable kinds there is a value
+    /// to write — see [`ResumeSite::is_rebuildable`].
     Unrebuildable { key: u32 },
     /// An opcode was handed the wrong kind: an `iload` of a slot holding a reference, an `iadd` on
     /// one, an `areturn` in a method whose descriptor returns an `int`. Verified bytecode never
@@ -2628,18 +2640,22 @@ pub struct NativeSite {
 }
 
 impl ResumeSite {
-    /// Whether the interpreter can rebuild **all** of this site: every operand and every slot of
-    /// every inlined frame names a `Value`.
+    /// Whether the interpreter can rebuild **all** of this site: every operand, in every frame,
+    /// names a `Value`.
     ///
-    /// The root frame's [`locals`][ResumeSite::locals] are deliberately not checked — they are the
-    /// one part with a legitimate skip. Checked at the end of [`compile`], so a compilation that
-    /// would fail here is never handed out; see [`Ineligible::Unrebuildable`].
+    /// **Locals are not checked, in any frame.** The root frame's [`locals`][ResumeSite::locals]
+    /// have a legitimate *skip*: the interpreter is holding that frame, and its existing `Value` is
+    /// the fallback. An inlined frame's locals have a legitimate *answer* instead: the expansion
+    /// wrote the arguments and zeroed every other slot, so an `Opaque` slot still holds that zero,
+    /// and a `Conflict` slot is dead. Those are the two facts `JitValue::of_frame` already wrote
+    /// back as `Int(0)` for the root of a called compilation, and an inlined frame is the same
+    /// thing — a frame that does not exist yet. Operands have neither a skip nor an answer.
+    ///
+    /// Checked at the end of [`compile`], so a compilation that would fail here is never handed out;
+    /// see [`Ineligible::Unrebuildable`].
     pub fn is_rebuildable(&self) -> bool {
         self.stack.iter().all(|k| k.names_a_value())
-            && self.inlined.iter().all(|frame| {
-                frame.locals.iter().all(|&(_, k)| k.names_a_value())
-                    && frame.stack.iter().all(|&(_, k)| k.names_a_value())
-            })
+            && self.inlined.iter().all(|frame| frame.stack.iter().all(|&(_, k)| k.names_a_value()))
     }
 }
 
@@ -2650,10 +2666,11 @@ impl ResumeSite {
 /// the root frame, which the interpreter is already holding, none of this exists yet: every local
 /// has to be written, not just the ones compiled code may have touched.
 ///
-/// That is why the locals here are complete and carry no `Opaque` escape hatch. The emitted call
-/// writes the arguments into the leading slots and **zeroes the rest** — the interpreter's own
-/// `Frame::reset_for_call`, restated in machine code — so every slot in this list holds a value
-/// this compilation put there.
+/// That is why the locals here are complete: there is no existing `Value` to fall back to, so a slot
+/// the type map cannot name is written rather than skipped. The emitted call writes the arguments
+/// into the leading slots and **zeroes the rest** — the interpreter's own `Frame::reset_for_call`,
+/// restated in machine code — so an `Opaque` slot holds that zero and a `Conflict` slot is dead.
+/// Both are handed back as `Int(0)` (see `JitValue::of_frame`).
 #[derive(Clone, PartialEq, Eq, Debug)]
 pub struct VirtualFrame {
     /// Which method this frame runs: the [`Unit`] the VM handed back for the inlined callee, i.e.
@@ -2816,6 +2833,11 @@ const MAX_CODE_LEN: usize = 4096;
 /// The deepest operand stack this tier maps to frame slots. `javac` emits single digits for the
 /// arithmetic this subset covers; the bound just stops a pathological class file from asking for
 /// a megabyte-deep frame.
+///
+/// It bounds two things. One body's own depth, refused in [`scan_body`]; and the **sum** over every
+/// body one compilation inlines, since each takes its own region of the native frame. The sum is
+/// spent as callees are expanded ([`expand_one`]), so running out of it turns the next site into a
+/// real call rather than refusing the method.
 const MAX_STACK_SLOTS: u16 = 64;
 
 /// How many objects **one excursion into native code** may allocate before it has to hand the
@@ -3081,10 +3103,11 @@ impl State {
     /// two readings and no opcode-level way to tell them apart; the other four are category-1 by
     /// definition and a `long` under them is unverifiable bytecode.
     ///
-    /// Rather than split the ten into "re-derive the shape from the type map" and "trust the
-    /// verifier", **every** shuffle over a category-2 value is refused. It is conservative and it
-    /// is nearly free: the shapes `javac` emits a `dup2` for are compound assignments to `long`
-    /// array elements and fields, and `laload`/`lastore` are outside the subset anyway.
+    /// Every shuffle over a category-2 value is refused here **except `pop2`**, which reads the
+    /// kind on top before calling this (see `transfer`). The exception is measured rather than
+    /// principled: discarding a `long` or `double` a call returned is `invokestatic …J; pop2`, and
+    /// it was 14 of the census's 17 `StackUnderflow`s. The `dup` forms over a category-2 value
+    /// were none of them, and they would need the emitter to read the kind as well.
     fn pop_any(&mut self, pc: usize) -> Result<Kind, Ineligible> {
         match self.stack.pop() {
             Some(kind) if kind.is_category2() => Err(Ineligible::WrongType { pc }),
@@ -3172,6 +3195,8 @@ impl State {
 /// source of truth for what each opcode consumes and produces; [`Insn::pops`]/[`Insn::pushes`] are
 /// kept alongside as an independent statement of the same shape, and the scan asserts they agree
 /// (a `debug_assert` rather than a check, because a disagreement is a compiler bug, not an input).
+/// The one instruction the decoder cannot state is `pop2`, whose depth depends on the kind on top;
+/// it decodes as its minimum and the assertion names it as the single exception.
 ///
 /// Only ever called on an instruction [`decode`] has already accepted, so every operand byte it
 /// indexes is known to be present and every local index is known to be inside `max_locals`.
@@ -3563,10 +3588,21 @@ fn transfer(
         0x57 => {
             state.pop_any(pc)?;
         }
-        0x58 => {
-            state.pop_any(pc)?;
-            state.pop_any(pc)?;
-        }
+        // `pop2` is the one shuffle whose two JVMS readings this map *can* tell apart for free:
+        // the kind on top decides. A category-2 value is one entry and is the whole of what `pop2`
+        // takes; otherwise it is two category-1 entries, and `pop_any` still refuses a category-2
+        // value in second place (`[long, int]` is not a `pop2` form at all). The verifier's stack
+        // equality at every merge is what makes "the kind on top" a property of the pc rather than
+        // of the path, and `join_from` checks that equality instead of assuming it.
+        0x58 => match state.stack.last() {
+            Some(top) if top.is_category2() => {
+                state.stack.pop();
+            }
+            _ => {
+                state.pop_any(pc)?;
+                state.pop_any(pc)?;
+            }
+        },
         0x59 => {
             let s0 = state.pop_any(pc)?;
             state.stack.extend([s0, s0]);
@@ -4418,7 +4454,7 @@ fn decode(
         // assumption the `long` step has to come back and re-examine.
         0x00 => simple(1, 0, 0), // nop
         0x57 => simple(1, 1, 0), // pop
-        0x58 => simple(1, 2, 0), // pop2
+        0x58 => simple(1, 1, 0), // pop2 — its minimum: one category-2 entry (see `transfer`)
         0x59 => simple(1, 1, 2), // dup
         0x5a => simple(1, 2, 3), // dup_x1
         0x5b => simple(1, 3, 4), // dup_x2
@@ -4627,9 +4663,12 @@ fn scan_body<'a>(method: Method<'a>, env: &Environment<'a>, inlined: bool) -> Re
         // header, what the write-back has to say about every local.
         let mut next = entry.clone();
         transfer(&mut next, method, env, pc, returns, void)?;
-        debug_assert_eq!(
-            next.stack.len(),
-            before - insn.pops as usize + insn.pushes as usize,
+        // `pop2` is the one instruction whose effect the decoder cannot state: one entry over a
+        // category-2 value, two over category-1 ones. It decodes as its minimum and the type map
+        // says which, so it is the one exception this cross-check allows.
+        debug_assert!(
+            next.stack.len() == before - insn.pops as usize + insn.pushes as usize
+                || (code[pc] == 0x58 && next.stack.len() + 2 == before),
             "the decoder and the type map disagree about the stack effect at {pc}"
         );
         state[pc] = Some(entry);
@@ -4790,9 +4829,9 @@ const MAX_INLINE_DEPTH: usize = 4;
 /// Inlining trades code size for calls, and the trade is only good while the callee is small: a
 /// getter is three bytes against a whole frame push, while a 300-byte method inlined at four sites
 /// is 1200 bytes of instruction cache bought for four calls. The budget is what makes the trade
-/// bounded rather than a judgement — a candidate that does not fit is simply not inlined, and its
-/// caller is refused (this tier has no way to *emit* a call, so "do not inline" and "do not
-/// compile" are the same answer).
+/// bounded rather than a judgement — a candidate that does not fit is simply not inlined. Since
+/// group 4 the site becomes a real call instead, whenever the VM names a record for it; before
+/// that this tier had no way to emit one, and "do not inline" meant "do not compile".
 ///
 /// It is a budget over the **total** rather than a per-callee size limit because that is the
 /// quantity that actually matters — `MAX_CODE_LEN` bounds each body, and the sum is what bounds
@@ -4901,6 +4940,7 @@ fn expand_one<'a>(
     depth: &[usize],
     count: usize,
     bytes: usize,
+    frame: u32,
     site: (usize, usize),
     callee: &Callee<'a>,
     env: &Environment<'a>,
@@ -4924,7 +4964,21 @@ fn expand_one<'a>(
     if bytes.saturating_add(callee.method.code.len()) > MAX_INLINE_BYTES {
         return Err(Ineligible::InlineBudget { pc });
     }
-    scan_body(callee.method, env, true)
+    let body = scan_body(callee.method, env, true)?;
+    // **The frame budget**, spent here like the byte budget above and refused the same way. Every
+    // expanded body takes its own region of the native operand frame, and the regions add up to
+    // [`MAX_STACK_SLOTS`]. `frame` is what the bodies already in the compilation have claimed.
+    //
+    // It used to be checked once, at the end of [`plan`], where running out refused the whole
+    // compilation. That was a leftover from before this tier could emit a call, when refusing the
+    // caller was the only answer to *any* budget; the depth and byte budgets became fallbacks with
+    // group 4 and this one did not. The census showed the cost: **170 of its 187 `TooBig`** were
+    // methods with no large body at all — `AtomTest.run` is 15 bytes — whose inline tree simply
+    // summed past 64. Refused here, the site becomes a real call and the method still compiles.
+    if frame.saturating_add(body.max_depth as u32) > MAX_STACK_SLOTS as u32 {
+        return Err(Ineligible::InlineBudget { pc });
+    }
+    Ok(body)
 }
 
 /// **All the arms of one polymorphic site, or none of them** — the scanned bodies and the inline
@@ -4938,14 +4992,19 @@ fn expand_all<'a>(
     bodies: &[Body<'a>],
     depth: &[usize],
     bytes: usize,
+    frame: u32,
     site: (usize, usize),
     alts: &[Callee<'a>],
     env: &Environment<'a>,
 ) -> Option<(Vec<Body<'a>>, usize)> {
-    let (mut out, mut spent) = (Vec::with_capacity(alts.len()), bytes);
+    // The frame is spent across the arms exactly as the bytes are: `n` copies of a body take `n`
+    // operand regions, so a chain that fitted only because its own arms were not counted would
+    // overrun the frame on the arm after it.
+    let (mut out, mut spent, mut framed) = (Vec::with_capacity(alts.len()), bytes, frame);
     for alt in alts {
-        let body = expand_one(bodies, depth, bodies.len() + out.len(), spent, site, alt, env).ok()?;
+        let body = expand_one(bodies, depth, bodies.len() + out.len(), spent, framed, site, alt, env).ok()?;
         spent = spent.saturating_add(alt.method.code.len());
+        framed = framed.saturating_add(body.max_depth as u32);
         out.push(body);
     }
     Some((out, spent))
@@ -4956,6 +5015,9 @@ fn plan<'a>(root: Method<'a>, env: &Environment<'a>) -> Result<Plan<'a>, Ineligi
     let mut calls: Vec<NativeCall> = Vec::new();
     let mut depth = vec![1usize];
     let mut bytes = bodies[0].method.code.len();
+    // The native operand slots the bodies so far have claimed — the frame budget's running total,
+    // kept alongside `bytes` for the same purpose (see `expand_one`).
+    let mut frame_used = bodies[0].max_depth as u32;
 
     let mut at = 0;
     while at < bodies.len() {
@@ -5034,12 +5096,13 @@ fn plan<'a>(root: Method<'a>, env: &Environment<'a>) -> Result<Plan<'a>, Ineligi
             // cannot take the chain is never made *worse* by the chain existing.
             let arms = match alternatives_fit(&alts, callee.arg_slots) {
                 false => None,
-                true => expand_all(&bodies, &depth, bytes, (at, pc), &alts, env),
+                true => expand_all(&bodies, &depth, bytes, frame_used, (at, pc), &alts, env),
             };
             if let Some((expanded, spent)) = arms {
                 bytes = spent;
                 let mut kids = Vec::with_capacity(expanded.len());
                 for (mut body, alt) in expanded.into_iter().zip(&alts) {
+                    frame_used += body.max_depth as u32;
                     body.parent = Some((at, pc));
                     body.arg_slots = alt.arg_slots;
                     body.guard = alt.guard;
@@ -5054,7 +5117,7 @@ fn plan<'a>(root: Method<'a>, env: &Environment<'a>) -> Result<Plan<'a>, Ineligi
             // compilation; now each one is a *fallback* whenever `callable` says so, which is the
             // whole of group 4's widening — recursion, a body past the budget, a callee this tier
             // could not scan at all.
-            let expanded = expand_one(&bodies, &depth, bodies.len(), bytes, (at, pc), &callee, env);
+            let expanded = expand_one(&bodies, &depth, bodies.len(), bytes, frame_used, (at, pc), &callee, env);
             let mut body = match (expanded, callable) {
                 (Ok(body), _) => body,
                 // **The fallback**: emit a call instead of a body. Nothing about the callee is
@@ -5083,6 +5146,7 @@ fn plan<'a>(root: Method<'a>, env: &Environment<'a>) -> Result<Plan<'a>, Ineligi
                 (Err(e), None) => return Err(e),
             };
             bytes = bytes.saturating_add(callee.method.code.len());
+            frame_used += body.max_depth as u32;
             body.parent = Some((at, pc));
             body.arg_slots = callee.arg_slots;
             body.guard = callee.guard;
@@ -5106,6 +5170,11 @@ fn plan<'a>(root: Method<'a>, env: &Environment<'a>) -> Result<Plan<'a>, Ineligi
         body.frame_base = frame;
         frame += body.max_depth as u32;
     }
+    // **A backstop, no longer a budget.** `expand_one` refuses any expansion that would overrun the
+    // frame, so the only way here is a root body that is too deep on its own — which `scan_body`
+    // already refuses. The assertion is the two running totals agreeing: if they did not, the
+    // budget above would be spending a number that is not the frame.
+    debug_assert_eq!(frame, frame_used, "the frame budget and the layout disagree");
     if frame > MAX_STACK_SLOTS as u32 {
         return Err(Ineligible::TooBig);
     }
@@ -5432,14 +5501,9 @@ pub fn compile_with_regs<'a>(
     // de operandos usa `R12`–`R15`, y `LOCALS`/`POLL`/`FRAMES` el resto.
     let allocates = bodies.iter().any(|b| b.order.iter().any(|&pc| matches!(b.method.code[pc], 0xbb..=0xbd)));
     let barriers = bodies.iter().any(|b| b.order.iter().any(|&pc| logs_barrier(&b.method, env, pc)));
-    // **Sólo lo paga quien lo necesita**, que es la misma regla que los logs: una compilación que no
-    // aloca, no escribe referencias y no llama a nadie no tiene log que compartir ni a quién
-    // pasárselo, y su región queda **byte por byte** como antes de este paso.
-    let log_ptr_base: i32 = result_base + 1;
-    let log_ptr_slots: i32 = i32::from(allocates || barriers || !calls.is_empty());
-    // Where the **allocation log** starts. Slot `alloc_base` is the record count, and record `r` is
-    // the pair at `alloc_base + 1 + 2r`.
-    let alloc_base: i32 = log_ptr_base + log_ptr_slots;
+    // Where the **allocation log** starts: right after the result slot. Slot `alloc_base` is the
+    // record count, and record `r` is the pair at `alloc_base + 1 + 2r`.
+    let alloc_base: i32 = result_base + 1;
     // **Which logs this compilation carries, decided before a byte is emitted.** The barrier log
     // sits past the allocation log, so its base is not a number the emitter can discover as it
     // goes — it has to be known when the first record is written, whichever of the two comes
@@ -5449,12 +5513,48 @@ pub fn compile_with_regs<'a>(
     //
     // A method that carries neither log pays **no slot at all** for either feature — the buffer
     // ends at `alloc_base`, exactly as it did before this step.
-    let alloc_slots: i32 = match allocates {
+    // **Los dos logs se reservan juntos o no se reserva ninguno** (F3-H4), y no es holgura: es lo
+    // que hace que la disposición sea *compartible*.
+    //
+    // Un callee anota en el log de la raíz a través del puntero, y para encontrar el log de barrier
+    // necesita saber a qué distancia del de alocación empieza — una distancia que, si cada
+    // compilación reservara sólo lo que usa, dependería de si **la raíz** aloca. El callee no sabe
+    // quién es su raíz. Reservando los dos, el desplazamiento es una constante que las dos partes
+    // conocen sin negociar nada, que es la única forma de que una estructura compartida funcione.
+    //
+    // Lo paga sólo quien participa del mecanismo: una compilación que no aloca, no escribe
+    // referencias y no llama a nadie sigue sin reservar un solo slot.
+    //
+    // ---------------------------------------------------------------------------------------
+    // **QUIÉN ARMA UN BUFFER, Y POR QUÉ ESTA LISTA EXISTE**
+    //
+    // El contrato del buffer —el slot previo con el puntero al log, y que el código ve el buffer
+    // corrido un lugar— está implementado **siete veces**:
+    //
+    //   1. `JitCache::enter`                     (el camino real)
+    //   2. `compile_tests::call_at_raw`
+    //   3. `compile_tests::call_native`
+    //   4. `jit_tests::run_newarray`
+    //   5-7. tres arneses más en `jit_tests` (alocación y barrier contra un heap real)
+    //
+    // Cada uno tiene su comentario diciendo que satisface "el mismo contrato que `enter`", y esa
+    // afirmación es exactamente lo que deja de ser cierto cuando el contrato cambia — **sin que
+    // nada avise**. Agregar este slot los rompió a los siete, uno por vez, y el síntoma de cada
+    // uno fue un `STATUS_ACCESS_VIOLATION` que no dice nada sobre la causa: hubo que ir
+    // encontrándolos corriendo la suite y viendo qué test caía.
+    //
+    // Si volvés a tocar la disposición del buffer, **son siete**. Y lo que corresponde de fondo es
+    // que el contrato viva en un solo lugar y los arneses lo llamen; queda anotado como deuda y no
+    // hecho acá porque abrir ese frente en medio de un cambio que toca el colector es sumar riesgo
+    // al riesgo.
+    // ---------------------------------------------------------------------------------------
+    let participa = allocates || barriers || !calls.is_empty();
+    let alloc_slots: i32 = match participa {
         true => 1 + 2 * ALLOC_LOG_RECORDS as i32,
         false => 0,
     };
     let barrier_base: i32 = alloc_base + alloc_slots;
-    let barrier_slots: i32 = match barriers {
+    let barrier_slots: i32 = match participa {
         true => 1 + 2 * BARRIER_LOG_RECORDS as i32,
         false => 0,
     };
@@ -5469,7 +5569,25 @@ pub fn compile_with_regs<'a>(
     // is emitted: a real call hands its callee the slots just past this compilation's own, so the
     // regions stack instead of overlapping and every frame's deopt state is still there when the
     // outermost call finally returns.
-    let buffer_slots: i32 = link_base + calls.len() as i32;
+    // **El puntero al log compartido va en el ÚLTIMO slot de la región** (F3-H4), y la posición no
+    // es una comodidad: es lo único que lo vuelve direccionable desde el callee.
+    //
+    // El problema que resuelve: un callee tiene que poder escribir en el log de la **raíz**, pero
+    // recibe `LOCALS` apuntando a *su* región, y la distancia hasta la raíz es la suma de los
+    // `buffer_slots` de toda la cadena — un número que no conoce. Y el caller tampoco puede
+    // escribirle el puntero en un slot "suyo", porque **la disposición del callee la decide la
+    // compilación del callee**, no la de quien llama.
+    //
+    // Poniéndolo al final se cancelan las dos ignorancias: la región del callee empieza justo
+    // después de la del caller, así que el último slot del caller **es** el que está en
+    // `LOCALS_callee - 8`. Cada frame lee su puntero ahí, sin saber quién lo llamó; y lo escribe
+    // en el suyo antes de llamar, sin saber a quién. La raíz lo recibe de `JitCache::enter`, que
+    // corre el buffer un slot para que ese `-8` también exista para ella.
+    //
+    // Lo paga sólo quien lo necesita, misma regla que los logs: una compilación que no aloca, no
+    // escribe referencias y no llama a nadie no tiene log que compartir ni a quién pasárselo.
+    let log_ptr_slots: i32 = i32::from(participa);
+    let buffer_slots: i32 = link_base + calls.len() as i32 + log_ptr_slots;
 
     emit_body(
         &mut a,
@@ -5658,11 +5776,21 @@ pub fn compile_with_regs<'a>(
     // A method that allocates nothing — no `new`, no `newarray`, no `anewarray` — carries no log
     // and the caller has nothing to replay, so it pays no slot for the feature. Same for a method
     // that writes no reference into an object or an array.
-    let alloc_records = match allocates {
+    // **`participa`, no `allocates`** — y ésta es la condición de corrección del log compartido,
+    // señalada como el punto sutil desde que existen las llamadas nativas.
+    //
+    // `JitCache::enter` usa estos dos números para dos cosas: **vaciar** el contador antes de
+    // entrar y **replicar** los registros al salir. Con el log compartido, una compilación que no
+    // aloca pero **llama** es igual de responsable: sus callees anotan en *su* log, el de la raíz.
+    // Si el número siguiera derivándose de `allocates`, una raíz que sólo llama entraría con el
+    // contador de la excursión anterior —replicando pares que ya no nombran nada— y saldría sin
+    // replicar los de sus callees. Eso es, exactamente, el "objeto que el colector nunca conoce"
+    // que la restricción existía para prevenir, reintroducido por la puerta de atrás.
+    let alloc_records = match participa {
         true => ALLOC_LOG_RECORDS,
         false => 0,
     };
-    let barrier_records = match barriers {
+    let barrier_records = match participa {
         true => BARRIER_LOG_RECORDS,
         false => 0,
     };
@@ -6033,10 +6161,23 @@ fn emit_body(
     let body = &bodies[b];
     let code = body.method.code;
     let unit = body.method.unit;
-    let alloc_count = Mem::at(LOCALS, 8 * layout.alloc_base);
-    let alloc_first = 8 * (layout.alloc_base + 1);
-    let barrier_count = Mem::at(LOCALS, 8 * layout.barrier_base);
-    let barrier_first = 8 * (layout.barrier_base + 1);
+    // **Los logs se direccionan por el puntero compartido, no por `LOCALS`** (F3-H4).
+    //
+    // `LOCALS` apunta a la región de *este* frame; el log vive en la de la **raíz** de la excursión,
+    // que es la única que `JitCache::enter` vacía al entrar y replica al salir. Un frame que anotara
+    // en el suyo escribiría en un área que nadie lee — y un objeto alocado que el colector nunca
+    // conoce es la peor corrupción que este proyecto sabe producir.
+    //
+    // El puntero está en `LOCALS - 8` para todos por igual: para un callee ése es el último slot de
+    // quien lo llamó, y para la raíz es el slot que `enter` reserva corriendo el buffer. Los
+    // desplazamientos de abajo son **relativos al puntero** y por lo tanto constantes que toda la
+    // cadena conoce, que es lo que permitió que los dos logs se reserven siempre juntos.
+    let _ = (layout.alloc_base, layout.barrier_base); // ahora sólo los usa `enter`, para la raíz
+    const LOG_PTR: Mem = Mem { base: LOCALS, disp: -8 };
+    const ALLOC_COUNT: i32 = 0;
+    const ALLOC_FIRST: i32 = 8;
+    let barrier_count_off: i32 = 8 * (1 + 2 * ALLOC_LOG_RECORDS as i32);
+    let barrier_first_off: i32 = barrier_count_off + 8;
     // Where a `return`-family opcode of the **root** leaves its value. An inlined body's `return`
     // never touches it: its result is an operand of its caller, not a boundary value.
     let result = Mem::at(LOCALS, 8 * layout.result_base);
@@ -6185,8 +6326,10 @@ fn emit_body(
                 let (bump, limit) =
                     alloc_bounds(env.heap, instance.size).ok_or(Ineligible::AllocOutOfReach { pc })?;
 
-                // (1) Room in this excursion's log? Nothing has happened yet if not.
-                a.mov_rm(T0, alloc_count);
+                // (1) Room in this excursion's log? Nothing has happened yet if not. El contador
+                // vive en el log **compartido**, así que primero hay que traer el puntero.
+                a.mov_rm(T2, LOG_PTR);
+                a.mov_rm(T0, Mem::at(T2, ALLOC_COUNT));
                 a.cmp_ri(T0, ALLOC_LOG_RECORDS as i32);
                 a.jcc(Cond::Ae, deopt);
 
@@ -6218,16 +6361,23 @@ fn emit_body(
                 // home, after the last guard, as the order rule requires.
                 write_home(a, home(d), T1);
 
-                // (6) Record it. `T2` is dead, so it carries the record's address:
-                // `LOCALS + 8*(alloc_base + 1) + 16*count`.
-                a.mov_rm(T0, alloc_count);
-                a.imul_rri(T2, T0, 16);
-                a.add_rr(T2, LOCALS);
-                a.mov_mr(Mem::at(T2, alloc_first), T1);
+                // (6) Record it, en el log compartido: `ptr + 16*count`, con el par en `+8`/`+16`.
+                //
+                // El contador **se recarga al final** en vez de mantenerse vivo, y ésa es la única
+                // libertad que hacía falta para que entren tres registros: el puntero, la dirección
+                // del registro y el valor a guardar son tres cosas simultáneas, y conservar además
+                // el conteo pedía una cuarta que este tier no tiene.
+                a.mov_rm(T2, LOG_PTR);
+                a.mov_rm(T0, Mem::at(T2, ALLOC_COUNT));
+                a.imul_rri(T0, T0, 16);
+                a.add_rr(T2, T0); // T2 = ptr + 16*count
+                a.mov_mr(Mem::at(T2, ALLOC_FIRST), T1);
                 a.mov_ri(T1, i64::from(instance.size));
-                a.mov_mr(Mem::at(T2, alloc_first + 8), T1);
+                a.mov_mr(Mem::at(T2, ALLOC_FIRST + 8), T1);
+                a.mov_rm(T1, LOG_PTR);
+                a.mov_rm(T0, Mem::at(T1, ALLOC_COUNT));
                 a.add_ri(T0, 1);
-                a.mov_mr(alloc_count, T0);
+                a.mov_mr(Mem::at(T1, ALLOC_COUNT), T0);
             }
 
             // --- newarray / anewarray: the same bump, over a run-time size -------------------
@@ -6255,7 +6405,7 @@ fn emit_body(
                 let capacity = array_alloc_bounds(env.heap).ok_or(Ineligible::AllocOutOfReach { pc })?;
                 // `d - 1` both ways round: the count comes off this position and the reference goes
                 // back onto it.
-                emit_array_alloc(a, env.heap, ty, capacity, home(d - 1), alloc_count, alloc_first, deopt);
+                emit_array_alloc(a, env.heap, ty, capacity, home(d - 1), deopt);
             }
 
             // --- constants: materialise the immediate, store it at the new top ---------------
@@ -6640,17 +6790,27 @@ fn emit_body(
                     // nothing has been written yet when it does — and it leaves through the
                     // *capacity* stub, not this instruction's guard stub, because a full log is not
                     // a failed speculation. See `Frames::barriers`.
-                    a.mov_rm(T2, barrier_count);
+                    // **Contra el log compartido, con un solo registro libre.** `T0` lleva el
+                    // holder y `T1` el valor, los dos vivos hasta que se escriba el par, así que
+                    // sólo queda `T2` — y hacen falta dos cosas a la vez: el puntero y el conteo.
+                    //
+                    // Se resuelve pisando el puntero con el conteo y **recuperándolo desde memoria**
+                    // con un `add` que suma directo del slot. El puntero está en `LOCALS - 8` y
+                    // leerlo dos veces es más barato que reservar un registro que este tier no
+                    // tiene.
+                    a.mov_rm(T2, LOG_PTR);
+                    a.mov_rm(T2, Mem::at(T2, barrier_count_off));
                     a.cmp_ri(T2, BARRIER_LOG_RECORDS as i32);
                     a.jcc(Cond::Ae, barrier_full);
-                    // `T2` becomes the record's address: `LOCALS + 8*(barrier_base + 1) + 16*count`.
                     a.imul_rri(T2, T2, 16);
-                    a.add_rr(T2, LOCALS);
-                    a.mov_mr(Mem::at(T2, barrier_first), T0); // the holder
-                    a.mov_mr(Mem::at(T2, barrier_first + 8), T1); // the value
-                    a.mov_rm(T0, barrier_count);
-                    a.add_ri(T0, 1);
-                    a.mov_mr(barrier_count, T0);
+                    a.add_rm(T2, LOG_PTR); // T2 = ptr + 16*count
+                    a.mov_mr(Mem::at(T2, barrier_first_off), T0); // the holder
+                    a.mov_mr(Mem::at(T2, barrier_first_off + 8), T1); // the value
+                    // Ya escrito el par, `T0` y `T1` quedan libres: el holder se recarga abajo.
+                    a.mov_rm(T0, LOG_PTR);
+                    a.mov_rm(T1, Mem::at(T0, barrier_count_off));
+                    a.add_ri(T1, 1);
+                    a.mov_mr(Mem::at(T0, barrier_count_off), T1);
                     read_home(a, T0, home(d - 2)); // `T0` carried the count; the receiver comes back
                     a.bind(skip);
                 }
@@ -6803,16 +6963,21 @@ fn emit_body(
                 a.jcc(Cond::B, skip); // a young array remembers nothing
                 a.cmp_rr(T1, T2);
                 a.jcc(Cond::Ae, skip); // an old value is not a young pointer
-                a.mov_rm(T2, barrier_count);
+                // El mismo baile que el barrier de `putfield`, contra el log compartido: se pisa
+                // el puntero con el conteo y se lo recupera con un `add` desde memoria, porque
+                // `T0` y `T1` llevan el par y no hay un tercer registro donde guardarlo.
+                a.mov_rm(T2, LOG_PTR);
+                a.mov_rm(T2, Mem::at(T2, barrier_count_off));
                 a.cmp_ri(T2, BARRIER_LOG_RECORDS as i32);
                 a.jcc(Cond::Ae, barrier_full);
                 a.imul_rri(T2, T2, 16);
-                a.add_rr(T2, LOCALS);
-                a.mov_mr(Mem::at(T2, barrier_first), T0); // the holder
-                a.mov_mr(Mem::at(T2, barrier_first + 8), T1); // the value
-                a.mov_rm(T0, barrier_count);
-                a.add_ri(T0, 1);
-                a.mov_mr(barrier_count, T0);
+                a.add_rm(T2, LOG_PTR); // T2 = ptr + 16*count
+                a.mov_mr(Mem::at(T2, barrier_first_off), T0); // the holder
+                a.mov_mr(Mem::at(T2, barrier_first_off + 8), T1); // the value
+                a.mov_rm(T0, LOG_PTR);
+                a.mov_rm(T1, Mem::at(T0, barrier_count_off));
+                a.add_ri(T1, 1);
+                a.mov_mr(Mem::at(T0, barrier_count_off), T1);
                 a.bind(skip);
 
                 // (6) The store, and nothing above it can be reached from here. The array's address
@@ -7342,8 +7507,10 @@ fn emit_body(
             // argument, and it is different for each. Below, `b` is the bottom of the affected
             // region and `s0..sn` are the values found there on entry, bottom-first.
             //
-            // (All six are the **category-1** readings. In this subset that is forced, not chosen
-            // — nothing can push a category-2 value. See the module docs.)
+            // (The six `mov` forms are the **category-1** readings, and the type map refuses a
+            // category-2 value under any of them. `pop2` has both readings and needs neither: the
+            // type map already decided how deep the next instruction starts, and that depth is
+            // all a dropped value ever was. See the module docs.)
             //
             // Step 10 changes none of that reasoning: a home — register or slot — is still one
             // location per position, distinct positions still have distinct homes, and the order of
@@ -7780,6 +7947,17 @@ fn emit_body(
                     let v = in_reg(a, home(d - args + k as u16), T0);
                     a.mov_mr(Mem::at(LOCALS, 8 * (sub + to as i32)), v);
                 }
+
+                // **El log compartido, pasado hacia abajo** (F3-H4). El callee lo va a leer en
+                // `LOCALS - 8`, que es el último slot de *esta* región — ver el cálculo de
+                // `buffer_slots`. Copiarlo acá es lo único que hace falta para que toda la cadena
+                // vea el mismo log: cada frame recibe el puntero por el mismo camino, sin que
+                // ninguno tenga que conocer la disposición del otro.
+                //
+                // Va antes de armar los argumentos porque usa `T0`, que la secuencia de abajo
+                // vuelve a pisar.
+                a.mov_rm(T0, Mem::at(LOCALS, -8));
+                a.mov_mr(Mem::at(LOCALS, 8 * (sub - 1)), T0);
 
                 // The three arguments, in the order that keeps each one out of the next one's way.
                 // `frame.arg(2)` is `R8`, which is also `CACHE[0]` — set last of the three that
@@ -8314,8 +8492,6 @@ fn emit_array_alloc(
     ty: ArrayType,
     capacity: i32,
     count_home: Home,
-    alloc_count: Mem,
-    alloc_first: i32,
     deopt: Label,
 ) {
     let element = ty.element as i32;
@@ -8324,8 +8500,9 @@ fn emit_array_alloc(
     // a reservation's raw cursor value is an offset from.
     let block = heap.eden_base.wrapping_add(heap.null_page as usize) as i64;
 
-    // (1) Room in this excursion's log? Nothing has happened yet if not.
-    a.mov_rm(T0, alloc_count);
+    // (1) Room in this excursion's log? Nothing has happened yet if not. Contra el log compartido.
+    a.mov_rm(T0, Mem::at(LOCALS, -8));
+    a.mov_rm(T0, Mem::at(T0, 0));
     a.cmp_ri(T0, ALLOC_LOG_RECORDS as i32);
     a.jcc(Cond::Ae, deopt);
 
@@ -8381,15 +8558,23 @@ fn emit_array_alloc(
 
     // (8) Record it for the trampoline to replay. The record's address goes in `T2` and the count
     // is bumped first, so `T0` is free for the two words — the logical size, then the offset.
-    a.mov_rm(T0, alloc_count);
-    a.imul_rri(T2, T0, 16);
-    a.add_rr(T2, LOCALS);
+    // Contra el log **compartido** (F3-H4): el puntero está en `LOCALS - 8`, el contador en su
+    // desplazamiento 0 y el primer registro en el 8. Acá el contador sí se puede incrementar antes,
+    // porque los dos valores del par se calculan después y `T0` queda libre.
+    // **Sólo `T0` y `T2`**: `T1` lleva la dirección del bloque y sigue viva hasta el final de esta
+    // función (ver el comentario del paso 9). Por eso el conteo se incrementa, se guarda y se
+    // vuelve a bajar en el mismo registro en vez de copiarse a otro.
+    a.mov_rm(T2, Mem::at(LOCALS, -8));
+    a.mov_rm(T0, Mem::at(T2, 0));
     a.add_ri(T0, 1);
-    a.mov_mr(alloc_count, T0);
+    a.mov_mr(Mem::at(T2, 0), T0);
+    a.add_ri(T0, -1);
+    a.imul_rri(T0, T0, 16);
+    a.add_rr(T2, T0); // T2 = ptr + 16*count
     read_home(a, T0, count_home);
     a.imul_rri(T0, T0, element);
     a.add_ri(T0, header);
-    a.mov_mr(Mem::at(T2, alloc_first + 8), T0);
+    a.mov_mr(Mem::at(T2, 8 + 8), T0);
     // The reference is the address back into offset space, which is the one subtraction in this
     // module that goes that way. `T1` still holds the address; nothing else does.
     //
@@ -8401,7 +8586,7 @@ fn emit_array_alloc(
     // the very first array a compiled method allocates would come back as `null`.
     a.mov_ri(T0, (heap.eden_base as i64).wrapping_neg());
     a.add_rr(T0, T1);
-    a.mov_mr(Mem::at(T2, alloc_first), T0);
+    a.mov_mr(Mem::at(T2, 8), T0);
 
     // (9) And the reference is the instruction's result — the first write to an operand home, and
     // the instruction that finally consumes the count's slot.

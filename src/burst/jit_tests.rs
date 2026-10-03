@@ -1165,30 +1165,32 @@ fn getstatic_of_an_int_agrees_with_the_interpreter() {
     // allocates hard enough between the calls to force collections — which a baked-in address must
     // survive. 246189 is what `java WdStatic` prints.
     let stats = differential("java/WdStatic.class", 246_189);
-    // `own`, `inherited`, `far`, `mutable`, `mixed` — **and `churn`**, which the array-allocation
-    // step added: it is `new int[16]` in a loop, and it was refused for that opcode alone.
-    // Not `notAnInt` (a `String` static, so the resolver refuses it).
+    // **Ocho**: `own`, `inherited`, `far`, `mutable`, `mixed`, `churn`, `notAnInt` y `run`.
     //
-    // **Siete desde milestone F3**, y el séptimo es `run` — el método que este comentario venía
-    // anotando como "no compila, tiene invokes". Sus invokes son dispatchados y ninguno se podía
-    // inlinear; ahora se emiten como **llamadas nativas** con la guarda de clase adelante, así que
-    // el método entra. El diferencial de arriba sigue dando 246189, que es lo que dice que entró
-    // bien; el número exacto es a propósito, para que un movimiento como éste se vea.
-    assert_eq!(stats.compiled, 7);
-    // Dos: `notAnInt` y **un método de la biblioteca**, que este arnés escanea desde que bootea con
-    // `KajiLibrary` en vez de `boot/` a secas (ver [`boot_class_path`]) y que se rechaza. Eran tres
-    // hasta F3; `run` se movió de esta columna a la de arriba.
+    // **Este comentario estuvo equivocado sobre cuáles eran, y el número acertaba de casualidad.**
+    // Decía siete con `run` adentro y `notAnInt` afuera ("un static `String`, el resolver lo
+    // rechaza"). `JVM_JIT_LOG=1` dice otra cosa: `notAnInt` compila desde que el resolver acepta
+    // statics de referencia, y `run` era el rechazado — `Unrebuildable`, porque un callee inlineado
+    // tenía un slot sin tipar en un sitio de resume. Las dos columnas intercambiaban un método cada
+    // una y ningún número se movía.
+    //
+    // `run` entra desde que un local de frame inlineado deja de exigir un tipo: la expansión lo puso
+    // en cero o está muerto, y en los dos casos se reconstruye como `Int(0)` (ver
+    // `ResumeSite::is_rebuildable`). El diferencial de arriba sigue dando 246189, que es lo que dice
+    // que entró bien; el número exacto es a propósito, para que un movimiento como éste se vea.
+    assert_eq!(stats.compiled, 8);
+    // **Uno**: `String.length`, de la biblioteca, que este arnés escanea desde que bootea con
+    // `KajiLibrary` en vez de `boot/` a secas (ver [`boot_class_path`]). Se rechaza por su propio
+    // `invokevirtual coder()`, y `notAnInt` la llama como llamada real en vez de inlinearla.
     //
     // El número es a propósito exacto y no un `>=`: depende de la imagen de arranque, así que si la
     // biblioteca crece este test tiene que fallar y que alguien lo mire.
-    assert_eq!(stats.rejected, 2, "`notAnInt` y uno de la biblioteca");
-    // **Ya no es cero, y el número es la restricción de los logs medida en un workload real.**
-    // `run` compila desde F3 y sus llamadas son nativas; los callees que llama (`churn` sobre
-    // todos) **alocan**, así que `JitCache::install` les deja el `code` del record en cero y cada
-    // sitio deopta en el invoke. Es decir: el método entró, la guarda de clase acertó, y lo que
-    // frena la llamada es exactamente lo que la documentación de `NativeRecord::code` dice que la
-    // frena. El día que el log compartido levante esa restricción, este número tiene que bajar.
-    assert!(stats.deopts > 0, "los callees de `run` alocan: sus records quedan en cero");
+    assert_eq!(stats.rejected, 1, "`String.length`, de la biblioteca");
+    // **No es cero**, y no por la restricción de los logs que este comentario nombraba: esa
+    // restricción ya no existe (el log compartido la levantó) y, además, `run` no compilaba cuando
+    // se escribió. Lo que se mide acá es que un workload con llamadas reales y alocación fuerte sale
+    // de nativo por guardas y sigue dando lo mismo que el intérprete.
+    assert!(stats.deopts > 0, "hay salidas por guarda en un workload con llamadas reales");
     assert_eq!(stats.unmarshallable, 0);
     // `churn` is the reason this workload was written — it allocates hard enough to force
     // collections between the other calls — and now it allocates *natively*, 16-int arrays at a
@@ -1753,14 +1755,17 @@ fn subset_census() {
     /// answer it — the same table the VM's own `jit_field_site`/`jit_static_field` use, restated
     /// here because the census reads class files with no VM behind them.
     ///
-    /// `L…;` and `[…` are group 2's addition and they answer [`Kind::Reference`]. The four
-    /// remaining primitives (`B`, `C`, `S`, `Z`) are still `None`: they are stored at widths this
-    /// tier's loads have never agreed on, and the *real* resolver refuses them too, so accepting
-    /// them here would make the census measure a compiler that does not exist.
+    /// `L…;` and `[…` are group 2's addition and they answer [`Kind::Reference`]. `B`, `C`, `S` and
+    /// `Z` answer [`Kind::Int`]: the VM stores each of them in a 4-byte slot exactly like an `int`
+    /// (see `jit_static_field`), so both real resolvers take them. They used to be `None` here, on
+    /// the belief that they were stored at 1 and 2 bytes. That belief cost differently on the two
+    /// sides: for instance fields it was the census's alone (79 refusals the compiler never made,
+    /// since `jit_field_site` always answered `Int`), and for statics it mirrored a real resolver
+    /// that refused them for the same wrong reason (22 refusals that were real).
     fn census_field_kind(descriptor: &str) -> Option<crate::burst::compile::Kind> {
         use crate::burst::compile::Kind;
         Some(match descriptor {
-            "I" => Kind::Int,
+            "I" | "B" | "C" | "S" | "Z" => Kind::Int,
             "F" => Kind::Float,
             "J" => Kind::Long,
             "D" => Kind::Double,
@@ -1771,16 +1776,10 @@ fn subset_census() {
 
     /// **Why a field descriptor is not one this tier can hold**, in the resolver's own terms.
     ///
-    /// [`census_field_kind`] answers `None` for exactly one reason, and it is worth naming rather
-    /// than counting: `B`, `C`, `S` and `Z` are stored at 1 and 2 bytes, and this tier's loads and
-    /// stores have no encoding for those widths ([`x64`][super::x64] can `mov` 4 and 8 bytes and
-    /// nothing else). Everything else that reaches here is a malformed descriptor.
-    fn census_field_cause(descriptor: &str) -> &'static str {
-        match descriptor {
-            "B" | "Z" => "byte/boolean — a 1-byte access this tier cannot encode",
-            "C" | "S" => "char/short — a 2-byte access this tier cannot encode",
-            _ => "descriptor is not a field type",
-        }
+    /// [`census_field_kind`] answers `None` only for a descriptor that is not a field type at all,
+    /// so that is the one cause left to name.
+    fn census_field_cause(_descriptor: &str) -> &'static str {
+        "descriptor is not a field type"
     }
 
     /// The **constant-pool tag** at `index`, as a word — what a refused `ldc` was actually naming.
@@ -2299,11 +2298,15 @@ fn subset_census() {
         };
         // **Every unit gets an answer, including "no".** A target that does not compile is not
         // callable -- which is a fact, not an unknown -- so the entry is written on both arms.
+        // **Two states, not three.** A compilation that carries an allocation or write-barrier log
+        // used to be a state of its own — compiled, but not enterable by a real call — and the
+        // shared log removed it: `JitCache::install` fills every record, and a callee writes its
+        // records into its caller's log. Counting it apart kept reporting a restriction that no
+        // longer existed.
         callable.insert(
             root,
             match &result {
-                Ok(code) if code.alloc_records == 0 && code.barrier_records == 0 => 0,
-                Ok(_) => 1,
+                Ok(_) => 0,
                 Err(_) => 2,
             },
         );
@@ -2316,11 +2319,9 @@ fn subset_census() {
                 let name = class.utf8(member.name_index).unwrap_or("?");
                 compiled.push(format!("{short}.{name}"));
                 // **Group 4's two numbers.** How many compilations emit a real call, and how many
-                // of them a real call could never *enter* — a compilation carrying an allocation
-                // or a write-barrier log lives with its records in its own region of the buffer,
-                // and only the outermost excursion's are replayed, so a nested one would allocate
-                // objects the collector never hears about. The restriction is stated in
-                // `JitCache::install`; this is what it costs.
+                // carry an allocation or write-barrier log. The second used to be the count of
+                // compilations a real call could never *enter*; since the shared log it is only a
+                // count, since a logged callee writes into its caller's log like any other.
                 with_calls += usize::from(code.native_sites > 0);
                 logged += usize::from(code.alloc_records > 0 || code.barrier_records > 0);
                 if code.native_sites > 0 {
@@ -2350,6 +2351,16 @@ fn subset_census() {
                 let variant = format!("{other:?}");
                 let head = variant.split([' ', '(']).next().unwrap_or("?");
                 *reasons.entry(head.to_string()).or_default() += 1;
+                // **Quién**, para las variantes que no dicen nada sin mirar el método: un `TooBig`
+                // mezcla cuatro topes distintos, y un `StackUnderflow` o un `TypeMismatch` sobre
+                // bytecode que el verificador aceptó es, hasta que se demuestre otra cosa, un bug
+                // del análisis y no del programa.
+                if matches!(head, "TooBig" | "StackUnderflow" | "TypeMismatch" | "Unrebuildable") {
+                    let owner = classes[units[root].0].0.as_str();
+                    let name = class.utf8(member.name_index).unwrap_or("?");
+                    let desc = class.utf8(member.descriptor_index).unwrap_or("?");
+                    println!("RECHAZO {head:<15} {owner}.{name}{desc}  {variant}");
+                }
                 // ...and the three variants that *do* mix incompatible causes get a second line
                 // saying which cause it was. The index in the note is checked against the error's
                 // rather than assumed: an attribution that cannot be proved is reported as one that
@@ -2466,37 +2477,31 @@ fn subset_census() {
     eprintln!();
     eprintln!("group 4 — real calls:");
     eprintln!("  compilations that emit at least one:   {with_calls}");
-    eprintln!("  compilations a real call may NOT enter: {logged}   (they carry an allocation or");
-    eprintln!("      write-barrier log, whose records only the outermost excursion replays)");
+    eprintln!("  compilations that carry an allocation or write-barrier log: {logged}");
+    eprintln!("      (callable like any other since the shared log: a callee writes into its caller's)");
     eprintln!();
     // **Whether the calls a compilation emits can actually be made** — the question "this method
     // compiles" cannot answer, and the one the inline-vs-call policy turns on. A site loads its
-    // entry point out of the callee's `NativeRecord`; that record holds code only when the callee
-    // compiled *and* carries no log, so a target that fails either test makes the site a deopt at
-    // every execution. `callable` is complete by now: the loop above compiles **every** unit
+    // entry point out of the callee's `NativeRecord`; that record holds code whenever the callee
+    // compiled (a logged callee included, since the shared log), so a target that does not compile
+    // makes the site a deopt at every execution. `callable` is complete by now: the loop above compiles **every** unit
     // in the table, censused or not, precisely so that a `KajiLibrary` or `boot/` target has an
     // answer. What is left in the unknown bucket is a target this census could not name at all.
-    let (mut all_ok, mut blocked_by_log, mut blocked_by_refusal, mut some_unknown) = (0, 0, 0, 0usize);
+    let (mut all_ok, mut blocked_by_refusal, mut some_unknown) = (0, 0, 0usize);
     for targets in &call_targets {
         let known: Vec<Option<u8>> = targets.iter().map(|u| callable.get(u).copied()).collect();
-        // Worst state wins: a compilation is only as callable as its least callable target. The
-        // "refused" bucket is checked before the "logged" one so that a caller blocked by both is
-        // not credited to the restriction -- lifting the log would not free it.
-        match (
-            known.iter().any(Option::is_none),
-            known.iter().any(|k| k == &Some(2)),
-            known.iter().any(|k| k == &Some(1)),
-        ) {
-            (true, _, _) => some_unknown += 1,
-            (false, true, _) => blocked_by_refusal += 1,
-            (false, false, true) => blocked_by_log += 1,
-            (false, false, false) => all_ok += 1,
+        // Worst state wins: a compilation is only as callable as its least callable target. There
+        // used to be a third state between these two — a target that compiled but carried a log —
+        // and the shared log removed it.
+        match (known.iter().any(Option::is_none), known.iter().any(|k| k == &Some(2))) {
+            (true, _) => some_unknown += 1,
+            (false, true) => blocked_by_refusal += 1,
+            (false, false) => all_ok += 1,
         }
     }
     eprintln!("  ({} units compiled in all: the whole table, not only the censused population)", callable.len());
     eprintln!("  ...of those, by whether the calls can be MADE:");
-    eprintln!("      every target compiles and is logless:  {all_ok}");
-    eprintln!("      blocked only by the LOG RESTRICTION (a target compiles but is logged):  {blocked_by_log}");
+    eprintln!("      every target compiles:  {all_ok}");
     eprintln!("      blocked by a target that does not compile at all:  {blocked_by_refusal}");
     eprintln!("      at least one target this census cannot name at all:  {some_unknown}");
     eprintln!();
@@ -3059,18 +3064,20 @@ fn an_object_allocated_by_compiled_code_survives_a_minor_collection() {
 
     // ---- 2. run it, and replay the log exactly as `JitCache::enter` does --------------------
     let mem = ExecMem::from_code(&compiled.code).expect("map W^X");
-    let mut buffer = vec![0i64; compiled.buffer_slots as usize + 1];
+    // Slot previo para el puntero al log compartido (F3-H4), como `JitCache::enter`.
+    let mut buffer = vec![0i64; 1 + compiled.buffer_slots as usize + 1];
+    buffer[0] = unsafe { buffer.as_mut_ptr().add(1 + compiled.alloc_base as usize) } as i64;
     // SAFETY: the same contract `JitCache::enter` satisfies — a live `[i64]` at least
-    // `buffer_slots` long, and an entry pc of 0.
+    // `buffer_slots` long **más el slot previo**, and an entry pc of 0.
     let f: extern "system" fn(*mut i64, i64) -> i64 = unsafe { mem.as_fn() };
-    let raw = f(buffer.as_mut_ptr(), 0);
+    let raw = f(unsafe { buffer.as_mut_ptr().add(1) }, 0);
     let object = match Status::unpack(raw) {
         // The status word says only *that* it returned; the reference is in the result slot, which
         // is where the boundary contract puts every returned value.
-        Outcome::Returned => buffer[compiled.result_base as usize] as usize,
+        Outcome::Returned => buffer[1 + compiled.result_base as usize] as usize,
         other => panic!("the allocation should have taken its fast path, got {other:?}"),
     };
-    let base = compiled.alloc_base as usize;
+    let base = 1 + compiled.alloc_base as usize;
     assert_eq!(buffer[base], 1, "one object was logged");
     assert_eq!(buffer[base + 1] as usize, object, "...and it is the one that came back");
     assert_eq!(buffer[base + 2] as usize, size as usize);
@@ -3251,17 +3258,19 @@ fn a_reference_stored_by_compiled_code_survives_a_minor_with_no_root_but_the_bar
 
     // Run it, exactly as `JitCache::enter` does: zero the count, call, replay.
     let mem = ExecMem::from_code(&compiled.code).expect("map W^X");
-    let mut buffer = vec![0i64; compiled.buffer_slots as usize + 1];
-    buffer[0] = holder as i64;
-    buffer[1] = young as i64;
+    // Slot previo para el puntero al log compartido (F3-H4), como `JitCache::enter`.
+    let mut buffer = vec![0i64; 1 + compiled.buffer_slots as usize + 1];
+    buffer[1] = holder as i64;
+    buffer[2] = young as i64;
+    buffer[0] = unsafe { buffer.as_mut_ptr().add(1 + compiled.alloc_base as usize) } as i64;
     // SAFETY: the contract `JitCache::enter` satisfies — a live `[i64]` at least `buffer_slots`
     // long, with every `touched_locals` slot filled, and an entry pc of 0.
     let f: extern "system" fn(*mut i64, i64) -> i64 = unsafe { mem.as_fn() };
-    let raw = f(buffer.as_mut_ptr(), 0);
+    let raw = f(unsafe { buffer.as_mut_ptr().add(1) }, 0);
     assert_eq!(Status::unpack(raw), Outcome::Returned, "nothing here can deopt");
     assert_eq!(heap.read_u32(holder + field_offset) as usize, young, "machine code wrote the pointer");
 
-    let base = compiled.barrier_base as usize;
+    let base = 1 + compiled.barrier_base as usize;
     assert_eq!(buffer[base], 1, "one old→young store was recorded");
     assert_eq!(buffer[base + 1] as usize, holder, "the holder, first");
     assert_eq!(buffer[base + 2] as usize, young, "the value, second");
@@ -3412,17 +3421,19 @@ fn an_aastore_by_compiled_code_keeps_its_element_alive_across_a_minor() {
     .expect("an aastore with a profiled array class is inside the subset");
 
     let mem = ExecMem::from_code(&compiled.code).expect("map W^X");
-    let mut buffer = vec![0i64; compiled.buffer_slots as usize + 1];
-    buffer[0] = holder as i64;
-    buffer[1] = young as i64;
+    // Slot previo para el puntero al log compartido (F3-H4), como `JitCache::enter`.
+    let mut buffer = vec![0i64; 1 + compiled.buffer_slots as usize + 1];
+    buffer[1] = holder as i64;
+    buffer[2] = young as i64;
+    buffer[0] = unsafe { buffer.as_mut_ptr().add(1 + compiled.alloc_base as usize) } as i64;
     // SAFETY: the contract `JitCache::enter` satisfies — a live `[i64]` at least `buffer_slots`
     // long, with every `touched_locals` slot filled, and an entry pc of 0.
     let f: extern "system" fn(*mut i64, i64) -> i64 = unsafe { mem.as_fn() };
-    assert_eq!(Status::unpack(f(buffer.as_mut_ptr(), 0)), Outcome::Returned, "every guard holds here");
+    assert_eq!(Status::unpack(f(unsafe { buffer.as_mut_ptr().add(1) }, 0)), Outcome::Returned, "every guard holds here");
     let slot = holder + array_operations::ARRAY_HEADER_SIZE + 4;
     assert_eq!(heap.read_u32(slot) as usize, young, "machine code wrote the element");
 
-    let base = compiled.barrier_base as usize;
+    let base = 1 + compiled.barrier_base as usize;
     assert_eq!(buffer[base], 1, "one old→young store was recorded");
     assert_eq!(buffer[base + 1] as usize, holder, "**the array**, not the element's address");
     assert_eq!(buffer[base + 2] as usize, young);
@@ -3619,16 +3630,23 @@ fn run_newarray(
     use crate::burst::exec_mem::ExecMem;
 
     let mem = ExecMem::from_code(&compiled.code).expect("map W^X");
-    let mut buffer = vec![0i64; compiled.buffer_slots as usize + 1];
-    buffer[0] = count; // local 0 — the count, marshalled as the interpreter marshals an `Int`
+    // **Un slot al frente para el puntero al log compartido** (F3-H4), como hace `JitCache::enter`:
+    // el código emitido lo lee en `LOCALS - 8`. Éste es el **cuarto** arnés que arma un buffer a
+    // mano —los otros son `enter`, `call_at_raw` y `call_native`— y el que hizo evidente el costo
+    // de que el contrato viva en cuatro lugares: el síntoma de no actualizarlo es un
+    // `STATUS_ACCESS_VIOLATION` que no dice nada de la causa.
+    let mut buffer = vec![0i64; 1 + compiled.buffer_slots as usize + 1];
+    buffer[1] = count; // local 0 — the count, marshalled as the interpreter marshals an `Int`
+    let log_addr = unsafe { buffer.as_mut_ptr().add(1 + compiled.alloc_base as usize) } as i64;
+    buffer[0] = log_addr;
     // SAFETY: the same contract `JitCache::enter` satisfies — a live `[i64]` at least
-    // `buffer_slots` long, and an entry pc of 0.
+    // `buffer_slots` long **más el slot previo**, and an entry pc of 0.
     let f: extern "system" fn(*mut i64, i64) -> i64 = unsafe { mem.as_fn() };
-    let array = match Status::unpack(f(buffer.as_mut_ptr(), 0)) {
-        Outcome::Returned => buffer[compiled.result_base as usize] as usize,
+    let array = match Status::unpack(f(unsafe { buffer.as_mut_ptr().add(1) }, 0)) {
+        Outcome::Returned => buffer[1 + compiled.result_base as usize] as usize,
         other => panic!("the allocation should have taken its fast path, got {other:?}"),
     };
-    let base = compiled.alloc_base as usize;
+    let base = 1 + compiled.alloc_base as usize;
     assert_eq!(buffer[base], 1, "exactly one array was logged");
     assert_eq!(buffer[base + 1] as usize, array, "...and it is the one that came back");
     let size = buffer[base + 2] as usize;
@@ -3798,15 +3816,17 @@ fn an_unlogged_array_is_exactly_the_corruption_the_replay_prevents() {
 
     // Run it and deliberately *drop* the log — the one line `JitCache::enter` must never lose.
     let mem = ExecMem::from_code(&compiled.code).expect("map W^X");
-    let mut buffer = vec![0i64; compiled.buffer_slots as usize + 1];
-    buffer[0] = 4;
+    // Slot previo para el puntero al log compartido (F3-H4).
+    let mut buffer = vec![0i64; 1 + compiled.buffer_slots as usize + 1];
+    buffer[1] = 4;
+    buffer[0] = unsafe { buffer.as_mut_ptr().add(1 + compiled.alloc_base as usize) } as i64;
     // SAFETY: as in `run_newarray`.
     let f: extern "system" fn(*mut i64, i64) -> i64 = unsafe { mem.as_fn() };
-    let array = match Status::unpack(f(buffer.as_mut_ptr(), 0)) {
-        Outcome::Returned => buffer[compiled.result_base as usize] as usize,
+    let array = match Status::unpack(f(unsafe { buffer.as_mut_ptr().add(1) }, 0)) {
+        Outcome::Returned => buffer[1 + compiled.result_base as usize] as usize,
         other => panic!("the allocation should have taken its fast path, got {other:?}"),
     };
-    assert_eq!(buffer[compiled.alloc_base as usize], 1, "native code did record it");
+    assert_eq!(buffer[1 + compiled.alloc_base as usize], 1, "native code did record it");
 
     let threads = vec![rooted_thread(vec![Frame::new(0, 1, vec![Value::Reference(array)])])];
     heap.commit_pending();
@@ -3982,6 +4002,67 @@ fn de_que_estan_hechos_los_invokedynamic_del_corpus() {
     }
 }
 
+/// **Estáticos y campos `boolean`/`byte`/`char`/`short`, compilados.** Esta VM guarda los cuatro en
+/// un slot de 4 bytes, igual que un `int`, y `jit_static_field` los rechazaba creyendo que no. La
+/// fixture los lee y los escribe en un bucle caliente; 14691696 es lo que imprime el `java` real
+/// del JDK 25 sobre el mismo `.class`, compilado con el `javac` real.
+#[test]
+fn los_estaticos_angostos_compilan_y_coinciden_con_el_jdk() {
+    let stats = differential("java/JcStat.class", 14_691_696);
+    // `run` es la única compilación, y entra por OSR: el bucle arranca interpretado. Si el
+    // resolver volviera a rechazar un `B`/`C`/`S`/`Z` estático, `run` no compilaría y `differential`
+    // ya fallaría por "nothing was compiled" — verificado rompiéndolo.
+    assert_eq!(stats.compiled, 1, "`run`, con sus cuatro estáticos angostos");
+    assert_eq!(stats.rejected, 0, "nada se rechaza");
+    assert_eq!(stats.osr_entries, 1, "el bucle se entra una vez, a mitad de camino");
+    assert_eq!(stats.deopts, 0, "ningún acceso a un campo angosto tiene por qué salir");
+}
+
+/// **Descartar un `long` o un `double` devuelto: `invokestatic …J; pop2`.** Era 14 de los 17
+/// `StackUnderflow` del censo, y rechazaba el método entero. 9271241 es lo que imprime el `java`
+/// real del JDK 25 sobre el mismo `.class`, compilado con el `javac` real.
+#[test]
+fn descartar_un_long_devuelto_no_rechaza_el_metodo() {
+    let stats = differential("java/JcPop2.class", 9_271_241);
+    // **La aserción que mide es el OSR.** `lh` y `dh` compilan con o sin el arreglo, así que
+    // `compiled > 0` —la que ya exige `differential`— se cumple igual con `run` rechazado. El único
+    // bucle es el de `run`, y entrar en él a mitad de camino sólo puede venir de que `run` compiló.
+    assert_eq!(stats.osr_entries, 1, "`run` tiene que compilar, con sus dos `pop2`");
+    assert_eq!(stats.rejected, 0, "nada se rechaza");
+    assert_eq!(stats.deopts, 0, "nada tiene por qué salir");
+}
+
+/// **Un árbol de inlining que suma más marco del que hay.** `run` llama a cuatro helpers y cada uno
+/// llama diez veces a `leaf`: el árbol entero pide unas 130 posiciones de operando y el marco nativo
+/// tiene 64. Lo que no entra tiene que ser una llamada real, no un rechazo del método. 1396285 es lo
+/// que imprime el `java` real del JDK 25 sobre el mismo `.class`, compilado con el `javac` real.
+#[test]
+fn un_arbol_de_inlining_ancho_cae_a_llamadas_en_vez_de_rechazar() {
+    let stats = differential("java/JcFrame.class", 1_396_285);
+    // **La aserción que mide es el OSR**, por la misma razón que en `JcPop2`: los helpers y `leaf`
+    // compilan con o sin el arreglo, y el único bucle es el de `run`.
+    assert_eq!(stats.osr_entries, 1, "`run` tiene que compilar aunque su árbol no entre en el marco");
+    assert_eq!(stats.rejected, 0, "nada se rechaza");
+    assert_eq!(stats.deopts, 0, "nada tiene por qué salir");
+}
+
+/// **Un slot muerto en un frame inlineado, reconstruido de verdad.** `h` reusa un slot para un `int`
+/// y un `Object`, así que después del `if` está en conflicto, y está inlineado en `run`. A mitad del
+/// bucle la clase del receptor cambia y el guard de `cur.v()` falla **dentro** del `h` inlineado: el
+/// intérprete tiene que materializar ese frame, con el slot muerto escrito como `Int(0)`. 15076720 es
+/// lo que imprime el `java` real del JDK 25 sobre el mismo `.class`, compilado con el `javac` real.
+#[test]
+fn un_slot_muerto_en_un_frame_inlineado_no_impide_reconstruirlo() {
+    let stats = differential("java/JcDead.class", 15_076_720);
+    // **Dos aserciones, y cada una cierra un hueco de la otra.** El OSR prueba que `run` compiló, que
+    // es lo que el chequeo de reconstruibilidad impedía; `h` compila solo con o sin el arreglo, pero
+    // no tiene bucle. Los *virtual frames* prueban que un frame inlineado se materializó, que es el
+    // camino nuevo del lado del intérprete (`JitValue::of_frame` sobre locales inlineados): un
+    // `run` que compilara sin que el guard disparara nunca pasaría la primera y no la segunda.
+    assert!(stats.osr_entries > 0, "`run` tiene que compilar con `h` inlineado");
+    assert!(stats.virtual_frames > 0, "el guard tiene que fallar dentro del `h` inlineado");
+}
+
 /// **La concatenación por método spinado: hecha, medida y apagada.**
 ///
 /// Lo que queda vivo y este test fija: `concat_factory` emite una clase con un `concat` estático
@@ -4011,5 +4092,8 @@ fn una_concatenacion_caliente_coincide_con_el_interprete_y_con_el_jdk() {
     assert_eq!(sin_jit, 232890, "el intérprete no coincide con el `java` real del JDK 25");
     assert_eq!(con_jit, sin_jit, "el JIT calcula otra cosa que el intérprete");
 }
+
+
+
 
 
