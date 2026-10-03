@@ -21,6 +21,7 @@ const ACC_VARARGS: u16 = 0x0080;
 const ACC_PUBLIC: u16 = 0x0001;
 const ACC_STATIC: u16 = 0x0008;
 const ACC_PRIVATE: u16 = 0x0002;
+const ACC_PROTECTED: u16 = 0x0004;
 const ACC_ABSTRACT: u16 = 0x0400;
 
 /// `ACC_NATIVE` (JVMS §4.6): el cuerpo lo pone la VM. Lo necesita el **polimorfismo de firma**
@@ -49,6 +50,20 @@ pub struct ExternalClass {
     /// (`build_external`) filtra las que son **miembros directos** (`Outer$Inner`) para que
     /// `Outer.Inner` de una clase externa resuelva.
     pub nested: Vec<String>,
+    /// La clase es un tipo **miembro** de otra y **no** es `static`, o sea que necesita una
+    /// instancia envolvente: su constructor lleva la externa de cabecera. Sale del 4to `u2` de su
+    /// propia entrada en `InnerClasses` (§4.7.6), que se venia leyendo y tirando --de las cuatro
+    /// palabras de cada entrada solo se usaba la primera--.
+    ///
+    /// Hace falta porque un tipo externo se registra **sin `owner`** (los anidados entran como
+    /// simbolos de nivel superior con un `$` en el nombre binario), asi que la pregunta "es una
+    /// interna de instancia" no se puede contestar mirando la tabla. Finding #480.
+    pub inner_instance: bool,
+    /// Los flags de la **propia** entrada `InnerClasses` (§4.7.6), si la clase es un tipo miembro.
+    /// Son los que distinguen `private` y `protected`: en la cabecera del `.class` un miembro
+    /// `protected` sale `ACC_PUBLIC` y uno `private`, de paquete. Los consume el `import static X.*`
+    /// para decidir qué tipos miembro importa (finding #540).
+    pub inner_access: Option<u16>,
     /// Si la declaracion lleva `@Retention(RUNTIME)`. Solo tiene sentido en un `@interface`, y lo
     /// consume el emisor para decidir si una anotacion de este classpath se escribe en la clase que
     /// la usa. Ver el finding #467.
@@ -64,11 +79,18 @@ pub struct ExtField {
     pub ty: Type,
     /// El tipo **genérico** del atributo `Signature`, si lo tiene.
     pub generic_ty: Option<Type>,
+    /// `ACC_PUBLIC`/`ACC_PRIVATE`/`ACC_PROTECTED` — finding #506. Sin ellos, el chequeo de
+    /// accesibilidad no tenia nada que mirar para un campo del classpath y se lo salteaba entero:
+    /// un `private` de otro paquete se podia leer desde cualquier lado. La ausencia de los tres es
+    /// el acceso **de paquete**, que no tiene flag propio.
+    pub is_public: bool,
+    pub is_private: bool,
+    pub is_protected: bool,
     /// `ACC_STATIC` — **finding #110**. Sin esto el compilador no sabe que un campo del classpath es
     /// estático: `codegen::field_info` elige el opcode por los modificadores del símbolo, y un
     /// `modifiers` vacío significa "de instancia" por default silencioso. Consecuencia:
     /// `Integer.MAX_VALUE` salía `getfield` —opcode equivocado **y** con un receptor inventado— y la
-    /// VM moría con `field_offset: field not found`. Los flags ya se leían del `.class`; para los
+    /// VM moría con `field_offset: 'MAX_VALUE' is not in 'java/lang/Integer' …`. Los flags ya se leían del `.class`; para los
     /// campos simplemente se descartaban.
     pub is_static: bool,
 }
@@ -89,6 +111,9 @@ pub struct ExtMethod {
     pub is_private: bool,
     /// `ACC_NATIVE`. Ver [`ACC_NATIVE`].
     pub is_native: bool,
+    /// `ACC_PROTECTED` — finding #506: sin el, un `protected` externo se trataba como de paquete y
+    /// el chequeo de accesibilidad ni siquiera llegaba a correr sobre el.
+    pub is_protected: bool,
     /// `ACC_PUBLIC` — lo necesitan los **accesores sintéticos** de #268: una clase pública que
     /// hereda un método público de una superclase package-private **externa** (del classpath, como
     /// `AbstractStringBuilder`) tiene que sintetizarles el forwarder, y para saber que el método es
@@ -147,12 +172,15 @@ pub fn read(bytes: &[u8]) -> Option<ExternalClass> {
         let access = r.u2()?;
         let fname = pool.utf8(r.u2()?)?;
         let desc = pool.utf8(r.u2()?)?;
-        let (sig, _, _, _, const_value) = read_attributes(&mut r, &pool)?;
+        let (sig, _, _, _, const_value, _) = read_attributes(&mut r, &pool)?;
         fields.push(ExtField {
             name: fname,
             ty: parse_field_desc(&desc)?,
             generic_ty: sig.as_deref().and_then(parse_field_signature),
             is_static: access & ACC_STATIC != 0,
+            is_public: access & ACC_PUBLIC != 0,
+            is_private: access & ACC_PRIVATE != 0,
+            is_protected: access & ACC_PROTECTED != 0,
             const_value,
         });
     }
@@ -162,7 +190,7 @@ pub fn read(bytes: &[u8]) -> Option<ExternalClass> {
         let access = r.u2()?;
         let mname = pool.utf8(r.u2()?)?;
         let desc = pool.utf8(r.u2()?)?;
-        let (sig, _, throws, _, _) = read_attributes(&mut r, &pool)?;
+        let (sig, _, throws, _, _, _) = read_attributes(&mut r, &pool)?;
         let (params, ret) = parse_method_desc(&desc)?;
         methods.push(ExtMethod {
             name: mname,
@@ -174,12 +202,20 @@ pub fn read(bytes: &[u8]) -> Option<ExternalClass> {
             is_private: access & ACC_PRIVATE != 0,
             is_native: access & ACC_NATIVE != 0,
             is_public: access & ACC_PUBLIC != 0,
+            is_protected: access & ACC_PROTECTED != 0,
             signature: sig.as_deref().and_then(parse_method_signature),
             throws,
         });
     }
 
-    let (class_sig, nested, _, runtime_retention, _) = read_attributes(&mut r, &pool)?;
+    let (class_sig, nested, _, runtime_retention, _, inner_flags) = read_attributes(&mut r, &pool)?;
+    // La entrada de `InnerClasses` que describe a **esta** clase: javac se lista a si misma. Si esta
+    // y no tiene `ACC_STATIC`, es una interna de instancia (#480). Una clase de nivel superior no
+    // aparece en su propia lista, asi que el default `false` es el correcto.
+    let inner_instance = inner_flags
+        .iter()
+        .any(|(n, f)| *n == name && f & ACC_STATIC == 0);
+    let inner_access = inner_flags.iter().find(|(n, _)| *n == name).map(|(_, f)| *f);
     Some(ExternalClass {
         name,
         is_interface: access_flags & ACC_INTERFACE != 0,
@@ -190,6 +226,8 @@ pub fn read(bytes: &[u8]) -> Option<ExternalClass> {
         methods,
         signature: class_sig.as_deref().and_then(parse_class_signature),
         nested,
+        inner_instance,
+        inner_access,
         runtime_retention,
     })
 }
@@ -324,12 +362,20 @@ fn read_pool(r: &mut Reader) -> Option<Pool> {
 fn read_attributes(
     r: &mut Reader,
     pool: &Pool,
-) -> Option<(Option<String>, Vec<String>, Vec<String>, bool, Option<super::codegen::ConstVal>)> {
+) -> Option<(
+    Option<String>,
+    Vec<String>,
+    Vec<String>,
+    bool,
+    Option<super::codegen::ConstVal>,
+    Vec<(String, u16)>,
+)> {
     let mut signature = None;
     let mut nested = Vec::new();
     let mut throws = Vec::new();
     let mut runtime_retention = false;
     let mut const_value = None;
+    let mut inner_flags: Vec<(String, u16)> = Vec::new();
     for _ in 0..r.u2()? {
         let name = pool.utf8(r.u2()?);
         let len = r.u4()? as usize;
@@ -350,7 +396,15 @@ fn read_attributes(
                         break;
                     }
                     let inner_idx = ((data[base] as u16) << 8) | data[base + 1] as u16;
+                    // El 4to `u2` de la entrada son los `inner_class_access_flags`; de ahi sale el
+                    // `ACC_STATIC` que dice si el anidado necesita instancia envolvente (#480).
+                    let flags = if base + 8 <= data.len() {
+                        ((data[base + 6] as u16) << 8) | data[base + 7] as u16
+                    } else {
+                        0
+                    };
                     if let Some(n) = pool.class_name(inner_idx) {
+                        inner_flags.push((n.clone(), flags));
                         nested.push(n);
                     }
                 }
@@ -386,7 +440,7 @@ fn read_attributes(
             _ => {}
         }
     }
-    Some((signature, nested, throws, runtime_retention, const_value))
+    Some((signature, nested, throws, runtime_retention, const_value, inner_flags))
 }
 
 // ---- descriptores → Type ----

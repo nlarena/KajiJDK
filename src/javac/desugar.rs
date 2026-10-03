@@ -108,12 +108,12 @@ use super::ast::{
     AssignOp, Binding, BinOp, BootstrapArg, Block, CaseLabel, CatchClause, ClassDecl,
     CompilationUnit, Expr, ExprKind, FieldDecl, IndyCall, LambdaBody, Member, MethodDecl,
     MethodRefQualifier, Modifier, Param, Pattern, Pos, PrimType, Stmt, StmtKind, SwitchBody,
-    SwitchCase, Type, TypeKind, TypeParam, UnOp,
+    SwitchCase, Type, TypeArg, TypeKind, TypeParam, UnOp,
 };
 use super::attribute::{candidates, constructors, functional_sam};
 use super::codegen::{concat_needs_value_of, internal_name, rtype_desc};
 use super::symbol::{
-    ParamSig, RType, Resolved, ScopeId, Symbol, SymbolId, SymbolKind, SymbolTable,
+    ParamSig, RType, RTypeArg, Resolved, ScopeId, Symbol, SymbolId, SymbolKind, SymbolTable,
 };
 use super::types;
 
@@ -159,6 +159,8 @@ pub fn desugar(unit: &mut CompilationUnit, table: &mut SymbolTable) {
     // `table.class(fqn)` de la síntesis de miembros (enum/record) fallaba para un tipo en un paquete
     // nombrado —`qualify` solo agrega las clases envolventes, no el paquete—, y el `enum`/`record`
     // salía **degenerado** (sin constantes, `values()`, `valueOf()`, ni el ctor propio).
+    // Antes que nada, los puentes `access$` (#512): miran el árbol tal como lo dejó la atribución.
+    puentes_protegidos(unit, table);
     let base = unit.package.as_deref().unwrap_or("").to_string();
     let mut enums = HashMap::new();
     collect_enums(table, &unit.types, &base, &mut enums);
@@ -266,10 +268,16 @@ struct Desugarer<'a> {
     captured_locals: HashMap<String, RType>,
     /// Por cada clase local, los nombres de los locales que captura **en orden**: el `new L(...)` de
     /// su sitio de uso los empuja como argumentos de cabecera.
-    local_new_args: HashMap<String, Vec<String>>,
+    ///
+    /// Va por **símbolo**, no por nombre (finding #533): dos anónimas anidadas se llaman las dos `$1`
+    /// en su scope, y con la clave por nombre la segunda pisaba a la primera. Con dos anónimas
+    /// hermanas que tienen cada una otra adentro, el `new $1(...)` de afuera recibía las capturas de
+    /// la `$1` de adentro de la **otra**: compilaba y daba otra salida, sin aviso.
+    local_new_args: HashMap<SymbolId, Vec<String>>,
     /// Las clases locales que **además** capturan la instancia envolvente (`this$0`): su `new L(...)`
-    /// empuja `this` de cabecera (antes de los `val$`), y su ctor lo lleva de primer parámetro.
-    local_uses_this: HashSet<String>,
+    /// empuja `this` de cabecera (antes de los `val$`), y su ctor lo lleva de primer parámetro. Por
+    /// símbolo, por lo mismo que `local_new_args`.
+    local_uses_this: HashSet<SymbolId>,
     /// Si la clase interna/local/anónima que se va a recorrer **almacena** la instancia envolvente en
     /// un campo `this$0` (porque realmente la usa). Lo fija cada sitio que fija `enclosing_type`, y lo
     /// lee `capture_enclosing_instance`: el **parámetro** de captura va siempre (en contexto de
@@ -710,6 +718,30 @@ fn hoist_initializers(class: &mut ClassDecl, consts: &super::codegen::ConstField
     }
 }
 
+/// Cuantas sentencias del frente de un constructor son su **prologo sintetico**: la llamada
+/// `super(...)`/`this(...)` escrita, y las asignaciones de los campos de captura que el desugar acaba
+/// de anteponer (`this.this$0 = this$0`, `this.val$x = val$x`).
+///
+/// Los inicializadores de instancia van **despues** de todo eso, y no solo despues del `super(...)`.
+/// Metidos en el medio, un `final String c = s + "!"` de una clase local lee `val$s` cuando todavia
+/// vale `null`: compila, corre, y da el dato equivocado sin decir nada. Finding #465.
+fn prologo_sintetico(body: &Block) -> usize {
+    let mut n = usize::from(delegates_to_super(body) || delegates_to_this(body));
+    while let Some(st) = body.0.get(n) {
+        let StmtKind::Expr(e) = &st.kind else { break };
+        let ExprKind::Assign { target, .. } = &e.kind else { break };
+        let ExprKind::Field { expr, name } = &target.kind else { break };
+        if !matches!(expr.kind, ExprKind::This) {
+            break;
+        }
+        if !(name.starts_with("this$") || name.starts_with("val$")) {
+            break;
+        }
+        n += 1;
+    }
+    n
+}
+
 fn delegates_to_this(body: &Block) -> bool {
     matches!(
         body.0.first().map(|s| &s.kind),
@@ -760,16 +792,35 @@ fn holder_class(h: Holder) -> ClassDecl {
 /// `$SwitchMap$Enum = new int[Enum.values().length]; try { $SwitchMap$Enum[Enum.C.ordinal()] = k; } catch (NoSuchFieldError $e) {} …`
 /// El `try/catch` por constante es la robustez de §14.11 ante recompilación separada del enum: si una
 /// constante desapareció, `E.C.ordinal()` lanza `NoSuchFieldError` y se ignora esa entrada.
-fn switchmap_population(field: &str, enum_name: &str, consts: &[String]) -> Block {
+/// Un nombre cualificado (`p.Externa.E`) como la **cadena de accesos** que un humano escribiria:
+/// `Field { Field { Name("p"), "Externa" }, "E" }`. Un `Name("p.Externa.E")` pelado no resuelve en
+/// posicion de expresion --el punto ahi no es un separador de paquete sino un acceso--, y ese fue el
+/// segundo paso del arreglo del switch sobre enum anidado: cualificar no alcanzaba, habia que
+/// cualificar **con la forma correcta**.
+fn cadena_cualificada(dotted: &str) -> Expr {
+    let mut partes = dotted.split('.');
+    let primera = partes.next().unwrap_or(dotted);
+    let mut acc = name(primera);
+    for p in partes {
+        acc = ex(ExprKind::Field { expr: Box::new(acc), name: p.to_string() });
+    }
+    acc
+}
+
+/// `enum_ref` es el nombre con el que el `<clinit>` **nombra** al enum, y no siempre coincide con
+/// el simple: la clase sintetica que aloja el mapa es hermana de la unidad, no del enum, asi que un
+/// enum **anidado** no es visible desde ahi por su nombre corto. Se le pasa el cualificado.
+fn switchmap_population(field: &str, enum_ref: &str, consts: &[String]) -> Block {
     let mut stmts = Vec::new();
     // $SwitchMap$Enum = new int[Enum.values().length];
-    let values = call(name(enum_name), "values", vec![]);
+    let values = call(cadena_cualificada(enum_ref), "values", vec![]);
     let len = ex(ExprKind::Field { expr: Box::new(values), name: "length".into() });
     let new_arr = ex(ExprKind::NewArray { elem: Type::Prim(PrimType::Int), dims: vec![Some(len)], init: None });
     stmts.push(st(StmtKind::Expr(assign_expr(name(field), new_arr))));
     // Una entrada por constante, con su índice denso `ordinal + 1`.
     for (o, c) in consts.iter().enumerate() {
-        let const_access = ex(ExprKind::Field { expr: Box::new(name(enum_name)), name: c.clone() });
+        let const_access =
+            ex(ExprKind::Field { expr: Box::new(cadena_cualificada(enum_ref)), name: c.clone() });
         let ordinal = call(const_access, "ordinal", vec![]);
         let index = ex(ExprKind::Index { array: Box::new(name(field)), index: Box::new(ordinal) });
         let assign = st(StmtKind::Expr(assign_expr(index, ex(ExprKind::IntLit(o as i64 + 1)))));
@@ -863,7 +914,7 @@ impl Desugarer<'_> {
         // constructores el parámetro/asignación de la instancia envolvente, **antes** de recorrer sus
         // cuerpos (que reescriben los accesos capturados).
         if let (Some(cid), Some(outer)) = (self.cur_class, self.enclosing_type) {
-            self.capture_enclosing_instance(class, cid, outer);
+            self.capture_enclosing_instance(class, cid, outer, enclosing);
         }
         // Se toma antes del bucle porque adentro `class` está prestado mutable.
         let enclosing_kind = class.kind;
@@ -968,7 +1019,7 @@ impl Desugarer<'_> {
                 // que el emisor no lo reconociera como primera sentencia y le antepusiera el
                 // `super()` implícito, con lo que la superclase se construía dos veces --- una con
                 // el constructor equivocado (finding #342).
-                let corte = if delegates_to_super(body) { 1 } else { 0 };
+                let corte = prologo_sintetico(body);
                 let mut merged: Vec<Stmt> = body.0.drain(..corte).collect();
                 merged.extend(inits.iter().flat_map(|b| b.0.clone()));
                 merged.append(&mut body.0);
@@ -1821,8 +1872,20 @@ impl Desugarer<'_> {
         }
         let Some(RType::Class(enum_id)) = selector.ty.clone() else { return };
         let enum_name = self.table.symbol(enum_id).name.clone();
-        let consts = self.enums.get(&enum_id).cloned().unwrap_or_default();
-        let field = self.ensure_switchmap(enum_id, &enum_name, &consts);
+        // El **nombre del campo** lleva el simple, como en javac (`$SwitchMap$Color`), pero las
+        // expresiones del `<clinit>` que lo pueblan --`Color.values()`, `Color.ROJO.ordinal()`-- se
+        // escriben dentro de la clase sintetica `Unidad$1`, que es hermana de la unidad y **no** del
+        // enum. Con un enum de nivel superior el nombre simple alcanza; con uno **anidado** no, y
+        // salia *"no se encuentra el simbolo: E, ubicacion: clase H401$1"* -- un mensaje que apunta a
+        // una clase que el usuario no escribio, sobre un tipo que esta a la vista en su archivo.
+        //
+        // Se usa el nombre binario con los `$` vueltos puntos, que es el cualificado.
+        let enum_ref = match &self.table.symbol(enum_id).kind {
+            SymbolKind::Class { binary, .. } => binary.replace('$', "."),
+            _ => enum_name.clone(),
+        };
+        let consts = self.enum_consts(enum_id).unwrap_or_default();
+        let field = self.ensure_switchmap(enum_id, &enum_name, &enum_ref, &consts);
         let holder_name = self.holder.as_ref().unwrap().name.clone();
 
         let StmtKind::Switch { selector, cases } = std::mem::replace(&mut s.kind, StmtKind::Empty) else {
@@ -2025,9 +2088,41 @@ impl Desugarer<'_> {
 
     /// ¿El selector es un `enum` (que conocemos) y todas las etiquetas son constantes suyas (o
     /// `default`), sin guardas? Los *patterns*/`case null` caen fuera.
+    /// Las constantes de un enum, vengan del **fuente** o del **classpath**.
+    ///
+    /// `collect_enums` solo recorre las declaraciones de la unidad, asi que un enum leido de un
+    /// `.class` no entraba en el mapa: `is_enum_switch` daba `false`, el `switch` no se bajaba, y el
+    /// emisor cortaba con *"no soporta un switch cuyo selector no es int"* -- un mensaje sobre el
+    /// generador para un problema que estaba en el desugar.
+    ///
+    /// Para uno externo se derivan de la tabla: sus campos `static` cuyo tipo es **el propio enum**,
+    /// que es exactamente lo que es una constante de enum (§8.9.3). El **orden** de la lista no
+    /// necesita coincidir con los ordinales reales: el `$SwitchMap` se indexa por `ordinal()` en
+    /// tiempo de ejecucion y guarda la posicion en esta lista, asi que basta con que sea la misma
+    /// lista en los dos lugares que la usan.
+    fn enum_consts(&self, id: SymbolId) -> Option<Vec<String>> {
+        if let Some(c) = self.enums.get(&id) {
+            return Some(c.clone());
+        }
+        let propio = RType::Class(id);
+        let consts: Vec<String> = self
+            .table
+            .members_of(id)
+            .into_iter()
+            .filter(|&m| {
+                let sym = self.table.symbol(m);
+                matches!(sym.kind, SymbolKind::Field { .. })
+                    && sym.modifiers.contains(&Modifier::Static)
+                    && matches!(self.table.resolved(m), Some(Resolved::Field(t)) if *t == propio)
+            })
+            .map(|m| self.table.symbol(m).name.clone())
+            .collect();
+        (!consts.is_empty()).then_some(consts)
+    }
+
     fn is_enum_switch(&self, selector: &Expr, cases: &[SwitchCase]) -> bool {
         let Some(RType::Class(id)) = &selector.ty else { return false };
-        let Some(consts) = self.enums.get(id) else { return false };
+        let Some(consts) = self.enum_consts(*id) else { return false };
         cases.iter().all(|c| {
             c.is_default
                 || (c.guard.is_none()
@@ -2071,7 +2166,13 @@ impl Desugarer<'_> {
 
     /// Asegura (idempotente por enum) el campo `$SwitchMap$Enum` en la clase sintética: registra su
     /// símbolo, agrega el `FieldDecl` y el `<clinit>` de población. Devuelve el nombre del campo.
-    fn ensure_switchmap(&mut self, enum_id: SymbolId, enum_name: &str, consts: &[String]) -> String {
+    fn ensure_switchmap(
+        &mut self,
+        enum_id: SymbolId,
+        enum_name: &str,
+        enum_ref: &str,
+        consts: &[String],
+    ) -> String {
         self.ensure_holder();
         if let Some(f) = self.holder.as_ref().unwrap().maps.get(&enum_id) {
             return f.clone();
@@ -2101,7 +2202,7 @@ impl Desugarer<'_> {
             name: field.clone(),
             init: None, // el `<clinit>` lo asigna
         });
-        let static_init = Member::StaticInit(switchmap_population(&field, enum_name, consts));
+        let static_init = Member::StaticInit(switchmap_population(&field, enum_ref, consts));
         let h = self.holder.as_mut().unwrap();
         h.members.push(field_decl);
         h.members.push(static_init);
@@ -2873,6 +2974,98 @@ impl Desugarer<'_> {
         }
     }
 
+    /// El tipo con el que se **declara** un parametro del metodo sintetico de una lambda --uno de la
+    /// lambda o una captura--, **con sus argumentos de tipo**.
+    ///
+    /// `rtype_to_type` los tira: `List<String>` sale `List` a secas. Eso no se ve en el descriptor,
+    /// que borra igual (§4.6), pero el metodo sintetico se **re-atribuye** despues del desugar, y
+    /// contra un parametro crudo `x.get(0)` es un `Object`: `l.forEach(x -> x.get(0).isEmpty())`
+    /// sobre un `List<List<String>>` daba "no se encuentra el metodo: isEmpty", y lo mismo
+    /// `m.entrySet().forEach(e -> e.getKey().length())` o `() -> xs.get(0).trim()` con `xs`
+    /// capturado. El JDK los compila. Es la misma leccion que el #402: javac puede escribir la
+    /// erasure porque no vuelve a resolver nada; nosotros si, asi que hay que conservar los tipos.
+    /// Finding #286.
+    ///
+    /// Una clase **miembro** del fuente va por su nombre cualificado ([`Self::nombre_escribible`]):
+    /// con el simple, `lista.forEach(h -> ...)` sobre un `List<Dentro.Hoja>` no compilaba.
+    ///
+    /// Una variable de **captura** se materializa por su cota superior, como en `rtype_to_type`
+    /// pero sin perder los argumentos de esa cota. Si algun argumento no se puede **escribir** en la
+    /// firma del sintetico --otra captura, una interseccion, una variable de tipo que aca no se ve
+    /// (#306)-- se cae al tipo crudo de siempre: un error visible antes que una firma dudosa.
+    fn tipo_de_parametro(&self, t: &RType) -> Type {
+        match t {
+            RType::Capture { upper, .. } => self.tipo_de_parametro(upper),
+            RType::Array(e) => Type::Array(Box::new(self.tipo_de_parametro(e))),
+            RType::Parameterized { .. } | RType::Class(_) => {
+                self.tipo_escribible(t).unwrap_or_else(|| rtype_to_type(self.table, t))
+            }
+            _ => rtype_to_type(self.table, t),
+        }
+    }
+
+    /// `t` como `Type` del fuente, argumentos incluidos, o `None` si algo de adentro no se puede
+    /// nombrar en el metodo sintetico. Ver [`Self::tipo_de_parametro`].
+    fn tipo_escribible(&self, t: &RType) -> Option<Type> {
+        match t {
+            RType::Prim(p) => Some(Type::Prim(*p)),
+            RType::Class(id) => self.nombre_escribible(*id).map(Type::Class),
+            // Solo las de la **clase**. Las del metodo envolvente se copian al `type_params` del
+            // sintetico (#282), pero la re-atribucion no las ve: un `T` de ahi resuelve a nada, y
+            // `x.get(0).hashCode()` sobre un `List<T>` pasaria de andar --contra el crudo, `get` da
+            // `Object`-- a una llamada sin resolver. (Es previo: `() -> t.hashCode()` con `t: T` del
+            // metodo ya falla asi.) Una que no se ve no se borra aca adentro --`List<X>` no es
+            // `List<Object>`--: se rinde el tipo entero y queda el crudo.
+            RType::TypeVar(id) if self.table.symbol(*id).owner == self.cur_class => {
+                Some(Type::Class(self.table.symbol(*id).name.clone()))
+            }
+            RType::TypeVar(_) => None,
+            RType::Array(e) => Some(Type::Array(Box::new(self.tipo_escribible(e)?))),
+            RType::Parameterized { base, args } => {
+                let base = self.nombre_escribible(*base)?;
+                let mut out = Vec::with_capacity(args.len());
+                for a in args {
+                    out.push(match a {
+                        RTypeArg::Type(x) => TypeArg::Type(self.tipo_escribible(x)?),
+                        RTypeArg::Extends(x) => TypeArg::Extends(Box::new(self.tipo_escribible(x)?)),
+                        RTypeArg::Super(x) => TypeArg::Super(Box::new(self.tipo_escribible(x)?)),
+                        RTypeArg::Wildcard => TypeArg::Wildcard,
+                    });
+                }
+                if out.is_empty() {
+                    return Some(Type::Class(base));
+                }
+                Some(Type::Parameterized { base, args: out })
+            }
+            RType::Capture { .. }
+            | RType::Intersection(_)
+            | RType::InferVar(_)
+            | RType::Void
+            | RType::Null
+            | RType::Unresolved => None,
+        }
+    }
+
+    /// Un nombre con el que la clase `id` **resuelve** desde el metodo sintetico, o `None`.
+    ///
+    /// El nombre simple no alcanza para una clase **miembro** del fuente: `Dentro.Hoja` se registra
+    /// como `Hoja`, y escrito asi en la firma del sintetico el generador no lo encuentra ("no puede
+    /// resolver el tipo `Hoja`"). Se usa entonces el nombre cualificado, que es la clave con la que
+    /// el fuente la registra. Un externo va por su nombre, como siempre; y si nada de eso resuelve,
+    /// `None`, y el parametro queda crudo como antes.
+    fn nombre_escribible(&self, id: SymbolId) -> Option<String> {
+        let sym = self.table.symbol(id);
+        let Some(owner) = sym.owner else { return Some(sym.name.clone()) };
+        let cualificado = internal_name(self.table, id).replace(['/', '$'], ".");
+        if self.table.class(&cualificado) == Some(id) {
+            return Some(cualificado);
+        }
+        match self.table.symbol(owner).kind {
+            SymbolKind::Class { .. } => None,
+            _ => Some(sym.name.clone()),
+        }
+    }
+
     fn lower_lambda(&mut self, e: &mut Expr) {
         // Sin target funcional resuelto no hay contra qué bajar: queda como `Lambda` y la corta el
         // emisor.
@@ -2944,10 +3137,10 @@ impl Desugarer<'_> {
         // tipo **instanciado** (el `x` de `x -> …` deja de ser inferido).
         let mut method_params: Vec<Param> = free
             .iter()
-            .map(|(n, rt)| synth_param(rtype_to_type(self.table, rt), n.clone()))
+            .map(|(n, rt)| synth_param(self.tipo_de_parametro(rt), n.clone()))
             .collect();
         for (p, it) in params.iter().zip(&inst_params) {
-            method_params.push(synth_param(rtype_to_type(self.table, it), p.name.clone()));
+            method_params.push(synth_param(self.tipo_de_parametro(it), p.name.clone()));
         }
         let return_type = rtype_to_type(self.table, &inst_ret);
         // El cuerpo: una lambda de expresión rinde su valor (`return e;`), salvo SAM `void`.
@@ -3033,7 +3226,8 @@ impl Desugarer<'_> {
         }
 
         e.kind = ExprKind::Indy { info: Box::new(info), captures };
-        // `e.ty` sigue siendo la interfaz funcional: no se toca.
+        // `e.ty` sigue siendo la interfaz funcional, sin sus capturas (ver `sin_capturas`).
+        e.ty = e.ty.as_ref().map(sin_capturas);
     }
 
     /// Baja una **referencia a método** (§15.13) a un nodo [`ExprKind::Indy`]. A diferencia de la
@@ -3061,6 +3255,13 @@ impl Desugarer<'_> {
         let (sam_params, sam_ret) = (sam_params.clone(), sam_ret.clone());
         let sam_name = self.table.symbol(sam).name.clone();
         let sam_arity = sam_params.len();
+        // **La parametrizacion NO-comodin del objetivo** (§9.9), igual que la lambda desde el #286:
+        // el `instantiatedMethodType` de `Function<? super String, ? extends Integer> f =
+        // String::length` tiene que decir `(String)Integer`, no `(Object)Integer`. Con la erasure del
+        // comodin el `LambdaMetafactory` de la HotSpot no enlaza: *"Invalid receiver type class
+        // java.lang.Object; not a subtype of implementation type class java.lang.String"*. La lambda
+        // con el mismo objetivo ya salia bien; la referencia se habia quedado afuera. Finding #547.
+        let iface = super::attribute::sin_comodines(self.table, &iface);
         // Igual que en la lambda: el SAM puede venir de una superinterfaz (ver `lower_lambda`).
         let subst = types::subst_for(self.table, &iface, sam_owner(self.table, sam));
         let inst_params: Vec<RType> =
@@ -3094,13 +3295,21 @@ impl Desugarer<'_> {
                 None => return,
             }
         } else {
-            let mut chosen = None;
+            let mut viables: Vec<(SymbolId, MRefKind)> = Vec::new();
             for m in candidates(self.table, qual_id, &name) {
                 let stat = self.is_static(m);
                 let ar = self.arity_of(m);
                 let v = if !is_type {
-                    // Valor: instancia ligada, aridad igual a la del SAM.
-                    (!stat && ar == Some(sam_arity)).then_some(MRefKind::BoundInstance)
+                    // Valor: instancia ligada, aridad igual a la del SAM. O el puente `access$` de
+                    // una ligada a un `protected` de otro paquete (#512): `static`, con el receptor
+                    // de primer parametro, que se captura igual que el de la ligada.
+                    if !stat && ar == Some(sam_arity) {
+                        Some(MRefKind::BoundInstance)
+                    } else if stat && ar == Some(sam_arity + 1) && name.starts_with("access$") {
+                        Some(MRefKind::BoundStatic)
+                    } else {
+                        None
+                    }
                 } else if stat && ar == Some(sam_arity) {
                     Some(MRefKind::Static)
                 } else if !stat && sam_arity >= 1 && ar == Some(sam_arity - 1) {
@@ -3110,11 +3319,71 @@ impl Desugarer<'_> {
                     None
                 };
                 if let Some(v) = v {
-                    chosen = Some((m, v));
-                    break;
+                    viables.push((m, v));
                 }
             }
-            match chosen {
+            // **Entre las viables se elige por los tipos del SAM**, no por la primera que coincida
+            // en aridad (§15.13.1). `Consumer<Object> c = sb::append` tomaba `append(char)` --la
+            // primera de la lista-- y la HotSpot no podia enlazar el `invokedynamic`: *"class
+            // java.lang.Object is not convertible to char"*. Finding #549.
+            //
+            // Los argumentos que le llegarian al metodo salen de los parametros **instanciados** del
+            // SAM, salteando el que hace de receptor en una no ligada. Se pide aplicabilidad con
+            // boxing (§15.12.2.3, que es la conversion que vale aca) y entre las aplicables gana la
+            // mas especifica; si ninguna aplica se deja la de antes, para no cambiar un `.class` que
+            // hoy anda por un error de compilacion.
+            let recv_ty = RType::Class(qual_id);
+            // Un parametro del SAM que quedo **sin resolver** --la `T` de `Consumer<T>` cuando el
+            // objetivo viene de un `forEach(Consumer<? super E>)`-- se toma como su **erasure**, que
+            // es lo que mira el javac real. Sin esto la aplicabilidad es indulgente con lo
+            // desconocido, `append(char)` pasaba el filtro y volviamos a elegir la primera.
+            let concreto = |t: &RType| -> RType {
+                match t {
+                    RType::Unresolved | RType::InferVar(_) => match self.table.external("Object") {
+                        Some(o) => RType::Class(o),
+                        None => t.clone(),
+                    },
+                    RType::TypeVar(_) | RType::Capture { .. } => types::erasure(self.table, t),
+                    otro => otro.clone(),
+                }
+            };
+            let inst_params: Vec<RType> = inst_params.iter().map(&concreto).collect();
+            let args_de = |v: &MRefKind| -> Vec<RType> {
+                match v {
+                    MRefKind::UnboundInstance => inst_params.iter().skip(1).cloned().collect(),
+                    MRefKind::BoundStatic => std::iter::once(recv_ty.clone())
+                        .chain(inst_params.iter().cloned())
+                        .collect(),
+                    _ => inst_params.clone(),
+                }
+            };
+            let aplicables: Vec<usize> = viables
+                .iter()
+                .enumerate()
+                .filter(|(_, (m, v))| {
+                    super::attribute::applicable(
+                        self.table,
+                        *m,
+                        &args_de(v),
+                        super::attribute::Phase::Loose,
+                        &recv_ty,
+                        &[],
+                    )
+                })
+                .map(|(i, _)| i)
+                .collect();
+            let mejor = aplicables
+                .iter()
+                .copied()
+                .find(|&i| {
+                    aplicables.iter().all(|&j| {
+                        j == i || super::attribute::more_specific(self.table, viables[i].0, viables[j].0)
+                    })
+                })
+                .or_else(|| aplicables.first().copied())
+                .or(if viables.is_empty() { None } else { Some(0) })
+                .map(|i| viables.remove(i));
+            match mejor {
                 Some(c) => c,
                 None => return,
             }
@@ -3125,7 +3394,14 @@ impl Desugarer<'_> {
             return;
         };
         let (tparams, tret) = (tparams.clone(), tret.clone());
-        let owner_internal = internal_name(self.table, qual_id);
+        // El dueño del `MethodHandle` es el tipo del calificador, salvo para el puente de una ligada:
+        // ese lo declara la envolvente `S`, que puede ser un supertipo del receptor.
+        let owner_internal = match variant {
+            MRefKind::BoundStatic => {
+                internal_name(self.table, self.table.symbol(target).owner.unwrap_or(qual_id))
+            }
+            _ => internal_name(self.table, qual_id),
+        };
         let tparam_descs: String = tparams.iter().map(|p| rtype_desc(self.table, p)).collect();
         let tret_desc = rtype_desc(self.table, &tret);
 
@@ -3133,7 +3409,7 @@ impl Desugarer<'_> {
             MRefKind::Ctor => {
                 (REF_NEW_INVOKE_SPECIAL, "<init>".to_string(), format!("({tparam_descs})V"))
             }
-            MRefKind::Static => {
+            MRefKind::Static | MRefKind::BoundStatic => {
                 (REF_INVOKE_STATIC, name.clone(), format!("({tparam_descs}){tret_desc}"))
             }
             MRefKind::BoundInstance | MRefKind::UnboundInstance => {
@@ -3145,7 +3421,9 @@ impl Desugarer<'_> {
         // Captura y descriptor del call site: solo la forma **ligada** captura (su receptor).
         let iface_desc = format!("L{};", internal_name(self.table, iface_id));
         let (captures, site_params) = match variant {
-            MRefKind::BoundInstance => (vec![(**qe).clone()], format!("L{owner_internal};")),
+            MRefKind::BoundInstance | MRefKind::BoundStatic => {
+                (vec![(**qe).clone()], format!("L{owner_internal};"))
+            }
             _ => (Vec::new(), String::new()),
         };
         let site_desc = format!("({site_params}){iface_desc}");
@@ -3160,6 +3438,10 @@ impl Desugarer<'_> {
         let info =
             metafactory_indy(sam_name, site_desc, sam_desc, inst_desc, impl_kind, owner_internal, impl_name, impl_desc);
         e.kind = ExprKind::Indy { info: Box::new(info), captures };
+        // A una referencia a metodo **no** se le sacan las capturas, a proposito: destrabarla sobre un
+        // receptor con comodin (`l.forEach(sb::append)` con `l` un `List<?>`) la lleva a la eleccion
+        // de sobrecarga de la referencia, que hoy elige mal (`append(char)` para un `Object`, #549)
+        // y emite un `invokedynamic` que la HotSpot rechaza. Mejor el error de siempre que eso.
     }
 
     /// La aridad (cantidad de parámetros) de un método resuelto, o `None` si no lo está.
@@ -3305,9 +3587,28 @@ impl Desugarer<'_> {
     /// omite también ese chequeo — la instancia es no-nula en el `new` no cualificado). Si no había
     /// constructor, sintetiza el por defecto. Actualiza el **símbolo** de cada constructor para que
     /// `new Inner(outer)` resuelva en la re-atribución.
-    fn capture_enclosing_instance(&mut self, class: &mut ClassDecl, cid: SymbolId, outer: SymbolId) {
+    fn capture_enclosing_instance(
+        &mut self,
+        class: &mut ClassDecl,
+        cid: SymbolId,
+        outer: SymbolId,
+        outer_fqn: &str,
+    ) {
         let scope = self.member_scope_of(cid);
-        let outer_ty = Type::Class(self.table.symbol(outer).name.clone());
+        // El tipo de la envolvente se escribe por su nombre **simple**, salvo que desde adentro ese
+        // nombre sea de otra clase (finding #533). Pasa con una anonima adentro de otra: las dos se
+        // llaman `$1` en su scope, y adentro de `Outer$1$1` el `$1` es ella misma. El parametro
+        // salia `(LOuter$1$1;)V` mientras el `new` pedia `(LOuter$1;)V`, y el JDK lo rechazaba con
+        // `NoSuchMethodError` (nuestra VM lo dejaba pasar). Ahi se usa el nombre completo, que
+        // resuelve por `table.class` sin ambiguedad.
+        let simple = self.table.symbol(outer).name.clone();
+        let outer_ty = if self.table.resolve_type(scope, &simple) == Some(outer)
+            || self.table.class(outer_fqn) != Some(outer)
+        {
+            Type::Class(simple)
+        } else {
+            Type::Class(outer_fqn.to_string())
+        };
         let store = self.enclosing_store;
         // Campo `final Outer this$0;` — símbolo + declaración. Solo si la clase usa el enclosing.
         if store {
@@ -3343,7 +3644,64 @@ impl Desugarer<'_> {
             }
             had_ctor = true;
             me.params.insert(0, synth_param(outer_ty.clone(), "this$0".to_string()));
-            if store {
+            // **Finding #511**: un constructor que delega con `this(args)` tiene que pasarle
+            // **también** la instancia envolvente, porque el destino acaba de recibir el mismo
+            // parámetro de cabecera. Sin esto, los argumentos escritos se corrían un lugar --el
+            // primero entraba como "la externa"-- y la resolución elegía el constructor de un
+            // argumento menos: con dos sobrecargas, uno terminaba **llamándose a sí mismo**, y el
+            // `.class` salía sin una palabra de aviso.
+            //
+            // Es lo mismo que ya se hacía para el `this(...)` de un `enum` con su `$name`/`$ordinal`
+            // (ver `rewrite_enum_ctors`); acá faltaba.
+            let delega = me
+                .body
+                .as_ref()
+                .is_some_and(|b| matches!(
+                    b.0.first().map(|s| &s.kind),
+                    Some(StmtKind::Expr(e))
+                        if matches!(&e.kind, ExprKind::Call { target: None, name, .. } if name == "this")
+                ));
+            if delega {
+                if let Some(StmtKind::Expr(e)) =
+                    me.body.as_mut().and_then(|b| b.0.first_mut()).map(|s| &mut s.kind)
+                {
+                    if let ExprKind::Call { args, .. } = &mut e.kind {
+                        args.insert(0, name("this$0"));
+                    }
+                }
+            }
+            // **Finding #480**: lo mismo, pero hacia arriba. Si la **superclase** es a su vez una
+            // interna de instancia, su constructor tambien recibe la envolvente de cabecera, asi que
+            // el `super(args)` escrito tiene que pasarsela. Sin esto no resolvia contra ningun
+            // constructor --el de la superclase tiene siempre un parametro mas que los argumentos
+            // escritos-- y el error salia desde el emisor, hablando de bytecode.
+            //
+            // Se pasa `this$0`, el parametro de cabecera que esta clase acaba de recibir: la
+            // envolvente de la superclase es la misma instancia, vista como su tipo (§8.8.7.1). En el
+            // caso que lo destapo --`BCSSChild extends BCSChild`, de `java.beans.beancontext`-- la
+            // externa de la subclase hereda de la externa de la superclase, que es la figura normal.
+            // Si los tipos no encajan, la re-atribucion lo dice; no se inventa nada aca.
+            if !delega && self.super_necesita_envolvente(cid) {
+                let primero = me
+                    .body
+                    .as_ref()
+                    .map(|b| starts_with_ctor_call(b))
+                    .unwrap_or(false);
+                if primero {
+                    if let Some(StmtKind::Expr(e)) =
+                        me.body.as_mut().and_then(|b| b.0.first_mut()).map(|s| &mut s.kind)
+                    {
+                        if let ExprKind::Call { target: None, name: n, args, .. } = &mut e.kind {
+                            if n == "super" {
+                                args.insert(0, name("this$0"));
+                            }
+                        }
+                    }
+                }
+            }
+            // El `this$0` se guarda solo en el constructor que **no** delega: el delegado ya lo
+            // guardó, y hacerlo dos veces asignaría un `final` dos veces.
+            if store && !delega {
                 if let Some(body) = &mut me.body {
                     let at = usize::from(starts_with_ctor_call(body));
                     body.0.insert(at, this0_assign());
@@ -3469,9 +3827,11 @@ impl Desugarer<'_> {
         e.binding = None; // la re-atribución la resuelve de nuevo, ya cualificada
     }
 
-    /// `new Inner(args)` sobre una interna de **instancia** cuyo enclosing es la clase actual →
-    /// `new Inner(this, args)`. Solo en contexto de instancia (hay `this`); el `outer.new Inner()`
-    /// cualificado y el anidamiento multinivel quedan pendientes.
+    /// `new Inner(args)` sobre una interna de **instancia** → `new Inner(<envolvente>, args)`.
+    /// Solo en contexto de instancia (hay `this`). La envolvente es `this` cuando el tipo es miembro
+    /// de la clase actual, y una cadena de `this$0` cuando es miembro de una clase mas arriba --el
+    /// caso de una interna que crea a su hermana, finding #508--. El `outer.new Inner()` cualificado
+    /// se resuelve arriba, con el calificador escrito.
     fn add_outer_arg(&mut self, e: &mut Expr) {
         // `outer.new Inner(...)` **cualificado** (§15.9.2): la instancia envolvente la designa el
         // calificador, no `this`. Se antepone tal cual —vale incluso en contexto estático, donde no
@@ -3480,6 +3840,22 @@ impl Desugarer<'_> {
             let Some(target) = e.ty.as_ref().and_then(types::erased_id) else { return };
             if !self.is_instance_inner_id(target) {
                 return;
+            }
+            // **El nombre escrito se reemplaza por el completo.** Sacar el calificador deja un
+            // `new Dentro(i, ...)` que la **re-atribucion** vuelve a mirar, y ahi `Dentro` ya no se
+            // nombra desde ningun lado: el tipo quedaba sin resolver y el generador cortaba con "un
+            // `new` de un tipo que no se pudo resolver". Como la atribucion anterior ya lo resolvio
+            // --por el calificador, §15.9.1--, se escribe el nombre completo, que resuelve solo.
+            // Finding #557.
+            if let Some(binario) = self.table.binary_name(target) {
+                let completo = binario.replace('$', ".");
+                if let ExprKind::NewObject { ty, .. } = &mut e.kind {
+                    match ty {
+                        Type::Class(n) => *n = completo,
+                        Type::Parameterized { base, .. } => *base = completo,
+                        _ => {}
+                    }
+                }
             }
             if let ExprKind::NewObject { args, outer, .. } = &mut e.kind {
                 let q = outer.take().expect("outer es Some por el guard");
@@ -3491,17 +3867,50 @@ impl Desugarer<'_> {
             return;
         }
         let Some(target) = e.ty.as_ref().and_then(types::erased_id) else { return };
-        let tname = self.table.symbol(target).name.clone();
         // Una clase **local** que NO captura la instancia envolvente maneja su captura aparte (`val$`):
         // no lleva `this$0`. La que sí la captura pasa por acá igual que una interna.
-        if self.local_new_args.contains_key(&tname) && !self.local_uses_this.contains(&tname) {
+        if self.local_new_args.contains_key(&target) && !self.local_uses_this.contains(&target) {
             return;
         }
-        if !self.is_instance_inner_id(target) || self.table.symbol(target).owner != self.cur_class {
+        if !self.is_instance_inner_id(target) {
             return;
+        }
+        // La instancia envolvente puede venir de una clase **mas arriba** que la actual: una interna
+        // que crea a su **hermana** la recibe de la envolvente que comparten, no de si misma
+        // (§15.9.2 elige la clase mas interna que sea la envolvente del tipo, y sube desde ahi por
+        // los `this$0`). Antes solo se ponia cuando el dueño era la clase actual, asi que
+        // `new Hermana(1)` desde `Otra` pedia el constructor sin la externa y no encontraba ninguno:
+        // finding #508.
+        let Some(saltos) = self.saltos_hasta_envolvente(target) else { return };
+        let mut acc = ex(ExprKind::This);
+        for _ in 0..saltos {
+            acc = ex(ExprKind::Field { expr: Box::new(acc), name: "this$0".to_string() });
         }
         if let ExprKind::NewObject { args, .. } = &mut e.kind {
-            args.insert(0, ex(ExprKind::This));
+            args.insert(0, acc);
+        }
+    }
+
+    /// Cuantos `this$0` hay que encadenar desde el `this` actual para llegar a la instancia
+    /// envolvente que pide `new target(...)`: `0` si la envolvente es la clase actual, `1` si es su
+    /// envolvente directa, y asi. `None` si el dueño del tipo no esta en la cadena --entonces no hay
+    /// instancia que ofrecer y se deja como estaba, que es lo que hacia antes--.
+    ///
+    /// La cadena solo se puede subir mientras cada eslabon sea una interna de **instancia**: una
+    /// anidada estatica no tiene `this$0`, asi que ahi se corta.
+    fn saltos_hasta_envolvente(&self, target: SymbolId) -> Option<usize> {
+        let dueño = self.table.symbol(target).owner?;
+        let mut cur = self.cur_class?;
+        let mut saltos = 0usize;
+        loop {
+            if cur == dueño {
+                return Some(saltos);
+            }
+            if !self.is_instance_inner_id(cur) {
+                return None;
+            }
+            cur = self.table.symbol(cur).owner?;
+            saltos += 1;
         }
     }
 
@@ -3514,9 +3923,17 @@ impl Desugarer<'_> {
         let ExprKind::QualifiedThis(Type::Class(name)) = &e.kind else { return };
         // El nombre pedido es simple (`Outer`); se compara contra los nombres simples de la cadena.
         let target = name.rsplit('.').next().unwrap_or(name).to_string();
+        // Salvo que la atribucion ya haya dicho **cual** es: entonces se compara el simbolo. Dos
+        // anonimas anidadas se llaman las dos `$1` (cada una con su contador), y por nombre el
+        // `$1.this` de la de afuera --el que arma un puente `access$` del #512-- era la de adentro.
+        let target_id = e.ty.as_ref().and_then(types::erased_id);
+        let es = |c: SymbolId, t: &SymbolTable| match target_id {
+            Some(id) => c == id,
+            None => t.symbol(c).name == target,
+        };
         let Some(mut cur) = self.cur_class else { return };
         // El calificador ya es la clase actual → `this`.
-        if self.table.symbol(cur).name == target {
+        if es(cur, self.table) {
             e.kind = ExprKind::This;
             e.binding = None;
             return;
@@ -3525,7 +3942,7 @@ impl Desugarer<'_> {
         let mut acc = ex(ExprKind::This);
         while let Some(owner) = self.table.symbol(cur).owner {
             acc = ex(ExprKind::Field { expr: Box::new(acc), name: "this$0".to_string() });
-            if self.table.symbol(owner).name == target {
+            if es(owner, self.table) {
                 e.kind = acc.kind;
                 e.binding = None;
                 return;
@@ -3555,10 +3972,21 @@ impl Desugarer<'_> {
     /// clase captura, en orden, tal como están en scope en el sitio de uso.
     fn add_local_captures_arg(&mut self, e: &mut Expr) {
         let Some(target) = e.ty.as_ref().and_then(types::erased_id) else { return };
-        let tname = self.table.symbol(target).name.clone();
-        let Some(caps) = self.local_new_args.get(&tname).cloned() else { return };
+        let Some(caps) = self.local_new_args.get(&target).cloned() else { return };
         if let ExprKind::NewObject { args, .. } = &mut e.kind {
-            let mut prefixed: Vec<Expr> = caps.iter().map(|n| name(n)).collect();
+            // Si el `new` esta adentro de otra local que **ya capturo** ese mismo local, aca no es un
+            // local sino su campo: se pasa `this.val$x` (finding #533, anonima adentro de anonima).
+            // Es el mismo criterio que usa `rewrite_captured_local` para los usos escritos.
+            let mut prefixed: Vec<Expr> = caps
+                .iter()
+                .map(|n| {
+                    if self.captured_locals.contains_key(n) {
+                        ex(ExprKind::Field { expr: Box::new(ex(ExprKind::This)), name: format!("val${n}") })
+                    } else {
+                        name(n)
+                    }
+                })
+                .collect();
             prefixed.append(args);
             *args = prefixed;
         }
@@ -3593,21 +4021,17 @@ impl Desugarer<'_> {
             free: Vec::new(),
             uses_this: false,
         };
-        for m in &lc.members {
-            if let Member::Method(me) = m {
-                cap.declared = me.params.iter().map(|p| p.name.clone()).collect();
-                if let Some(body) = &me.body {
-                    cap.block(body);
-                }
-            }
-        }
+        cap.members(&lc.members);
         let free = cap.free;
 
         // Primero los `val$` (parámetros de cola); el `this$0` lo antepone `capture_enclosing_instance`
         // dentro de `class()` —cuando `enclosing_type` está seteado—, quedando el ctor `[this$0, val$…]`.
         self.add_val_captures(&mut lc, lc_cid, &free);
 
-        self.captured_locals = free.iter().cloned().collect();
+        // Las capturas de la envolvente se **salvan**, no se vacian al salir (finding #533): si esta
+        // local esta declarada adentro de otra local o anonima, la envolvente todavia tiene cuerpo por
+        // recorrer --el `new` de esta misma, por lo pronto-- y sus `val$` tienen que seguir valiendo.
+        let saved_caps = std::mem::replace(&mut self.captured_locals, free.iter().cloned().collect());
         let fqn = self.cur_fqn.clone();
         let saved_encl = self.enclosing_type;
         let saved_store = self.enclosing_store;
@@ -3616,11 +4040,11 @@ impl Desugarer<'_> {
         self.class(&mut lc, &fqn);
         self.enclosing_type = saved_encl;
         self.enclosing_store = saved_store;
-        self.captured_locals.clear();
+        self.captured_locals = saved_caps;
 
-        self.local_new_args.insert(lc.name.clone(), free.iter().map(|(n, _)| n.clone()).collect());
+        self.local_new_args.insert(lc_cid, free.iter().map(|(n, _)| n.clone()).collect());
         if uses_this {
-            self.local_uses_this.insert(lc.name.clone());
+            self.local_uses_this.insert(lc_cid);
         }
         Some(Member::Type(lc))
     }
@@ -3814,6 +4238,24 @@ impl Desugarer<'_> {
         self.table.symbol(sym).modifiers.contains(&Modifier::Static)
     }
     /// ¿`id` es una interna de **instancia** (una `class` no-estática miembro de otra clase)?
+    /// La **superclase** de `cid` necesita una instancia envolvente, o sea que su constructor lleva
+    /// la externa de cabecera (§8.8.7.1). Finding #480.
+    ///
+    /// Se pregunta por los dos caminos porque la respuesta vive en lugares distintos: una superclase
+    /// del **fuente** se contesta con la tabla (`is_instance_inner_id`), y una del **classpath** con
+    /// el `ACC_STATIC` de su entrada en `InnerClasses`, que el lector ahora guarda -- un tipo externo
+    /// se registra sin `owner`, asi que por la tabla siempre daria `false`.
+    fn super_necesita_envolvente(&self, cid: SymbolId) -> bool {
+        let Some(sup) = self.table.super_class(cid) else { return false };
+        if self.is_instance_inner_id(sup) {
+            return true;
+        }
+        match &self.table.symbol(sup).kind {
+            SymbolKind::Class { binary, .. } => self.table.is_inner_instance(binary),
+            _ => false,
+        }
+    }
+
     fn is_instance_inner_id(&self, id: SymbolId) -> bool {
         let s = self.table.symbol(id);
         // Una **anónima** (`$1`) o una **local** (`1L`) no son tipos *miembro*: se crean en el
@@ -3843,6 +4285,9 @@ enum MRefKind {
     Static,
     /// `expr::im` — método de instancia sobre un **valor** (el receptor se captura).
     BoundInstance,
+    /// `expr::access$k` — el puente `static` de una ligada a un `protected` de otro paquete (#512):
+    /// el receptor se captura como en `BoundInstance` y entra de primer parámetro.
+    BoundStatic,
     /// `C::im` — método de instancia sobre un **tipo** (el receptor es el 1.er parámetro del SAM).
     UnboundInstance,
     /// `C::new` — constructor.
@@ -4069,9 +4514,59 @@ impl Captures<'_> {
             }
             StmtKind::Labeled { body, .. } => self.stmt(body),
             StmtKind::Break(_) | StmtKind::Continue(_) | StmtKind::Empty => {}
-            // Una clase local no debería quedar dentro de una lambda que sepamos bajar; se ignora
-            // su interior (su captura es otra feature).
-            StmtKind::LocalClass(_) => {}
+            // Una clase local **adentro** de la que se analiza (finding #533: la anonima de adentro de
+            // otra anonima llega aca como `LocalClass`). Lo que ella captura y no esta declarado a
+            // este nivel lo tiene que capturar tambien la de afuera: es de donde la de adentro lo va
+            // a sacar, por su `val$`. Asi lo hace javac (`Outer$1` lleva el `val$s` que solo usa
+            // `Outer$1$1`).
+            //
+            // En un lambda esto no llega a pasar: su cuerpo se baja **antes** del analisis, y bajarlo
+            // ya levanto la local y dejo un `Empty` en su lugar.
+            StmtKind::LocalClass(lc) => {
+                let mut dentro = Captures {
+                    table: self.table,
+                    declared: HashSet::new(),
+                    free: Vec::new(),
+                    uses_this: false,
+                };
+                dentro.members(&lc.members);
+                for (n, ty) in dentro.free {
+                    if !self.declared.contains(&n) && !self.free.iter().any(|(x, _)| *x == n) {
+                        self.free.push((n, ty));
+                    }
+                }
+            }
+        }
+    }
+
+    /// Las variables libres de los miembros de una clase local: cada metodo con sus parametros
+    /// declarados, y los inicializadores de campo y de instancia sin ninguno.
+    fn members(&mut self, members: &[Member]) {
+        for m in members {
+            match m {
+                Member::Method(me) => {
+                    self.declared = me.params.iter().map(|p| p.name.clone()).collect();
+                    if let Some(body) = &me.body {
+                        self.block(body);
+                    }
+                }
+                // **Un inicializador de campo tambien nombra locales capturados** (finding #465):
+                // sin mirarlos, `class L { final String c = s + "!"; }` no registraba `s` y no se
+                // sintetizaba su `val$s`. No declaran parametros, asi que `declared` se vacia para no
+                // arrastrar los del metodo anterior, que aca no estan en alcance.
+                Member::Field(f) => {
+                    if let Some(e) = &f.init {
+                        self.declared = HashSet::new();
+                        self.expr(e);
+                    }
+                }
+                Member::InstanceInit(b) => {
+                    self.declared = HashSet::new();
+                    self.block(b);
+                }
+                // Un `static` de una clase local no puede nombrar un local del metodo.
+                Member::StaticInit(_) | Member::Type(_) => {}
+            }
         }
     }
 
@@ -4376,6 +4871,24 @@ impl EnclosingUseScan<'_> {
             // Una clase anónima aún sin levantar (por si se analiza antes de `hoist_anonymous`): su
             // cuerpo puede usar el enclosing común.
             ExprKind::NewObject { args, outer, body, .. } => {
+                // Crear una **hermana** --una interna de un enclosing, sin calificador-- tambien usa
+                // la instancia envolvente: es la que `add_outer_arg` va a pasarle como primer
+                // argumento (§15.9.2). Sin contarlo aca, el rewrite rutea por un `this$0` que este
+                // analisis decidio no materializar, y sale "no se encuentra el campo: this$0" --el
+                // mismo par desalineado del #522, ahora por el lado del `new`--. Finding #508.
+                //
+                // Un `outer.new Inner()` **calificado** no cuenta: la envolvente la da el
+                // calificador, y ese ya se visita como expresion.
+                if outer.is_none() {
+                    if let Some(target) = e.ty.as_ref().and_then(types::erased_id) {
+                        let t = self.table.symbol(target);
+                        if !t.modifiers.contains(&Modifier::Static)
+                            && t.owner.is_some_and(|o| self.set.contains(&o))
+                        {
+                            self.used = true;
+                        }
+                    }
+                }
                 if let Some(o) = outer {
                     self.expr(o);
                 }
@@ -4537,6 +5050,51 @@ fn is_pure(e: &Expr) -> bool {
     }
 }
 
+/// El tipo del `Indy` de una **lambda**, con cada **variable de captura** de
+/// primer nivel cambiada por su cota superior: `Consumer<cap#1 of ? extends Number>` pasa a
+/// `Consumer<Number>`.
+///
+/// El `Indy` guarda el tipo que le dio el atributado, y la re-atribucion de despues del desugar
+/// captura el receptor **de nuevo**, con variables frescas. `l.forEach(x -> ...)` sobre un
+/// `List<? extends Number>` pedia entonces un `Consumer<? super cap#3>` y el argumento decia
+/// `Consumer<cap#1>`: dos capturas distintas, ningun candidato aplicable, y el generador cortaba con
+/// "una llamada que no resolvio a ningun metodo". Pasaba con **todo** receptor con comodin --`List<?>`,
+/// `Map<String, ?>`, `Collection<? extends X>`-- y con lambdas y referencias a metodo por igual.
+/// Finding #286. Solo se aplica a las lambdas: ver el final de `lower_method_ref` y el #549.
+///
+/// La cota superior es honesta: el valor de la captura **es** un subtipo de ella, asi que un
+/// `Consumer<Number>` entra en cualquier `Consumer<? super cap>` con `cap <: Number`, que es la forma
+/// que tienen `forEach`, `removeIf` y compania. El descriptor no cambia, porque la erasure es la
+/// misma. Una captura mas adentro (`Consumer<List<cap>>`) se deja como estaba.
+///
+/// No cambia **que** metodo se elige: dos sobrecargas no pueden diferir solo en los argumentos de
+/// tipo de la misma interfaz (misma erasure), asi que esto decide aplicabilidad y nada mas.
+fn sin_capturas(t: &RType) -> RType {
+    let arriba = |x: &RType| match x {
+        RType::Capture { upper, .. } => (**upper).clone(),
+        otro => otro.clone(),
+    };
+    match t {
+        RType::Parameterized { base, args } => RType::Parameterized {
+            base: *base,
+            args: args
+                .iter()
+                .map(|a| match a {
+                    RTypeArg::Type(x) => RTypeArg::Type(arriba(x)),
+                    // Una referencia a metodo no pasa por `sin_comodines` y llega con el comodin
+                    // puesto: `Consumer<? super cap#1>`. Con la cota siendo una captura se hace lo
+                    // mismo; un comodin sobre un tipo comun se deja, que ahi no hay nada viejo.
+                    RTypeArg::Super(x) | RTypeArg::Extends(x) if matches!(**x, RType::Capture { .. }) => {
+                        RTypeArg::Type(arriba(x))
+                    }
+                    otro => otro.clone(),
+                })
+                .collect(),
+        },
+        otro => arriba(otro),
+    }
+}
+
 /// Un [`RType`] resuelto de vuelta a un [`Type`] sintáctico (por nombre simple), para construir
 /// nodos frescos como el array de un varargs. La *erasure* de un parametrizado es su base.
 fn rtype_to_type(table: &SymbolTable, t: &RType) -> Type {
@@ -4569,6 +5127,914 @@ fn compound_binop(op: AssignOp) -> BinOp {
         AssignOp::Shr => BinOp::Shr,
         AssignOp::UShr => BinOp::UShr,
         AssignOp::Assign => BinOp::Add, // no se llega (solo se llama con compuestas)
+    }
+}
+
+// ---- puentes `access$` de un `protected` de otro paquete (§6.6.2 vs JVMS §5.4.4, #512) ----
+
+/// Sintetiza los puentes `access$NNN` que pide un `protected` de **otro paquete** usado desde el
+/// cuerpo de una subclase `S` pero **no** desde `S` misma: desde una anidada, una interna, una local o
+/// una anonima que viven adentro de `S` (y desde una lambda de una de ellas, que termina siendo un
+/// metodo de esa clase).
+///
+/// **Por que hace falta.** La regla del lenguaje (§6.6.2) mira el *cuerpo* de `S`, y ese cuerpo
+/// incluye a sus anidadas; la de la JVM (JVMS §5.4.4) no tiene la nocion de cuerpo: para ella
+/// `S$Interna` es una clase suelta que no hereda de nadie, y un `invokevirtual pa/Base.m` emitido ahi
+/// es un `IllegalAccessError` (o un `VerifyError`, si es un `putfield`). El javac del JDK lo traduce
+/// igual que aca: un metodo `static` en `S` --que si es subclase-- que hace el acceso, y la anidada
+/// llama a ese. Sin esto el chequeo tenia que elegir entre rechazar codigo legal y emitir un `.class`
+/// que ninguna JVM carga, y durante un tiempo hizo las dos cosas segun como llegara la superclase.
+///
+/// Las reglas de cuando y donde son las de `Lower.needsProtectedAccess` y `Lower.accessClass` del
+/// javac: hace falta si la clase actual no hereda del dueño, o si hereda pero el receptor escrito no
+/// es de ella; y el puente va en la envolvente mas interna que herede del dueño o, con receptor
+/// escrito, en la mas interna de la que el receptor sea subtipo. Los nombres siguen la forma del JDK
+/// (`access$` + numero + codigo de acceso), no su numeracion exacta: nadie puede nombrarlos.
+///
+/// Corre **antes** del desugar, sobre el arbol atribuido: ahi las anonimas y las locales todavia son
+/// clases dentro del cuerpo --con su lugar en la cadena de envolventes--, las lambdas todavia estan
+/// en la clase que las va a alojar, y cada nodo tiene su tipo y su binding. Los nodos nuevos salen
+/// decorados por lo mismo: el desugar (que empaqueta los varargs mirando el binding) los procesa como
+/// a cualquier llamada, y la re-atribucion los vuelve a resolver.
+fn puentes_protegidos(unit: &mut CompilationUnit, table: &mut SymbolTable) {
+    let base = unit.package.as_deref().unwrap_or("").to_string();
+    let mut p = Puentes {
+        table,
+        pila: Vec::new(),
+        pendientes: HashMap::new(),
+        hechos: HashMap::new(),
+        cuenta: HashMap::new(),
+    };
+    for ty in &mut unit.types {
+        p.clase(ty, &base);
+    }
+}
+
+/// Como llega el receptor al puente.
+#[derive(Clone, Copy, PartialEq)]
+enum Receptor {
+    /// Miembro `static`: el puente no lleva receptor.
+    Estatico,
+    /// `expr.m()` / `expr.f`: el receptor escrito pasa como primer argumento.
+    Escrito,
+    /// `m()` / `f` sin cualificar desde adentro de `S`: el receptor es `S.this`.
+    Implicito,
+}
+
+/// Que hace el puente con el miembro. El numero es el *codigo de acceso* de javac, que es lo que
+/// queda al final del nombre (`access$1` + `08` = un `x++`).
+#[derive(Clone, Copy, PartialEq)]
+enum Uso {
+    /// Leer el campo o llamar al metodo.
+    Leer,
+    Asignar,
+    /// `++`/`--`, con `prefix`.
+    IncDec(UnOp, bool),
+    Compuesta(AssignOp),
+}
+
+impl Uso {
+    fn codigo(self) -> u32 {
+        match self {
+            Uso::Leer => 0,
+            Uso::Asignar => 2,
+            Uso::IncDec(UnOp::Inc, true) => 4,
+            Uso::IncDec(_, true) => 6,
+            Uso::IncDec(UnOp::Inc, false) => 8,
+            Uso::IncDec(_, false) => 10,
+            Uso::Compuesta(op) => 12 + 2 * op as u32,
+        }
+    }
+}
+
+struct Puentes<'a> {
+    table: &'a mut SymbolTable,
+    /// Las clases que encierran al punto actual, con su FQN (el de `table.class`); la mas interna al
+    /// final. El FQN hace falta para encontrar el simbolo de una local, que se registra como anidada.
+    pila: Vec<(SymbolId, String)>,
+    /// Los puentes de cada `S`, que se le agregan al terminar de recorrerla (no se puede tocar
+    /// `members` mientras se recorren).
+    pendientes: HashMap<SymbolId, Vec<Member>>,
+    /// `(S, miembro, codigo, tipos)` -> nombre del puente, para no sintetizar dos iguales.
+    hechos: HashMap<(SymbolId, SymbolId, u32, String), String>,
+    /// Cuantos puentes lleva cada `S`: el numero del nombre.
+    cuenta: HashMap<SymbolId, u32>,
+}
+
+impl Puentes<'_> {
+    fn clase(&mut self, c: &mut ClassDecl, enclosing: &str) {
+        let fqn = qualify(enclosing, &c.name);
+        let Some(cid) = self.table.class(&fqn) else { return };
+        self.pila.push((cid, fqn.clone()));
+        for m in &mut c.members {
+            match m {
+                Member::Method(me) => {
+                    if let Some(b) = &mut me.body {
+                        self.block(b);
+                    }
+                }
+                Member::Field(f) => {
+                    if let Some(e) = &mut f.init {
+                        self.expr(e);
+                    }
+                }
+                Member::StaticInit(b) | Member::InstanceInit(b) => self.block(b),
+                Member::Type(n) => self.clase(n, &fqn),
+            }
+        }
+        for k in &mut c.enum_constants {
+            k.args.iter_mut().for_each(|a| self.expr(a));
+        }
+        self.pila.pop();
+        if let Some(ps) = self.pendientes.remove(&cid) {
+            c.members.extend(ps);
+        }
+    }
+
+    fn block(&mut self, b: &mut Block) {
+        for s in &mut b.0 {
+            self.stmt(s);
+        }
+    }
+
+    fn stmt(&mut self, s: &mut Stmt) {
+        match &mut s.kind {
+            StmtKind::LocalVar { init, .. } => {
+                if let Some(e) = init {
+                    self.expr(e);
+                }
+            }
+            StmtKind::Return(e) => {
+                if let Some(e) = e {
+                    self.expr(e);
+                }
+            }
+            StmtKind::Expr(e) | StmtKind::Throw(e) | StmtKind::Yield(e) => self.expr(e),
+            StmtKind::If { cond, then, els } => {
+                self.expr(cond);
+                self.stmt(then);
+                if let Some(e) = els {
+                    self.stmt(e);
+                }
+            }
+            StmtKind::While { cond, body } | StmtKind::Do { body, cond } => {
+                self.expr(cond);
+                self.stmt(body);
+            }
+            StmtKind::For { init, cond, update, body } => {
+                if let Some(i) = init {
+                    self.stmt(i);
+                }
+                if let Some(c) = cond {
+                    self.expr(c);
+                }
+                update.iter_mut().for_each(|u| self.expr(u));
+                self.stmt(body);
+            }
+            StmtKind::ForEach { iterable, body, .. } => {
+                self.expr(iterable);
+                self.stmt(body);
+            }
+            StmtKind::Block(b) => self.block(b),
+            StmtKind::Synchronized { lock, body } => {
+                self.expr(lock);
+                self.block(body);
+            }
+            StmtKind::Assert { cond, message } => {
+                self.expr(cond);
+                if let Some(m) = message {
+                    self.expr(m);
+                }
+            }
+            StmtKind::Try { resources, body, catches, finally } => {
+                resources.iter_mut().for_each(|r| self.stmt(r));
+                self.block(body);
+                catches.iter_mut().for_each(|c| self.block(&mut c.body));
+                if let Some(f) = finally {
+                    self.block(f);
+                }
+            }
+            StmtKind::Switch { selector, cases } => {
+                self.expr(selector);
+                self.cases(cases);
+            }
+            StmtKind::Labeled { body, .. } => self.stmt(body),
+            // Una local (o una anonima, que `enter` ya convirtio en local) es otra clase de la
+            // cadena: su FQN es el de la envolvente mas su nombre unico.
+            StmtKind::LocalClass(lc) => {
+                let encl = self.pila.last().map(|(_, f)| f.clone()).unwrap_or_default();
+                self.clase(lc, &encl);
+            }
+            StmtKind::Break(_) | StmtKind::Continue(_) | StmtKind::Empty => {}
+        }
+    }
+
+    fn cases(&mut self, cases: &mut [SwitchCase]) {
+        for c in cases {
+            if let Some(g) = &mut c.guard {
+                self.expr(g);
+            }
+            match &mut c.body {
+                SwitchBody::Arrow(st) => self.stmt(st),
+                SwitchBody::Colon(ss) => ss.iter_mut().for_each(|s| self.stmt(s)),
+            }
+        }
+    }
+
+    /// Recorre de abajo hacia arriba: los hijos primero, despues el nodo.
+    fn expr(&mut self, e: &mut Expr) {
+        match &mut e.kind {
+            ExprKind::Assign { target, value, .. } => {
+                self.destino(target);
+                self.expr(value);
+            }
+            ExprKind::Unary { op: UnOp::Inc | UnOp::Dec, expr, .. } => self.destino(expr),
+            ExprKind::Unary { expr, .. }
+            | ExprKind::Cast { expr, .. }
+            | ExprKind::InstanceOf { expr, .. } => self.expr(expr),
+            ExprKind::Binary { lhs, rhs, .. } => {
+                self.expr(lhs);
+                self.expr(rhs);
+            }
+            ExprKind::Ternary { cond, then, els } => {
+                self.expr(cond);
+                self.expr(then);
+                self.expr(els);
+            }
+            ExprKind::Call { target, args, .. } => {
+                if let Some(t) = target {
+                    self.expr(t);
+                }
+                args.iter_mut().for_each(|a| self.expr(a));
+            }
+            ExprKind::Field { expr, .. } => self.expr(expr),
+            ExprKind::Index { array, index } => {
+                self.expr(array);
+                self.expr(index);
+            }
+            ExprKind::NewObject { args, outer, .. } => {
+                if let Some(o) = outer {
+                    self.expr(o);
+                }
+                args.iter_mut().for_each(|a| self.expr(a));
+            }
+            ExprKind::NewArray { dims, init, .. } => {
+                dims.iter_mut().flatten().for_each(|d| self.expr(d));
+                if let Some(es) = init {
+                    es.iter_mut().for_each(|x| self.expr(x));
+                }
+            }
+            ExprKind::Switch { selector, cases } => {
+                self.expr(selector);
+                self.cases(cases);
+            }
+            ExprKind::Lambda { body, .. } => match body.as_mut() {
+                LambdaBody::Expr(b) => self.expr(b),
+                LambdaBody::Block(b) => self.block(b),
+            },
+            ExprKind::MethodRef { qualifier, .. } => {
+                if let MethodRefQualifier::Expr(q) = qualifier.as_mut() {
+                    self.expr(q);
+                }
+            }
+            ExprKind::Indy { captures, .. } => captures.iter_mut().for_each(|c| self.expr(c)),
+            _ => {}
+        }
+        self.reescribir(e);
+    }
+
+    /// El destino de una asignacion o de un `++`: se recorren sus partes, **no** el acceso mismo --
+    /// si no, un `h.f = 1` se volveria una lectura--. De eso se encarga `reescribir` sobre el nodo
+    /// de la asignacion.
+    fn destino(&mut self, t: &mut Expr) {
+        match &mut t.kind {
+            ExprKind::Field { expr, .. } => self.expr(expr),
+            ExprKind::Index { array, index } => {
+                self.expr(array);
+                self.expr(index);
+            }
+            ExprKind::Name(_) => {}
+            _ => self.expr(t),
+        }
+    }
+
+    fn reescribir(&mut self, e: &mut Expr) {
+        if matches!(e.kind, ExprKind::MethodRef { .. }) {
+            self.referencia(e);
+            return;
+        }
+        if self.super_de_envolvente(e) {
+            return;
+        }
+        // Que miembro se toca, con que calificador, y para que.
+        let (member, uso) = match &e.kind {
+            ExprKind::Call { .. } => match e.binding {
+                Some(Binding::Method(m)) => (m, Uso::Leer),
+                _ => return,
+            },
+            ExprKind::Field { .. } | ExprKind::Name(_) => match e.binding {
+                Some(Binding::Field(f)) => (f, Uso::Leer),
+                _ => return,
+            },
+            ExprKind::Assign { op, target, .. } => match target.binding {
+                Some(Binding::Field(f)) if matches!(target.kind, ExprKind::Field { .. } | ExprKind::Name(_)) => {
+                    (f, if *op == AssignOp::Assign { Uso::Asignar } else { Uso::Compuesta(*op) })
+                }
+                _ => return,
+            },
+            ExprKind::Unary { op: op @ (UnOp::Inc | UnOp::Dec), expr: target, prefix } => match target.binding {
+                Some(Binding::Field(f)) if matches!(target.kind, ExprKind::Field { .. } | ExprKind::Name(_)) => {
+                    (f, Uso::IncDec(*op, *prefix))
+                }
+                _ => return,
+            },
+            _ => return,
+        };
+        let qual: Option<&Expr> = match &e.kind {
+            ExprKind::Call { target, .. } => target.as_deref(),
+            ExprKind::Field { expr, .. } => Some(expr),
+            ExprKind::Assign { target, .. } | ExprKind::Unary { expr: target, .. } => match &target.kind {
+                ExprKind::Field { expr, .. } => Some(expr),
+                _ => None,
+            },
+            _ => None,
+        };
+        let Some((s, rec)) = self.puente_para(member, qual, None) else { return };
+        let Some(firma) = self.firma(s, member, rec, uso, e) else { return };
+        // Recien ahora se desarma el nodo: receptor escrito, argumentos y valor.
+        let (recv, args, valor) = match std::mem::replace(&mut e.kind, ExprKind::Null) {
+            ExprKind::Call { target, args, .. } => (target.map(|t| *t), args, None),
+            ExprKind::Field { expr, .. } => (Some(*expr), Vec::new(), None),
+            ExprKind::Assign { target, value, .. } => (receptor_de(*target), Vec::new(), Some(*value)),
+            ExprKind::Unary { expr, .. } => (receptor_de(*expr), Vec::new(), None),
+            _ => (None, Vec::new(), None),
+        };
+        self.reemplazar(e, s, member, rec, uso, firma, recv, args, valor);
+    }
+
+    /// Una referencia a metodo (§15.13) a un `protected` que necesita puente. El JDK la convierte en
+    /// lambda; aca se apunta el `MethodHandle` al puente, que es `static`:
+    ///
+    /// - `Base::sm` y `H::m` (no ligada) pasan a `S::access$k`: el receptor, si lo hay, ya es el
+    ///   primer parametro del SAM y el del puente.
+    /// - `h::m` (ligada) pasa a `h::access$k`, que `lower_method_ref` baja a un `static` con el
+    ///   receptor **capturado** --lo mismo que hace con una lambda que captura un local--.
+    ///
+    /// La eleccion del metodo repite la de `lower_method_ref` (por aridad contra el SAM y por
+    /// `static`), que es quien la hace de verdad: si no coincidieran, la referencia quedaria
+    /// apuntando a un puente de otro metodo.
+    fn referencia(&mut self, e: &mut Expr) {
+        let ExprKind::MethodRef { qualifier, name: mname, .. } = &e.kind else { return };
+        if mname == "new" {
+            return;
+        }
+        let MethodRefQualifier::Expr(qe) = qualifier.as_ref() else { return };
+        let Some(iface) = e.ty.as_ref().and_then(types::erased_id) else { return };
+        let Some(sam) = functional_sam(self.table, iface) else { return };
+        let Some(Resolved::Method { params: sam_params, .. }) = self.table.resolved(sam) else { return };
+        let n = sam_params.len();
+        let Some(qual_id) = qe.ty.as_ref().map(|t| types::erasure(self.table, t)).as_ref().and_then(types::erased_id)
+        else {
+            return;
+        };
+        let es_tipo = matches!(qe.binding, Some(Binding::Class(_)));
+        let aridad = |m: SymbolId| match self.table.resolved(m) {
+            Some(Resolved::Method { params, .. }) => Some(params.len()),
+            _ => None,
+        };
+        let estatico = |m: SymbolId| self.table.symbol(m).modifiers.contains(&Modifier::Static);
+        // (metodo, no ligada)
+        let elegido = candidates(self.table, qual_id, mname).into_iter().find_map(|m| {
+            let (st_, ar) = (estatico(m), aridad(m));
+            if !es_tipo {
+                (!st_ && ar == Some(n)).then_some((m, false))
+            } else if st_ && ar == Some(n) {
+                Some((m, false))
+            } else if !st_ && n >= 1 && ar == Some(n - 1) {
+                Some((m, true))
+            } else {
+                None
+            }
+        });
+        let Some((member, sin_ligar)) = elegido else { return };
+        let Some((s, rec)) = self.puente_para(member, Some(qe), sin_ligar.then_some(qual_id)) else { return };
+        let Some(firma) = self.firma(s, member, rec, Uso::Leer, e) else { return };
+        let clave = (s, member, Uso::Leer.codigo(), format!("{:?}", firma.ptys));
+        let nombre = match self.hechos.get(&clave) {
+            Some(x) => x.clone(),
+            None => {
+                let x = self.crear(s, member, rec, Uso::Leer, &firma);
+                self.hechos.insert(clave, x.clone());
+                x
+            }
+        };
+        let ligada = rec == Receptor::Escrito && !sin_ligar;
+        if let ExprKind::MethodRef { qualifier, name, .. } = &mut e.kind {
+            *name = nombre;
+            if !ligada {
+                let mut q = self::name(&self.table.symbol(s).name.clone());
+                q.ty = Some(RType::Class(s));
+                q.binding = Some(Binding::Class(s));
+                **qualifier = MethodRefQualifier::Expr(Box::new(q));
+            }
+        }
+    }
+
+    fn hereda(&self, a: SymbolId, b: SymbolId) -> bool {
+        super::check::ancestros(self.table, a).contains(&b)
+    }
+
+    fn binario(&self, c: SymbolId) -> String {
+        match &self.table.symbol(c).kind {
+            SymbolKind::Class { binary, .. } => binary.clone(),
+            _ => self.table.symbol(c).name.clone(),
+        }
+    }
+
+    /// ¿Hace falta un puente para usar `member` con el calificador `qual` desde aca? Si hace falta,
+    /// en que clase va y como llega el receptor. `None` deja el acceso como esta.
+    ///
+    /// Ante lo que no se sabe --un receptor sin tipo de clase, una `S` que no aparece-- contesta que
+    /// no: el acceso queda directo, que es lo que se emitia antes de que existieran los puentes.
+    ///
+    /// `sin_ligar` es el tipo de una referencia a metodo **no ligada** (`H::m`, §15.13.1): ahi el
+    /// calificador es un tipo, pero el receptor llega como primer argumento y es de ese tipo.
+    /// `Externa.super.m()` escrito **adentro de una interna** (§15.11.2, segunda forma).
+    ///
+    /// El `invokespecial` que eso pide tiene que salir de `Externa` --su clase actual tiene que ser
+    /// asignable a la clase de la referencia, JVMS §4.9.2--, y nosotros lo emitiamos desde la
+    /// interna, con la interna de receptor: la HotSpot lo rechazaba (*"Bad invokespecial
+    /// instruction"*) y nuestra VM corria el metodo de la **subclase**, que es justo el que el
+    /// `super` queria saltear, en silencio. Finding #553.
+    ///
+    /// El arreglo es el mismo mecanismo que el #512: un puente en la clase que si puede hacerlo. La
+    /// diferencia con los de aquel es que este es de **instancia**, no `static`, y por una razon
+    /// concreta: su cuerpo es `super.m(...)`, que solo se puede escribir donde hay un `this`. El
+    /// javac real lo hace `static` y emite el `invokespecial` sobre su parametro, que en el AST no
+    /// se puede decir. El sitio de llamada queda `Externa.this.access$k(args)`, y la cadena de
+    /// `this$0` la arma despues `lower_qualified_this`.
+    ///
+    /// Devuelve `true` si reescribio (y entonces no hay que seguir con lo de abajo).
+    fn super_de_envolvente(&mut self, e: &mut Expr) -> bool {
+        let ExprKind::Call { target: Some(t), .. } = &e.kind else { return false };
+        let ExprKind::QualifiedSuper(_) = &t.kind else { return false };
+        let Some(Binding::Method(member)) = e.binding else { return false };
+        // `t.ty` es la clase **nombrada** (la atribucion la tipa asi), no su superclase.
+        let Some(s) = t.ty.as_ref().and_then(types::erased_id) else { return false };
+        let Some(&(cur, _)) = self.pila.last() else { return false };
+        // `super.m()` a secas, o `Interfaz.super.m()` en la clase que la implementa: eso ya sale
+        // bien --el `invokespecial` lo emite la propia clase-- y no se toca.
+        if s == cur {
+            return false;
+        }
+        // Solo la forma de §15.11.2: la nombrada tiene que ser una envolvente de la actual.
+        if !self.pila.iter().any(|&(c, _)| c == s) {
+            return false;
+        }
+        let Some((nombre, mid)) = self.puente_super(s, member) else { return false };
+        let ExprKind::Call { args, .. } = std::mem::replace(&mut e.kind, ExprKind::Null) else {
+            return false;
+        };
+        let nombre_s = match self.escribible(&RType::Class(s)) {
+            Some(Type::Class(n)) => Type::Class(n),
+            _ => Type::Class(self.table.symbol(s).name.clone()),
+        };
+        let mut recv = ex(ExprKind::QualifiedThis(nombre_s));
+        recv.ty = Some(RType::Class(s));
+        let nueva = call(recv, &nombre, args);
+        let ty = e.ty.clone();
+        e.kind = nueva.kind;
+        e.ty = ty;
+        e.binding = Some(Binding::Method(mid));
+        true
+    }
+
+    /// El puente de instancia del #553, en `s`, con cuerpo `super.m(x$0…)`. Memoizado, como los del
+    /// #512: dos `Externa.super.m()` sobre el mismo metodo comparten uno solo.
+    fn puente_super(&mut self, s: SymbolId, member: SymbolId) -> Option<(String, SymbolId)> {
+        let Some(Resolved::Method { params, ret, varargs, .. }) = self.table.resolved(member) else {
+            return None;
+        };
+        let (ptys, ret, varargs) = (params.clone(), ret.clone(), *varargs);
+        let ptypes: Vec<Type> = ptys.iter().map(|t| self.escribible(t)).collect::<Option<_>>()?;
+        let ret_ty = self.escribible(&ret)?;
+        let scope = member_scope_id(self.table, s);
+        let clave = (s, member, u32::MAX, String::new());
+        if let Some(nombre) = self.hechos.get(&clave).cloned() {
+            let mid = *self.table.scope(scope).get(&nombre).first()?;
+            return Some((nombre, mid));
+        }
+        let nombre = loop {
+            let n = self.cuenta.entry(s).or_insert(0);
+            let candidato = format!("access${}{:02}", *n, Uso::Leer.codigo());
+            *n += 1;
+            if self.table.scope(scope).get(&candidato).is_empty() {
+                break candidato;
+            }
+        };
+        let total = ptypes.len();
+        let params: Vec<Param> = ptypes
+            .iter()
+            .enumerate()
+            .map(|(i, t)| {
+                let mut p = synth_param(t.clone(), format!("x${i}"));
+                p.varargs = varargs && i + 1 == total;
+                p
+            })
+            .collect();
+        let args: Vec<Expr> = (0..total)
+            .map(|i| {
+                let mut n = name(&format!("x${i}"));
+                n.ty = Some(ptys[i].clone());
+                n
+            })
+            .collect();
+        let mnombre = self.table.symbol(member).name.clone();
+        let mut cuerpo = call(ex(ExprKind::Super), &mnombre, args);
+        cuerpo.ty = Some(ret.clone());
+        cuerpo.binding = Some(Binding::Method(member));
+        let stmt = if matches!(ret, RType::Void) {
+            st(StmtKind::Expr(cuerpo))
+        } else {
+            st(StmtKind::Return(Some(cuerpo)))
+        };
+        let psig: Vec<ParamSig> = params
+            .iter()
+            .map(|p| ParamSig { ty: p.ty.clone(), name: p.name.clone(), varargs: p.varargs })
+            .collect();
+        let mid = self.table.new_symbol(Symbol {
+            name: nombre.clone(),
+            kind: SymbolKind::Method {
+                params: psig,
+                return_type: ret_ty.clone(),
+                is_constructor: false,
+                throws: Vec::new(),
+            },
+            owner: Some(s),
+            modifiers: Vec::new(),
+        });
+        self.table.define(scope, &nombre, mid);
+        self.table.set_resolved(
+            mid,
+            Resolved::Method { params: ptys, ret: ret.clone(), varargs, throws: Vec::new() },
+        );
+        self.pendientes.entry(s).or_default().push(Member::Method(MethodDecl {
+            doc: None,
+            annotations: Vec::new(),
+            return_annos: Vec::new(),
+            pos: Pos::default(),
+            modifiers: Vec::new(),
+            type_params: Vec::new(),
+            return_type: ret_ty,
+            name: nombre.clone(),
+            params,
+            throws: Vec::new(),
+            throws_annos: Vec::new(),
+            body: Some(Block(vec![stmt])),
+            is_constructor: false,
+        }));
+        self.hechos.insert(clave, nombre.clone());
+        Some((nombre, mid))
+    }
+
+    fn puente_para(
+        &self,
+        member: SymbolId,
+        qual: Option<&Expr>,
+        sin_ligar: Option<SymbolId>,
+    ) -> Option<(SymbolId, Receptor)> {
+        let sym = self.table.symbol(member);
+        if !sym.modifiers.contains(&Modifier::Protected) {
+            return None;
+        }
+        let owner = sym.owner?;
+        if !matches!(
+            self.table.symbol(owner).kind,
+            SymbolKind::Class { kind: TypeKind::Class | TypeKind::Enum | TypeKind::Record, .. }
+        ) {
+            return None;
+        }
+        let estatico = sym.modifiers.contains(&Modifier::Static);
+        let &(cur, _) = self.pila.last()?;
+        if super::check::package_of(&self.binario(owner)) == super::check::package_of(&self.binario(cur)) {
+            return None;
+        }
+        // `super.m()` / `X.super.m()` van por `invokespecial` de la propia clase: exentos.
+        if qual.is_some_and(|q| matches!(q.kind, ExprKind::Super | ExprKind::QualifiedSuper(_))) {
+            return None;
+        }
+        let es_tipo = sin_ligar.is_none() && qual.is_some_and(|q| matches!(q.binding, Some(Binding::Class(_))));
+        // Un `static` por una expresion (`b.sm()`) evalua la expresion y la descarta (§15.12.4.1).
+        // Si no es pura no hay donde ponerla sin una expresion secuencia: se deja como esta.
+        if estatico && !es_tipo && qual.is_some_and(|q| !is_pure(q)) {
+            return None;
+        }
+        let recv: Option<SymbolId> = match qual {
+            _ if sin_ligar.is_some() && !estatico => sin_ligar,
+            Some(q) if !estatico && !es_tipo => {
+                let t = types::erasure(self.table, q.ty.as_ref()?);
+                Some(types::erased_id(&t)?)
+            }
+            _ => None,
+        };
+        // `Lower.needsProtectedAccess`: la clase actual hereda del dueño y el receptor (si lo hay)
+        // es de ella --el acceso directo pasa la JVMS §5.4.4 y el chequeo de §4.10.1.8--.
+        if self.hereda(cur, owner) && recv.map_or(true, |r| r == cur || self.hereda(r, cur)) {
+            return None;
+        }
+        // `Lower.accessClass`: la envolvente que da el permiso.
+        let s = self.pila.iter().rev().map(|&(c, _)| c).find(|&c| match recv {
+            Some(r) => (r == c || self.hereda(r, c)) && self.hereda(c, owner),
+            None => self.hereda(c, owner),
+        })?;
+        if s == cur {
+            return None;
+        }
+        let rec = if estatico {
+            Receptor::Estatico
+        } else if qual.is_some() && !es_tipo {
+            Receptor::Escrito
+        } else {
+            Receptor::Implicito
+        };
+        Some((s, rec))
+    }
+
+    /// Un tipo escrito que la re-atribucion resuelve siempre al mismo simbolo, este donde este el
+    /// puente: el nombre **binario**, que `resolve_type_name` encuentra tanto para una clase del
+    /// fuente como para una del classpath. Con el nombre simple --lo que usa `rtype_to_type`-- un
+    /// tipo de la firma de la superclase que el paquete de la subclase no importa no resolveria.
+    fn escribible(&self, t: &RType) -> Option<Type> {
+        match types::erasure(self.table, t) {
+            RType::Prim(p) => Some(Type::Prim(p)),
+            RType::Void => Some(Type::Void),
+            // Una clase de la cadena de envolventes va por su FQN de la tabla: para una local o una
+            // anonima el binario (`P$1`) no es la clave con que se registro (`P.1$1`, con el
+            // prefijo unico de `enter`), y el `S` de una anonima no resolvia.
+            RType::Class(id) => match self.pila.iter().find(|(c, _)| *c == id) {
+                Some((_, fqn)) => Some(Type::Class(fqn.clone())),
+                None => Some(Type::Class(self.binario(id))),
+            },
+            RType::Array(el) => Some(Type::Array(Box::new(self.escribible(&el)?))),
+            _ => None,
+        }
+    }
+
+    /// La firma borrada del puente: los tipos de sus parametros y su retorno, resueltos y escritos.
+    /// `None` si alguno no se puede escribir; entonces no se toca nada.
+    fn firma(&self, s: SymbolId, member: SymbolId, rec: Receptor, uso: Uso, e: &Expr) -> Option<Firma> {
+        let (mparams, mret, varargs) = match self.table.resolved(member)? {
+            Resolved::Method { params, ret, varargs, .. } => (params.clone(), ret.clone(), *varargs),
+            Resolved::Field(t) => (Vec::new(), t.clone(), false),
+            _ => return None,
+        };
+        // Los tipos del miembro **vistos desde `S`**, y recien despues borrados. Adentro del puente
+        // el receptor es de tipo `S`, y para `S extends Gen<String>` el `T val` de `Gen` es un
+        // `String`: con el borrado directo (`Object`) el cuerpo `x$0.val = x$1` asignaba un `Object`
+        // a un `String` y la re-atribucion lo rechazaba.
+        let dueño = self.table.symbol(member).owner;
+        let subst = match dueño {
+            Some(o) if rec != Receptor::Estatico => types::subst_for(self.table, &types::self_type(self.table, s), o),
+            _ => Default::default(),
+        };
+        let visto = |t: &RType| types::erasure(self.table, &types::substitute(t, &subst));
+        let mut ptys: Vec<RType> = Vec::new();
+        if rec != Receptor::Estatico {
+            ptys.push(RType::Class(s));
+        }
+        ptys.extend(mparams.iter().map(visto));
+        // El retorno, en cambio, es el borrado **declarado** (`Object` por `T`), como el del JDK: el
+        // sitio de la llamada le pone el cast. Con el tipo visto desde `S` el puente tendria que
+        // hacer el `checkcast` adentro, y el emisor no lo pone en un `return x$0.val;`.
+        let ret = types::erasure(self.table, &mret);
+        match uso {
+            Uso::Asignar => ptys.push(visto(&mret)),
+            // El lado derecho de una compuesta va con su propio tipo (`s += 1` con `s` un `String`
+            // recibe un `int`): el operador lo resuelve adentro del puente, igual que afuera.
+            Uso::Compuesta(_) => {
+                let v = match &e.kind {
+                    ExprKind::Assign { value, .. } => value.ty.as_ref().map(|t| types::erasure(self.table, t)),
+                    _ => None,
+                };
+                ptys.push(match v {
+                    Some(t @ (RType::Prim(_) | RType::Class(_) | RType::Array(_))) => t,
+                    _ => ret.clone(),
+                });
+            }
+            _ => {}
+        }
+        let ptypes = ptys.iter().map(|t| self.escribible(t)).collect::<Option<Vec<Type>>>()?;
+        let ret_ty = self.escribible(&ret)?;
+        Some(Firma { ptys, ptypes, ret, ret_ty, varargs })
+    }
+
+    /// Reemplaza `e` por la llamada al puente --creandolo si hace falta--. `recv` es el receptor
+    /// escrito (si lo habia), `args` los argumentos de una llamada y `valor` el lado derecho de una
+    /// asignacion.
+    #[allow(clippy::too_many_arguments)]
+    fn reemplazar(
+        &mut self,
+        e: &mut Expr,
+        s: SymbolId,
+        member: SymbolId,
+        rec: Receptor,
+        uso: Uso,
+        firma: Firma,
+        recv: Option<Expr>,
+        args: Vec<Expr>,
+        valor: Option<Expr>,
+    ) {
+        let clave = (s, member, uso.codigo(), format!("{:?}", firma.ptys));
+        let nombre = match self.hechos.get(&clave) {
+            Some(n) => n.clone(),
+            None => {
+                let n = self.crear(s, member, rec, uso, &firma);
+                self.hechos.insert(clave, n.clone());
+                n
+            }
+        };
+        let mid = self.table.scope(member_scope_id(self.table, s)).get(&nombre).first().copied();
+
+        // Los argumentos de la llamada al puente: receptor, argumentos, valor.
+        let mut cargs: Vec<Expr> = Vec::new();
+        match rec {
+            Receptor::Escrito => cargs.extend(recv),
+            Receptor::Implicito => {
+                // `S.this` por el mismo nombre que la firma del puente (`escribible`): una anonima
+                // se llama `$1` a secas, y adentro de **otra** anonima --que tambien se llama `$1`,
+                // cada una con su contador-- el nombre simple resolvia a la de adentro.
+                let nombre_s = match self.escribible(&RType::Class(s)) {
+                    Some(t) => t,
+                    None => Type::Class(self.table.symbol(s).name.clone()),
+                };
+                let mut this = ex(ExprKind::QualifiedThis(nombre_s));
+                this.ty = Some(RType::Class(s));
+                cargs.push(this);
+            }
+            Receptor::Estatico => {}
+        }
+        cargs.extend(args);
+        if let Some(mut v) = valor {
+            // Una asignacion convierte con las reglas de §5.2 --un `5` entra en un `byte`--; una
+            // llamada, con las de §5.3, que no estrechan. Ante un primitivo distinto se escribe el
+            // cast que la asignacion hacia sola.
+            if uso == Uso::Asignar {
+                let vt = v.ty.as_ref().map(|t| types::erasure(self.table, t));
+                let ft = firma.ptys.last().cloned().unwrap_or(RType::Unresolved);
+                if matches!(ft, RType::Prim(_)) && vt.as_ref() != Some(&ft) {
+                    let ty = firma.ptypes.last().cloned().unwrap_or(Type::Var);
+                    v = Expr { ty: Some(ft), ..ex(ExprKind::Cast { ty, expr: Box::new(v) }) };
+                }
+            }
+            cargs.push(v);
+        }
+        let mut llamada = ex(ExprKind::Call { target: None, name: nombre, args: cargs, type_args: Vec::new() });
+        llamada.pos = e.pos;
+        llamada.binding = mid.map(Binding::Method);
+        llamada.ty = Some(firma.ret.clone());
+        // Un miembro generico devuelve su borrado (`Object` por `T`): donde el sitio esperaba el
+        // tipo instanciado se escribe el cast, como el `checkcast` del JDK despues de su puente.
+        let esperado = e.ty.as_ref().map(|t| types::erasure(self.table, t));
+        let nuevo = match esperado {
+            Some(t @ (RType::Class(_) | RType::Array(_))) if t != firma.ret => match self.escribible(&t) {
+                Some(ty) => {
+                    let mut c = ex(ExprKind::Cast { ty, expr: Box::new(llamada) });
+                    c.ty = Some(t);
+                    c
+                }
+                None => llamada,
+            },
+            _ => llamada,
+        };
+        let pos = e.pos;
+        *e = nuevo;
+        e.pos = pos;
+    }
+
+    /// Sintetiza el puente en `S` --declaracion y simbolo ya resuelto-- y devuelve su nombre.
+    fn crear(&mut self, s: SymbolId, member: SymbolId, rec: Receptor, uso: Uso, firma: &Firma) -> String {
+        let scope = member_scope_id(self.table, s);
+        let es_metodo = matches!(self.table.symbol(member).kind, SymbolKind::Method { .. });
+        // El numero: el siguiente libre en `S` (un `access$` escrito a mano no se pisa).
+        let nombre = loop {
+            let n = self.cuenta.entry(s).or_insert(0);
+            let candidato = format!("access${}{:02}", *n, uso.codigo());
+            *n += 1;
+            if self.table.scope(scope).get(&candidato).is_empty() {
+                break candidato;
+            }
+        };
+        let total = firma.ptypes.len();
+        let varargs = firma.varargs && es_metodo;
+        let params: Vec<Param> = firma
+            .ptypes
+            .iter()
+            .enumerate()
+            .map(|(i, t)| {
+                let mut p = synth_param(t.clone(), format!("x${i}"));
+                p.varargs = varargs && i + 1 == total;
+                p
+            })
+            .collect();
+        // El cuerpo sale **decorado** (tipo y binding), igual que la llamada: el desugar lo recorre
+        // antes de la re-atribucion, y hay bajadas que miran el tipo --un `s += x` sobre un `String`
+        // es una concatenacion solo si el destino dice `String`; sin tipo salia como resta de
+        // enteros--, y el empaquetado de varargs mira el binding.
+        let pname = |i: usize| {
+            let mut n = name(&format!("x${i}"));
+            n.ty = Some(firma.ptys[i].clone());
+            n
+        };
+        // El receptor adentro del puente: el parametro 0, o el dueño por su nombre completo si es
+        // `static` --por nombre simple podria tomar un homonimo que `S` declare y esconda al heredado--.
+        let dueño = self.table.symbol(member).owner;
+        let (qual, primero) = match (rec, dueño) {
+            (Receptor::Estatico, Some(o)) => {
+                let mut q = cadena_cualificada(&self.binario(o).replace('$', "."));
+                q.ty = Some(RType::Class(o));
+                q.binding = Some(Binding::Class(o));
+                (q, 0)
+            }
+            _ => (pname(0), 1),
+        };
+        let mnombre = self.table.symbol(member).name.clone();
+        let tipado = |mut e: Expr, b: Binding| {
+            e.ty = Some(firma.ret.clone());
+            e.binding = Some(b);
+            e
+        };
+        let cuerpo = if es_metodo {
+            tipado(call(qual, &mnombre, (primero..total).map(pname).collect()), Binding::Method(member))
+        } else {
+            let campo = tipado(ex(ExprKind::Field { expr: Box::new(qual), name: mnombre }), Binding::Field(member));
+            let mut e = match uso {
+                Uso::Leer => campo,
+                Uso::Asignar => assign_expr(campo, pname(total - 1)),
+                Uso::Compuesta(op) => {
+                    ex(ExprKind::Assign { op, target: Box::new(campo), value: Box::new(pname(total - 1)) })
+                }
+                Uso::IncDec(op, prefix) => ex(ExprKind::Unary { op, expr: Box::new(campo), prefix }),
+            };
+            e.ty = Some(firma.ret.clone());
+            e
+        };
+        let stmt = if matches!(firma.ret, RType::Void) {
+            st(StmtKind::Expr(cuerpo))
+        } else {
+            st(StmtKind::Return(Some(cuerpo)))
+        };
+        let psig: Vec<ParamSig> =
+            params.iter().map(|p| ParamSig { ty: p.ty.clone(), name: p.name.clone(), varargs: p.varargs }).collect();
+        let mid = self.table.new_symbol(Symbol {
+            name: nombre.clone(),
+            kind: SymbolKind::Method {
+                params: psig,
+                return_type: firma.ret_ty.clone(),
+                is_constructor: false,
+                throws: Vec::new(),
+            },
+            owner: Some(s),
+            modifiers: vec![Modifier::Static],
+        });
+        self.table.define(scope, &nombre, mid);
+        self.table.set_resolved(
+            mid,
+            Resolved::Method { params: firma.ptys.clone(), ret: firma.ret.clone(), varargs, throws: Vec::new() },
+        );
+        self.pendientes.entry(s).or_default().push(Member::Method(MethodDecl {
+            doc: None,
+            annotations: Vec::new(),
+            return_annos: Vec::new(),
+            pos: Pos::default(),
+            modifiers: vec![Modifier::Static],
+            type_params: Vec::new(),
+            return_type: firma.ret_ty.clone(),
+            name: nombre.clone(),
+            params,
+            throws: Vec::new(),
+            throws_annos: Vec::new(),
+            body: Some(Block(vec![stmt])),
+            is_constructor: false,
+        }));
+        nombre
+    }
+}
+
+/// La firma borrada de un puente, en las dos formas que hacen falta: resuelta (para el simbolo y
+/// la llamada) y escrita (para la declaracion que la re-atribucion vuelve a resolver).
+struct Firma {
+    ptys: Vec<RType>,
+    ptypes: Vec<Type>,
+    ret: RType,
+    ret_ty: Type,
+    varargs: bool,
+}
+
+/// El receptor escrito de un destino de asignacion (`h` en `h.f = v`); `None` si es un nombre suelto.
+fn receptor_de(target: Expr) -> Option<Expr> {
+    match target.kind {
+        ExprKind::Field { expr, .. } => Some(*expr),
+        _ => None,
     }
 }
 

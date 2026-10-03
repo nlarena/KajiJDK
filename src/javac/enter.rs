@@ -25,7 +25,8 @@ use super::ast::{
 };
 use super::classfile::{self, ExternalClass};
 use super::symbol::{
-    ParamSig, RType, RTypeArg, Resolved, ScopeId, Symbol, SymbolId, SymbolKind, SymbolTable,
+    ImportEstatico, ParamSig, RType, RTypeArg, Resolved, ScopeId, Symbol, SymbolId, SymbolKind,
+    SymbolTable,
 };
 use super::Error;
 
@@ -175,6 +176,16 @@ fn load_externals(table: &mut SymbolTable, finder: &ClassFinder, unit: &Compilat
     for name in JAVA_LANG {
         try_load(table, finder, name, imports, unit.package.as_deref(), &mut pending);
     }
+    // El tipo `X` de cada `import static X.*`: sus tipos miembro son nombrables corto en la unidad
+    // (§7.5.4, finding #540), y para encontrarlos hace falta `X` cargado --con él vienen sus
+    // anidados directos y su jerarquía, de donde salen los heredados--. Va con los de la fase 2 y
+    // no con los que la unidad nombra, porque `X` no se escribe como tipo: no debe ganar ninguna
+    // clave simple.
+    pending.extend(imports.estaticos_on_demand.iter().cloned());
+    // Y el `X` de cada `import static X.m;`, por lo mismo: sin el cargado no hay donde buscar el
+    // miembro, y el import quedaba sin efecto (finding #543). Tampoco se escribe como tipo, asi que
+    // tampoco debe ganar la clave simple: va en la misma fase que los de arriba.
+    pending.extend(imports.estaticos_single.iter().map(|(_, x)| x.clone()));
     // **Fase 2** (finding #251): los tipos que aparecen en las **firmas** de los externos ya
     // cargados — el retorno de un método del classpath, sin ir más lejos. Sin esto, encadenar sobre
     // ese retorno no resuelve y la llamada se descarta en silencio.
@@ -666,26 +677,42 @@ fn try_load(
             }
         }
     } else {
-        candidates.push(format!("java/lang/{name}"));
+        // **El orden es la precedencia del JLS**, y no es decorativo: el bucle de más abajo corta en
+        // el primer candidato que encuentra, así que el que va primero **gana**. §6.5.5.1 y §7.5
+        // ordenan un nombre de tipo simple así: los tipos de la propia unidad (eso se resuelve en
+        // otro lado), el `import` de un solo tipo, los tipos del **propio paquete**, y recién
+        // después los imports **on demand** — entre los que está el `java.lang.*` implícito (§7.3).
+        //
+        // `java/lang/{name}` estaba **primero**, y por eso el finding #493 no se moría: cuando el
+        // tipo existe en `java.lang` **y** en el paquete de la unidad, ganaba el de `java.lang` y el
+        // del paquete no se probaba nunca. Tampoco se recuperaba la clave después, porque el
+        // `override_external` mira si **el candidato que ganó** tiene precedencia, y ese no la tiene.
+        // Parecía caprichoso porque solo muerde cuando existen los dos: `List` desde `java.util`
+        // andaba (no hay `java/lang/List`), `EmptyEnumeration` no.
+
+        // 1. `import` de un solo tipo (§7.5.1): le gana hasta al propio paquete.
         if let Some(fqn) = imports.single.get(name) {
             con_precedencia.extend(internal_candidates(fqn));
             candidates.extend(internal_candidates(fqn));
         }
-        // `import p.Outer.*;` — el prefijo puede ser un **paquete** (`p/Outer/Nombre`) o una
-        // **clase** cuyos tipos miembro se importan (`p/Outer$Nombre`).
-        for prefix in &imports.on_demand {
-            candidates.extend(internal_candidates(&format!("{prefix}.{name}")));
-        }
-        // Mismo paquete (§6.5.5.1): un tipo del **paquete actual** en el classpath es visible por su
-        // nombre simple, sin `import` (finding #4). P. ej. `List` desde `package java.util` → busca
-        // `java/util/List`. Antes solo se probaba `java/lang/List`, y quedaba sin resolver.
+        // 2. Mismo paquete (§6.5.5.1): un tipo del **paquete actual** en el classpath es visible por
+        // su nombre simple, sin `import` (finding #4). P. ej. `List` desde `package java.util` →
+        // busca `java/util/List`.
         if let Some(p) = pkg {
             con_precedencia.push(format!("{}/{name}", p.replace('.', "/")));
             candidates.push(format!("{}/{name}", p.replace('.', "/")));
         }
-        // Nombre **pelado**: un tipo del **paquete por defecto** en el classpath (su nombre interno
-        // es el simple, sin paquete). Es lo que permite referenciar una clase KajiLibrary-only por
-        // `-cp` (finding #7). Va último: `java.lang` y los imports tienen precedencia.
+        // 3. El `import java.lang.*` implícito (§7.3). Es un on-demand como cualquier otro, y va
+        // después del paquete propio por eso.
+        candidates.push(format!("java/lang/{name}"));
+        // 4. `import p.Outer.*;` — el prefijo puede ser un **paquete** (`p/Outer/Nombre`) o una
+        // **clase** cuyos tipos miembro se importan (`p/Outer$Nombre`).
+        for prefix in &imports.on_demand {
+            candidates.extend(internal_candidates(&format!("{prefix}.{name}")));
+        }
+        // 5. Nombre **pelado**: un tipo del **paquete por defecto** en el classpath (su nombre
+        // interno es el simple, sin paquete). Es lo que permite referenciar una clase
+        // KajiLibrary-only por `-cp` (finding #7). Va último: todo lo anterior tiene precedencia.
         candidates.push(name.to_string());
     }
     // **source-shadows-classpath** (findings #5/#7/#19): si **algún** candidato corresponde a un tipo
@@ -801,6 +828,14 @@ fn build_external(
     if ext.runtime_retention {
         table.mark_runtime_retained(&ext.name);
     }
+    // Finding #480: que sea una interna de **instancia** sale de su propia entrada en
+    // `InnerClasses`, y no se puede deducir de la tabla porque un externo se registra sin `owner`.
+    if ext.inner_instance {
+        table.mark_inner_instance(&ext.name);
+    }
+    if let Some(flags) = ext.inner_access {
+        table.mark_inner_access(&ext.name, flags);
+    }
 
     // Los parámetros de tipo de la clase (`<E>` de `List<E>`): sin estos símbolos, las `E` de sus
     // firmas no resolverían a nada.
@@ -816,11 +851,22 @@ fn build_external(
         // perdía. `codegen::field_info` decide el opcode por **estos** modificadores, así que "no es
         // estático" quedaba como el default silencioso de **todo** campo del classpath: un
         // `Integer.MAX_VALUE` salía `getfield` —opcode equivocado y con un receptor inventado— y la
-        // VM moría con `field_offset: field not found`. El `.is_static` se venía consumiendo para los
+        // VM moría con `field_offset: 'MAX_VALUE' is not in 'java/lang/Integer' …`. El `.is_static` se venía consumiendo para los
         // **métodos** de acá abajo y nunca para los campos.
         let mut mods = Vec::new();
         if f.is_static {
             mods.push(Modifier::Static);
+        }
+        // Los flags de acceso (finding #506). Sin ninguno de los tres, el acceso es **de paquete**,
+        // que es justamente lo que `access_level_in` entiende por "sin modificador".
+        if f.is_public {
+            mods.push(Modifier::Public);
+        }
+        if f.is_private {
+            mods.push(Modifier::Private);
+        }
+        if f.is_protected {
+            mods.push(Modifier::Protected);
         }
         let s = table.new_symbol(Symbol {
             name: f.name.clone(),
@@ -869,6 +915,10 @@ fn build_external(
         // inaccesibles desde otro nido (el `private AssertionError(String)` no captura un `new` externo).
         if m.is_private {
             mmods.push(Modifier::Private);
+        }
+        // `ACC_PROTECTED` (finding #506): el unico de los cuatro niveles que no se leia.
+        if m.is_protected {
+            mmods.push(Modifier::Protected);
         }
         // `ACC_NATIVE`: sin esto, un `MethodHandle.invoke` **cargado del classpath** no se distinguía
         // de un varargs cualquiera, y el polimorfismo de firma (JLS §15.12.3) no llegaba a aplicarse
@@ -1086,7 +1136,10 @@ pub fn enter_cp_multi(
     let mut errors = Vec::new();
 
     // El paquete de cada unidad (o el paquete sin nombre) es el dueño de sus tipos top-level.
-    let mut pkgs: Vec<(SymbolId, ScopeId, String)> = Vec::new();
+    // Cada unidad lleva además **su propio scope**, colgado del paquete, donde más abajo se
+    // definen sus `import` de un solo tipo: el escalón que faltaba entre la clase y el paquete
+    // (§7.5.1).
+    let mut pkgs: Vec<(SymbolId, ScopeId, ScopeId, String)> = Vec::new();
     for unit in units {
         let pkg = unit.package.as_deref();
         let pkg_id = table.get_or_create_package(pkg);
@@ -1094,20 +1147,23 @@ pub fn enter_cp_multi(
             SymbolKind::Package { members } => *members,
             _ => unreachable!("get_or_create_package devuelve un Package"),
         };
-        pkgs.push((pkg_id, pkg_scope, pkg.unwrap_or("").to_string()));
+        let unit_scope = table.new_scope(Some(pkg_scope), None);
+        pkgs.push((pkg_id, pkg_scope, unit_scope, pkg.unwrap_or("").to_string()));
     }
 
     // Enter — **todos** los símbolos de clase de **todas** las unidades primero (top-level y
     // anidados, recursivo), así cualquier nombre de tipo tiene a quién resolver.
-    for (i, (unit, (pkg_id, pkg_scope, base))) in units.iter().zip(&pkgs).enumerate() {
+    for (i, (unit, (pkg_id, pkg_scope, unit_scope, base))) in units.iter().zip(&pkgs).enumerate() {
         let desde = errors.len();
         for class in &unit.types {
-            enter_type(&mut table, &mut errors, class, *pkg_id, *pkg_scope, base, base, false);
+            enter_type(
+                &mut table, &mut errors, class, *pkg_id, *pkg_scope, *unit_scope, base, base, false,
+            );
         }
         crate::javac::marcar_unidad(&mut errors, desde, i);
     }
     // MemberEnter — recién ahora los contenidos de cada clase (recursivo en las anidadas).
-    for (i, (unit, (_, _, base))) in units.iter().zip(&pkgs).enumerate() {
+    for (i, (unit, (_, _, _, base))) in units.iter().zip(&pkgs).enumerate() {
         let desde = errors.len();
         for class in &unit.types {
             member_enter_type(&mut table, &mut errors, class, base);
@@ -1147,9 +1203,15 @@ pub fn enter_cp_multi(
             }
         }
     }
+    // Los `import` de un solo tipo, ya con los externos cargados, se definen en el scope de cada
+    // unidad. Recién acá se puede: antes de `load_externals` el símbolo importado todavía no
+    // existe.
+    for ((_, _, unit_scope, base), imports) in pkgs.iter().zip(&per_unit) {
+        definir_imports_de_unidad(&mut table, *unit_scope, base, imports);
+    }
     // Cada unidad resuelve con **sus** imports (§7.5) y su propio paquete base.
     let mut reported = HashSet::new();
-    for (i, ((unit, imports), (_, _, base))) in units.iter().zip(&per_unit).zip(&pkgs).enumerate() {
+    for (i, ((unit, imports), (_, _, _, base))) in units.iter().zip(&per_unit).zip(&pkgs).enumerate() {
         let desde = errors.len();
         for class in &unit.types {
             resolve_type_decl(&mut table, &mut errors, class, base, imports, &mut reported);
@@ -1181,6 +1243,9 @@ pub fn enter_multi(units: &[CompilationUnit], extra_classpath: &[PathBuf]) -> (S
     let imports: Vec<Imports> = units.iter().map(Imports::from_unit).collect();
 
     // Enter — **todos** los tipos de **todas** las unidades primero (top-level y anidados).
+    // Mismo escalón por unidad que en `enter_cp_multi` (findings #352 y #493). Se guardan los
+    // scopes para poder definir los imports una vez cargados los externos.
+    let mut unit_scopes: Vec<ScopeId> = Vec::new();
     for unit in units {
         let pkg = unit.package.as_deref();
         let pkg_id = table.get_or_create_package(pkg);
@@ -1188,9 +1253,13 @@ pub fn enter_multi(units: &[CompilationUnit], extra_classpath: &[PathBuf]) -> (S
             SymbolKind::Package { members } => *members,
             _ => unreachable!("get_or_create_package devuelve un Package"),
         };
+        let unit_scope = table.new_scope(Some(pkg_scope), None);
+        unit_scopes.push(unit_scope);
         let base = pkg.unwrap_or("");
         for class in &unit.types {
-            enter_type(&mut table, &mut errors, class, pkg_id, pkg_scope, base, base, false);
+            enter_type(
+                &mut table, &mut errors, class, pkg_id, pkg_scope, unit_scope, base, base, false,
+            );
         }
     }
     // MemberEnter — recién ahora los contenidos de cada tipo de cada unidad.
@@ -1208,6 +1277,14 @@ pub fn enter_multi(units: &[CompilationUnit], extra_classpath: &[PathBuf]) -> (S
     // Respaldo: stubs modelados de `java.lang` para lo que no se encontró en disco.
     for &name in JAVA_LANG {
         table.add_external(name);
+    }
+    // Los `import` de un solo tipo en el scope de su unidad, igual que en `enter_cp_multi` y por lo
+    // mismo: después de `load_externals`, que es cuando el símbolo importado ya existe. Acá el scope
+    // por unidad se creaba y quedaba **vacío**, así que los findings #352 y #493 solo estaban
+    // arreglados por el otro camino de entrada.
+    for ((unit, imp), scope) in units.iter().zip(&imports).zip(&unit_scopes) {
+        let base = unit.package.as_deref().unwrap_or("");
+        definir_imports_de_unidad(&mut table, *scope, base, imp);
     }
     // `import static` de cada unidad (no afectan la resolución de *tipos*, sí la de miembros).
     for unit in units {
@@ -1440,7 +1517,29 @@ fn resolve_rtype_arg(table: &SymbolTable, scope: ScopeId, arg: &TypeArg) -> RTyp
 
 /// Resuelve un nombre de tipo a su símbolo (y si es un parámetro de tipo). Mismo orden que
 /// `resolve_class_name`, pero devolviendo el `SymbolId`.
+/// La forma **binaria** de un anidado (`Externa$Anidada`) es una extension nuestra --el `$` no es
+/// separador en el fuente de Java-- y `KajiLibrary` la usa en todas partes. Resolvia solo cuando el
+/// tipo venia de un `.class`, porque el *class finder* registra los externos por su nombre simple y
+/// ese nombre simple **es** `Externa$Anidada`. Un tipo del mismo lote se registra punteado en cada
+/// nivel, y nadie repunteaba: finding #514.
+///
+/// El reintento va **al final**, despues de agotar la forma escrita, para no cambiar en nada lo que
+/// ya resolvia: si el nombre con `$` encuentra algo, gana el, como hasta ahora.
 fn resolve_name_to_sym(table: &SymbolTable, scope: ScopeId, name: &str) -> Option<(SymbolId, bool)> {
+    if let Some(r) = resolve_name_to_sym_exacto(table, scope, name) {
+        return Some(r);
+    }
+    if name.contains('$') {
+        return resolve_name_to_sym_exacto(table, scope, &name.replace('$', "."));
+    }
+    None
+}
+
+fn resolve_name_to_sym_exacto(
+    table: &SymbolTable,
+    scope: ScopeId,
+    name: &str,
+) -> Option<(SymbolId, bool)> {
     // Un supertipo leído del `.class` viene como **nombre interno** (`java/util/AbstractList`); se
     // normaliza a puntos para tratarlo igual que uno del fuente.
     let dotted = name.replace('/', ".");
@@ -1527,6 +1626,14 @@ fn resolve_name_to_sym(table: &SymbolTable, scope: ScopeId, name: &str) -> Optio
         let is_var = matches!(table.symbol(id).kind, SymbolKind::TypeVar { .. });
         return Some((id, is_var));
     }
+    // Un tipo miembro que trae un `import static X.*` de la unidad (§7.5.4, finding #540). Va antes
+    // que `java.lang` y los externos: si compite con alguno de ellos es ambiguo, y la tabla ya lo
+    // miró.
+    match table.tipo_importado_estatico(scope, name) {
+        ImportEstatico::Uno(id) => return Some((id, false)),
+        ImportEstatico::Ambiguo => return None,
+        ImportEstatico::Nada => {}
+    }
     // El `import java.lang.*` implícito, mirando también los tipos **del fuente** de este round
     // (§7.3). Va antes que el externo por el shadowing del #5: si esta compilación declara
     // `java.lang.X`, ese gana sobre el `.class` homónimo del classpath.
@@ -1567,6 +1674,81 @@ fn detect_cycles(table: &SymbolTable, errors: &mut Vec<Error>) {
 }
 
 /// Los `import`s de tipo de una unidad (los `static` no aportan tipos).
+/// Define en el scope de una unidad sus `import` de un solo tipo (§7.5.1).
+///
+/// Va **después** de `load_externals`: antes, el símbolo importado todavía no está en la tabla.
+/// Un import que no resuelve se saltea en silencio -- `check_type` ya reporta el nombre que
+/// falta, y duplicar el error acá solo agregaría ruido.
+///
+/// El nombre cualificado de un tipo **anidado** se escribe distinto en el fuente y en la tabla de
+/// externos; de eso se ocupa [`simbolo_importado`].
+///
+/// Aprovecha el recorrido para anotar la **cabecera** de la unidad (paquete y comodines), que es lo
+/// que decide si un tipo del classpath se puede nombrar corto — ver `externo_nombrable_corto` y el
+/// finding #491.
+fn definir_imports_de_unidad(
+    table: &mut SymbolTable,
+    scope: ScopeId,
+    paquete: &str,
+    imports: &Imports,
+) {
+    // Los `X` de los `import static X.*`, ya cargados por `load_externals`. Uno que no resuelve se
+    // saltea por lo mismo que un import de un solo tipo.
+    let estaticos: Vec<SymbolId> = imports
+        .estaticos_on_demand
+        .iter()
+        .filter_map(|x| simbolo_importado(table, x))
+        .collect();
+    // Los `import static X.m;`: interesa `X`, la clase donde buscar el miembro.
+    let estaticos_single: Vec<(String, SymbolId)> = imports
+        .estaticos_single
+        .iter()
+        .filter_map(|(m, x)| simbolo_importado(table, x).map(|id| (m.clone(), id)))
+        .collect();
+    table.registrar_unidad(
+        scope,
+        paquete,
+        imports.algun_on_demand(),
+        estaticos,
+        estaticos_single,
+        imports.on_demand.clone(),
+    );
+    for (simple, fqn) in &imports.single {
+        if let Some(sym) = simbolo_importado(table, fqn) {
+            table.define(scope, simple, sym);
+        }
+    }
+    // Un `import static X.T;` de un **tipo** miembro se comporta, para nombrarlo, igual que un
+    // import de un solo tipo: se define en el scope de la unidad y lo encuentra toda la resolucion
+    // que ya camina la cadena de scopes (§7.5.3). Lo que no es un tipo --un campo, un metodo-- no
+    // resuelve aca y se contesta mas tarde con `duenos_estaticos`. Finding #543.
+    for (miembro, dueno) in &imports.estaticos_single {
+        let camino = format!("{dueno}.{miembro}");
+        if let Some(sym) = simbolo_importado(table, &camino) {
+            if matches!(table.symbol(sym).kind, SymbolKind::Class { .. }) {
+                table.define(scope, miembro, sym);
+            }
+        }
+    }
+}
+
+/// El símbolo que designa el nombre cualificado de un `import`, probando las formas **anidadas**.
+///
+/// Un tipo anidado se escribe con puntos en el fuente (`java.util.Map.Entry`) y con `$` en la tabla
+/// de externos (`java.util.Map$Entry`), y desde el nombre escrito no se sabe **cuántos** de los
+/// últimos segmentos son anidamiento y cuántos son paquete. Así que se prueban todas las formas, de
+/// menos a más: `a.b.C.D.E`, `a.b.C.D$E`, `a.b.C$D$E`, ... Las claves son exactas, así que una forma
+/// que no corresponde simplemente no está; no hay falsos positivos que ganarían por orden.
+///
+/// Convertir **un solo** separador --el último-- era lo que había, y alcanzaba para un nivel. Con
+/// tres no: `Signature.TypeArg.Bounded.WildcardIndicator` quedaba sin definir. Mientras el fallback
+/// a la tabla de externos era libre no se notaba; con el filtro del #491 pasó a ser un error.
+fn simbolo_importado(table: &SymbolTable, fqn: &str) -> Option<SymbolId> {
+    // La misma búsqueda la necesita el `import static X.*` para detectar ambigüedades, así que vive
+    // en la tabla.
+    table.simbolo_por_nombre_escrito(fqn)
+}
+
 struct Imports {
     single: HashMap<String, String>, // nombre simple → nombre cualificado
     has_wildcard: bool,
@@ -1574,6 +1756,16 @@ struct Imports {
     /// porque un `import p.Outer.*;` importa los tipos miembro de la **clase** `p.Outer`, y para
     /// encontrarlos hay que probar `p/Outer$Nombre` — un `has_wildcard` a secas no dice contra qué.
     on_demand: Vec<String>,
+    /// Los tipos `X` de los `import static X.*` de la unidad, tal como se escribieron.
+    ///
+    /// Un `import static p.Outer.*;` importa los tipos miembro estáticos de `p.Outer` (§7.5.4), así
+    /// que una unidad que solo tenga ese import puede nombrar `Nombre` a secas. Sirve para dos cosas:
+    /// que el filtro del #491 no la rechace (cuenta como comodín) y **resolver** esos nombres, que
+    /// es lo que faltaba (finding #540). Se guardan por unidad y no en `static_on_demand`, que es
+    /// global a la compilación.
+    estaticos_on_demand: Vec<String>,
+    /// Los `import static X.m;`: `(miembro, `X`)`. Ver `SymbolTable::duenos_estaticos` (#543).
+    estaticos_single: Vec<(String, String)>,
 }
 
 impl Imports {
@@ -1581,8 +1773,15 @@ impl Imports {
         let mut single = HashMap::new();
         let mut has_wildcard = false;
         let mut on_demand = Vec::new();
+        let mut estaticos_on_demand = Vec::new();
+        let mut estaticos_single = Vec::new();
         for imp in &unit.imports {
             if imp.is_static {
+                if imp.wildcard {
+                    estaticos_on_demand.push(imp.path.clone());
+                } else if let Some((dueno, miembro)) = imp.path.rsplit_once('.') {
+                    estaticos_single.push((miembro.to_string(), dueno.to_string()));
+                }
                 continue;
             }
             if imp.wildcard {
@@ -1592,7 +1791,13 @@ impl Imports {
                 single.insert(simple.to_string(), imp.path.clone());
             }
         }
-        Imports { single, has_wildcard, on_demand }
+        Imports { single, has_wildcard, on_demand, estaticos_on_demand, estaticos_single }
+    }
+
+    /// ¿Hay algún import **on-demand**, de tipos o estático? Es la pregunta de la que depende la
+    /// indulgencia del #491: con un comodín en juego no se puede descartar ningún nombre.
+    fn algun_on_demand(&self) -> bool {
+        self.has_wildcard || !self.estaticos_on_demand.is_empty()
     }
 }
 
@@ -1657,7 +1862,7 @@ fn check_type(
                 return;
             }
             if !resolve_class_name(table, scope, name, imports) && reported.insert(name.clone()) {
-                error(errors, pos, format!("no se encuentra el símbolo: {name}"));
+                error(errors, pos, mensaje_no_resuelto(table, scope, name));
             }
         }
         // Se valida la base **y** cada argumento: `List<NoExiste>` también es un error.
@@ -1666,7 +1871,7 @@ fn check_type(
                 && !resolve_class_name(table, scope, base, imports)
                 && reported.insert(base.clone())
             {
-                error(errors, pos, format!("no se encuentra el símbolo: {base}"));
+                error(errors, pos, mensaje_no_resuelto(table, scope, base));
             }
             for a in args {
                 match a {
@@ -1686,10 +1891,37 @@ fn check_type(
     }
 }
 
+/// El error para un nombre de tipo que no resolvió: si fue porque dos imports on-demand lo traen,
+/// se dice eso y no "no se encuentra", que mandaría a buscar un import que falta cuando sobra uno.
+fn mensaje_no_resuelto(table: &SymbolTable, scope: ScopeId, name: &str) -> String {
+    if table.tipo_importado_estatico(scope, name) == ImportEstatico::Ambiguo {
+        format!("la referencia a {name} es ambigua: la traen dos imports on-demand")
+    } else {
+        format!("no se encuentra el símbolo: {name}")
+    }
+}
+
 /// ¿Resuelve el nombre de tipo `name`? Orden: scope (anidados/mismo paquete) → import
 /// single-type → `java.lang` (class finder) → cualificado. Ante un `import *` se es indulgente
 /// (no podemos saber sin classpath). Es la resolución de la **pasada 1** (solo existencia).
 fn resolve_class_name(table: &SymbolTable, scope: ScopeId, name: &str, imports: &Imports) -> bool {
+    // El mismo reintento de `resolve_name_to_sym` (finding #514): los dos tienen que contestar lo
+    // mismo, o el chequeo de la pasada 1 rechaza un nombre que la resolucion despues encuentra.
+    if resolve_class_name_exacto(table, scope, name, imports) {
+        return true;
+    }
+    if name.contains('$') {
+        return resolve_class_name_exacto(table, scope, &name.replace('$', "."), imports);
+    }
+    false
+}
+
+fn resolve_class_name_exacto(
+    table: &SymbolTable,
+    scope: ScopeId,
+    name: &str,
+    imports: &Imports,
+) -> bool {
     // **Finding #119/#120**: igual que en `resolve_name_to_sym`, este atajo valia para cualquier
     // nombre bajo `java.lang.` y devolvia `false` de una para los **subpaquetes**
     // (`java.lang.ref.WeakReference` → `rest` = `"ref.WeakReference"`, que no es clave de ningun
@@ -1703,10 +1935,23 @@ fn resolve_class_name(table: &SymbolTable, scope: ScopeId, name: &str, imports: 
         if table.class(name).is_some() {
             return true;
         }
+        // El **nombre completo** primero: es la consulta exacta, y hace falta cuando la clave
+        // simple se la quedo un homonimo. `java.util.Date` y `java.security.cert.Certificate` son
+        // legales y quedaban rechazados porque `Date` y `Certificate` los tenian `java.sql.Date` y
+        // `java.security.Certificate`.
+        if simbolo_importado(table, name).is_some() {
+            return true;
+        }
         // Un externo se registra por su **nombre simple**, asi que un cualificado de subpaquete
-        // (`java.lang.ref.WeakReference`, `java.util.stream.Stream`) resuelve por ahi.
+        // (`java.lang.ref.WeakReference`, `java.util.stream.Stream`) resuelve por ahi -- **pero solo
+        // si lo escrito es el nombre completo del tipo**. Buscar por el ultimo segmento a secas
+        // aceptaba un calificado a medias (`reflect.Field`), que el JDK rechaza porque no hay
+        // nombres de paquete relativos. Finding #542.
         if let Some(simple) = name.rsplit('.').next() {
-            if table.external(simple).is_some() {
+            if table
+                .external(simple)
+                .is_some_and(|id| table.binary_name(id).is_some_and(|b| b.replace('$', ".") == name))
+            {
                 return true;
             }
         }
@@ -1727,8 +1972,20 @@ fn resolve_class_name(table: &SymbolTable, scope: ScopeId, name: &str, imports: 
     if imports.single.contains_key(name) {
         return true; // importado explícitamente (lo damos por existente)
     }
-    if table.external(name).is_some() {
-        return true; // java.lang, auto-importado
+    // Lo que trae un `import static X.*` de la unidad (finding #540). Ambiguo es un error, igual
+    // que en el JDK, aunque haya un externo homónimo cargado.
+    match table.tipo_importado_estatico(scope, name) {
+        ImportEstatico::Uno(_) => return true,
+        ImportEstatico::Ambiguo => return false,
+        ImportEstatico::Nada => {}
+    }
+    if let Some(id) = table.external(name) {
+        // Estar **cargado** no es estar **visible**: el mapa de externos es plano y global a la
+        // compilación, así que un tipo que otra unidad importó quedaba nombrable en todas, sin
+        // importarlo. Finding #491.
+        if table.externo_nombrable_corto(scope, id) {
+            return true;
+        }
     }
     imports.has_wildcard // con `import *` no podemos descartar
 }
@@ -1756,6 +2013,12 @@ fn enter_type(
     class: &ClassDecl,
     owner: SymbolId,
     owner_scope: ScopeId,
+    // **Donde cuelga** el scope de miembros, que no siempre es donde se **define** el tipo. Para un
+    // tipo top-level, se define en el paquete --si no, dejaria de verse desde las otras unidades--
+    // pero cuelga del scope de su **unidad**, para que los `import` de ese archivo tapen al
+    // homonimo del paquete (§7.5.1) y no se filtren a los hermanos. Findings #352 y #493.
+    // Para un tipo anidado los dos son el mismo: el scope de miembros de quien lo encierra.
+    parent_scope: ScopeId,
     enclosing_fqn: &str,
     enclosing_binary: &str,
     nested: bool,
@@ -1771,8 +2034,9 @@ fn enter_type(
         error(errors, class.pos, format!("tipo duplicado: {fqn}"));
         return;
     }
-    // El scope de miembros se enlaza al de su contenedor (paquete o clase externa).
-    let members = table.new_scope(Some(owner_scope), None);
+    // El scope de miembros se enlaza al de su contenedor: el de la unidad para un top-level, el de
+    // la clase que lo encierra para un anidado.
+    let members = table.new_scope(Some(parent_scope), None);
     let sym = table.new_symbol(Symbol {
         name: class.name.clone(),
         kind: SymbolKind::Class {
@@ -1798,7 +2062,7 @@ fn enter_type(
     // Recursión: los tipos anidados son símbolos de la clase, en su scope de miembros.
     for member in &class.members {
         if let Member::Type(inner) = member {
-            enter_type(table, errors, inner, sym, members, &fqn, &binary, true);
+            enter_type(table, errors, inner, sym, members, members, &fqn, &binary, true);
         }
     }
 }
@@ -1919,11 +2183,32 @@ fn member_enter_type(table: &mut SymbolTable, errors: &mut Vec<Error>, class: &C
             } else {
                 Vec::new()
             };
+            // **El acceso del constructor por defecto es el de su clase** (§8.8.9), no de paquete.
+            //
+            // Se registraba con la lista vacia, asi que un `new q.Sub()` desde otro paquete se
+            // rechazaba con *"el metodo `Sub` es `de paquete`"* aunque `Sub` fuera `public`. El
+            // emisor ya lo hacia bien --`codegen::default_ctor` toma el `access` del tipo-- y la
+            // atribucion no: dos mitades que responden lo mismo y solo una estaba al dia.
+            // Finding #497.
+            //
+            // Un `enum` es la excepcion: su constructor implicito es `private` (§8.9.2), porque sus
+            // constantes son las unicas instancias y nadie puede construir otra desde afuera.
+            let acceso: Vec<Modifier> = if class.kind == TypeKind::Enum {
+                vec![Modifier::Private]
+            } else {
+                class
+                    .modifiers
+                    .iter()
+                    .find(|m| matches!(m, Modifier::Public | Modifier::Protected | Modifier::Private))
+                    .cloned()
+                    .into_iter()
+                    .collect()
+            };
             let sym = table.new_symbol(Symbol {
                 name: class.name.clone(),
                 kind: SymbolKind::Method { params, return_type: Type::Void, is_constructor: true, throws: Vec::new() },
                 owner: Some(cid),
-                modifiers: Vec::new(),
+                modifiers: acceso,
             });
             table.define(scope, &class.name, sym);
         }
@@ -1942,7 +2227,7 @@ fn member_enter_type(table: &mut SymbolTable, errors: &mut Vec<Error>, class: &C
 pub fn hoist_anonymous(unit: &mut CompilationUnit, table: &mut SymbolTable, errors: &mut Vec<Error>) {
     let base = unit.package.as_deref().unwrap_or("").to_string();
     {
-        let mut h = Hoister { table: &mut *table, errors };
+        let mut h = Hoister { table: &mut *table, errors, campo_estatico: false };
         for class in &mut unit.types {
             h.class(class, &base);
         }
@@ -1957,6 +2242,10 @@ pub fn hoist_anonymous(unit: &mut CompilationUnit, table: &mut SymbolTable, erro
 struct Hoister<'a> {
     table: &'a mut SymbolTable,
     errors: &'a mut Vec<Error>,
+    /// La anónima que se está bajando sale del inicializador de un campo **estático**, o sea que no
+    /// tiene instancia envolvente y hay que marcarla `static` (finding #499). Solo lo enciende ese
+    /// camino: por un cuerpo de método sigue valiendo `false`, como siempre.
+    campo_estatico: bool,
 }
 
 impl Hoister<'_> {
@@ -1968,6 +2257,37 @@ impl Hoister<'_> {
             _ => return,
         };
         let mut counter = 0u32;
+        // **Los inicializadores de campo van primero, y aparte** (finding #499). Una anónima en un
+        // cuerpo de método se baja a una clase **local**, intercalando un `LocalClass` antes de la
+        // sentencia que la usa; un inicializador de campo no es una sentencia de ningún bloque, así
+        // que no hay dónde intercalarlo y este `match` la salteaba entera --de ahí que el generador
+        // se encontrara con un `NewObject` con cuerpo y cortara--.
+        //
+        // Se baja a un **miembro** de la clase, que es lo que hace el JDK: la anónima de un campo es
+        // `Externa$1`, una anidada. Lo demás ya estaba: `make_anon` la registra con el `fqn` y el
+        // binario de una anidada --`Externa.$1` / `Externa$1`-- y con un scope hijo del de la clase,
+        // exactamente igual que cuando sale de un método. Lo único que cambia es el envoltorio.
+        let mut anidadas: Vec<Member> = Vec::new();
+        for member in &mut class.members {
+            if let Member::Field(f) = member {
+                if let Some(e) = &mut f.init {
+                    // Sin esto, la `$N` de un campo estático se toma por interna de instancia --toda
+                    // clase de nombre sintético lo es-- y el desugar le antepone `this$0` a la
+                    // cabecera del constructor. Pero en contexto estático no hay `this` que pasarle,
+                    // así que el `new` queda con un argumento menos y no resuelve: el síntoma era
+                    // *"no se encontró un constructor `$4(int)` aplicable"*.
+                    self.campo_estatico = f.modifiers.contains(&Modifier::Static);
+                    let mut decls: Vec<Stmt> = Vec::new();
+                    self.expr(e, cid, scope, &binary, &fqn, &mut counter, &mut decls);
+                    self.campo_estatico = false;
+                    for d in decls {
+                        if let StmtKind::LocalClass(decl) = d.kind {
+                            anidadas.push(Member::Type(decl));
+                        }
+                    }
+                }
+            }
+        }
         for member in &mut class.members {
             match member {
                 Member::Method(m) => {
@@ -1982,6 +2302,8 @@ impl Hoister<'_> {
                 Member::Field(_) => {}
             }
         }
+        // Van al final para no invalidar el recorrido de arriba; el orden entre miembros no importa.
+        class.members.extend(anidadas);
     }
 
     /// Reescribe un bloque intercalando, **antes** de cada sentencia, las `LocalClass` sintéticas de
@@ -2086,6 +2408,14 @@ impl Hoister<'_> {
             StmtKind::Labeled { body, .. } => {
                 self.stmt(body, owner, scope, binary, fqn, counter, decls)
             }
+            // Una clase **local**: sus metodos tambien pueden declarar anonimas, y no habia brazo
+            // para esto --caia en el `_` de abajo--, asi que nunca se levantaban: el emisor se
+            // encontraba con un `NewObject` con cuerpo y cortaba (*"todavia no soporta una clase
+            // anonima"*). Se recorre como cualquier clase; para cuando corre esta pasada,
+            // `register_local_classes` ya le puso su nombre unico, asi que `class` la encuentra en la
+            // tabla por el FQN de la envolvente mas ese nombre. La anonima queda adentro de la local
+            // (`A$1Afuera$1`), que es como la nombra el javac real. Finding #555.
+            StmtKind::LocalClass(lc) => self.class(lc, fqn),
             _ => {}
         }
     }
@@ -2157,9 +2487,26 @@ impl Hoister<'_> {
                     let members = body.take().unwrap();
                     let ty_clone = ty.clone();
                     let arity = args.len();
-                    if let Some((name, decl)) =
+                    if let Some((name, mut decl)) =
                         self.make_anon(&ty_clone, members, arity, owner, scope, binary, fqn, counter)
                     {
+                        // **El cuerpo de la anónima puede traer otra anónima** (finding #533). Se lo
+                        // recorre como a cualquier clase: `make_anon` ya la registró con el fqn y el
+                        // binario de una anidada, así que `class()` la encuentra y la numera con su
+                        // propio contador -- `Outer$1` por fuera y `Outer$1$1` por dentro, que es
+                        // exactamente como las nombra javac.
+                        //
+                        // Sin esto la de adentro nunca se bajaba y el `NewObject` con cuerpo llegaba
+                        // entero al emisor, que cortaba con "todavía no soporta una clase anónima".
+                        //
+                        // El cuerpo de la anonima es otro contexto: si esta anonima sale del
+                        // inicializador de un campo `static`, la de adentro vive en un **metodo de
+                        // instancia** de esta y no es estatica. Sin apagar la marca, la de adentro
+                        // salia `static`, el `new` no le pasaba la envolvente y su constructor si la
+                        // pedia: `NoSuchMethodError` en el JDK, y nuestra VM lo dejaba pasar.
+                        let estatico = std::mem::replace(&mut self.campo_estatico, false);
+                        self.class(&mut decl, fqn);
+                        self.campo_estatico = estatico;
                         decls.push(Stmt::new(Pos::default(), StmtKind::LocalClass(decl)));
                         *ty = Type::Class(name);
                     }
@@ -2169,7 +2516,108 @@ impl Hoister<'_> {
         }
     }
 
-    /// Sintetiza y **registra** la clase local `$N` de una anónima: su supertipo sale de `ty`
+    /// El tipo de un parametro del **constructor de reenvio** de una anonima, con los parametros de tipo
+/// de la superclase reemplazados por los **argumentos escritos** en el `new`.
+///
+/// Para `new G<String>("D") {}` con `G<R> { G(R v) }`, el reenvio pasa de `$N(R)` --que no resuelve
+/// dentro de `$N`, porque `R` es de `G`-- a `$N(String)`. Finding #402.
+///
+/// **Se preservan los argumentos de tipo, no la erasure**, y esto no es un detalle: el `super($a0)`
+/// que el reenvio contiene se vuelve a **resolver** despues del desugar, y contra una firma cruda la
+/// inferencia se pierde. Un intento anterior puso la erasure --que es lo que emite javac-- y termino
+/// eligiendo otro constructor en silencio, porque javac escribe el descriptor directo y no vuelve a
+/// resolver nada. Nuestro pipeline si.
+///
+/// Devuelve `None` --y entonces el llamador deja el tipo declarado, con el error de hoy-- en todos
+/// los casos que no se pueden sostener:
+///
+/// - el `new` no escribio argumentos de tipo (el **diamante** `new ArrayList<>(10) {}`, que hoy
+///   funciona por otro camino y no hay que tocar);
+/// - la cantidad de argumentos no coincide con la de parametros de la superclase;
+/// - algun argumento es un **comodin**, que no da un tipo con el que trabajar;
+/// - el tipo sustituido **no resuelve** en el alcance de la anonima. Eso es lo que deja afuera al
+///   `new G<T>(t) {}` de un metodo generico: la `T` del metodo tampoco esta en alcance ahi, y
+///   inventar algo seria cambiar un error visible por un `.class` dudoso.
+fn sustituir_args_escritos(
+    table: &SymbolTable,
+    scope: ScopeId,
+    sup: Option<SymbolId>,
+    escrito: &Type,
+    param: &Type,
+) -> Option<Type> {
+    /// Reemplaza, en un tipo **escrito**, los nombres que esten en el mapa. Baja por arrays y por
+    /// los argumentos de un tipo parametrizado; un comodin sin cota queda como esta.
+    fn reemplazar_nombres(t: &Type, mapa: &HashMap<String, Type>) -> Type {
+        match t {
+            Type::Class(n) => mapa.get(n).cloned().unwrap_or_else(|| t.clone()),
+            Type::Array(inner) => Type::Array(Box::new(reemplazar_nombres(inner, mapa))),
+            Type::Parameterized { base, args } => Type::Parameterized {
+                base: mapa
+                    .get(base)
+                    .and_then(|r| match r {
+                        Type::Class(n) => Some(n.clone()),
+                        Type::Parameterized { base: b, .. } => Some(b.clone()),
+                        _ => None,
+                    })
+                    .unwrap_or_else(|| base.clone()),
+                args: args
+                    .iter()
+                    .map(|a| match a {
+                        TypeArg::Type(x) => TypeArg::Type(reemplazar_nombres(x, mapa)),
+                        TypeArg::Extends(x) => {
+                            TypeArg::Extends(Box::new(reemplazar_nombres(x, mapa)))
+                        }
+                        TypeArg::Super(x) => TypeArg::Super(Box::new(reemplazar_nombres(x, mapa))),
+                        TypeArg::Wildcard => TypeArg::Wildcard,
+                    })
+                    .collect(),
+            },
+            _ => t.clone(),
+        }
+    }
+
+    /// Si en el tipo resuelto quedo algo sin resolver --o una variable de tipo-- a cualquier
+    /// profundidad. Una variable de tipo cuenta: es justo lo que no esta en alcance en `$N`.
+    fn tiene_sin_resolver(rt: &RType) -> bool {
+        match rt {
+            RType::Unresolved | RType::TypeVar(_) => true,
+            RType::Array(inner) => tiene_sin_resolver(inner),
+            RType::Parameterized { args, .. } => args.iter().any(|a| match a {
+                RTypeArg::Type(t) => tiene_sin_resolver(t),
+                RTypeArg::Extends(t) | RTypeArg::Super(t) => tiene_sin_resolver(t),
+                RTypeArg::Wildcard => false,
+            }),
+            _ => false,
+        }
+    }
+
+    let sup = sup?;
+    let Type::Parameterized { args, .. } = escrito else { return None };
+    if args.is_empty() {
+        return None; // diamante
+    }
+    let tps = super::types::type_params_of(table, sup);
+    if tps.len() != args.len() {
+        return None;
+    }
+    let mut mapa: HashMap<String, Type> = HashMap::new();
+    for (tp, arg) in tps.iter().zip(args) {
+        let TypeArg::Type(t) = arg else { return None }; // comodin
+        mapa.insert(table.symbol(*tp).name.clone(), t.clone());
+    }
+    let nuevo = reemplazar_nombres(param, &mapa);
+    // Si no cambio nada, no hay motivo para tocar el parametro.
+    if nuevo == *param {
+        return None;
+    }
+    // Y tiene que resolver desde aca; si no, se deja el error de hoy.
+    if tiene_sin_resolver(&super::attribute::resolve_rtype(table, scope, &nuevo)) {
+        return None;
+    }
+    Some(nuevo)
+}
+
+/// Sintetiza y **registra** la clase local `$N` de una anónima: su supertipo sale de `ty`
     /// (`extends` si es clase, `implements` si es interfaz) y sus miembros son el cuerpo. Devuelve su
     /// nombre y su `ClassDecl` (para el `LocalClass` que la declara).
     #[allow(clippy::too_many_arguments)]
@@ -2211,7 +2659,12 @@ impl Hoister<'_> {
                     .enumerate()
                     .map(|(i, p)| Param {
                         annotations: Vec::new(),
-                        ty: p.ty.clone(),
+                        // Los parametros del reenvio llevan los **argumentos de tipo escritos**, no
+                        // los parametros declarados por la superclase: la `R` de `G<R> { G(R v) }`
+                        // no esta en alcance dentro de `$N`, y copiarla dejaba un tipo que el emisor
+                        // no podia resolver (finding #402).
+                        ty: Self::sustituir_args_escritos(self.table, scope, ty_sym, ty, &p.ty)
+                            .unwrap_or_else(|| p.ty.clone()),
                         name: format!("$a{i}"),
                         // El `varargs` del supertipo se **hereda**: si `Base(String...)` es
                         // variádico, el reenvío `$N(String... $a0)` también tiene que serlo. Con
@@ -2278,14 +2731,14 @@ impl Hoister<'_> {
             name: name.clone(),
             kind: SymbolKind::Class {
                 kind: TypeKind::Class,
-                binary: anon_binary,
+                binary: anon_binary.clone(),
                 extends: extends.clone(),
                 implements: implements.clone(),
                 permits: Vec::new(),
                 members: members_scope,
             },
             owner: Some(owner),
-            modifiers: Vec::new(),
+            modifiers: if self.campo_estatico { vec![Modifier::Static] } else { Vec::new() },
         });
         self.table.set_scope_owner(members_scope, sym);
         self.table.register_class(&anon_fqn, sym);
@@ -2293,11 +2746,11 @@ impl Hoister<'_> {
         self.table
             .set_resolved(sym, Resolved::Class { super_type: super_rt, interface_types: iface_rts, permitted: Vec::new() });
 
-        let decl = ClassDecl {
+        let mut decl = ClassDecl {
             doc: None,
             pos: Pos::default(),
             annotations: Vec::new(),
-            modifiers: Vec::new(),
+            modifiers: if self.campo_estatico { vec![Modifier::Static] } else { Vec::new() },
             kind: TypeKind::Class,
             name: name.clone(),
             type_params: Vec::new(),
@@ -2312,6 +2765,25 @@ impl Hoister<'_> {
             annotation_defaults: Vec::new(),
         };
         member_enter_type(self.table, self.errors, &decl, fqn);
+        // **Las clases locales declaradas adentro de la anonima** (§14.3). `register_local_classes`
+        // corre **antes** que esta pasada, cuando la anonima todavia no tiene simbolo: ahi sus
+        // cuerpos se recorren con `reg = false` --no hay de quien colgarlas-- y una `class Mas`
+        // declarada en un metodo suyo no se registraba nunca, asi que `new Mas()` no resolvia y el
+        // generador cortaba con *"una llamada que no resolvio a ningun metodo"*. Ahora que la clase
+        // sintetica **ya existe**, se las registra con ella de enclosing, que es lo que dice el
+        // JLS y como las nombra el javac real (`Externa$1$1Mas`). El `resolve_symbols` del final de
+        // `hoist_anonymous` les decora las firmas. Finding #556.
+        {
+            let ctx = LocalCtx {
+                cid: sym,
+                scope: members_scope,
+                fqn: anon_fqn.clone(),
+                binary: anon_binary.clone(),
+            };
+            let mut namer =
+                LocalNamer { table: &mut *self.table, errors: &mut *self.errors, n: 0 };
+            namer.walk_bodies(&mut decl.members, &ctx, true, &mut Vec::new());
+        }
         // El constructor de reenvío quedó registrado por `member_enter` **sin `Resolved`** (la anónima
         // se registra después de la resolución de Enter): se lo fijamos con los parámetros del
         // constructor del supertipo, para que `new $N(args)` resuelva y el desugar le anteponga las
@@ -3124,6 +3596,20 @@ mod tests {
         );
         assert_eq!(t.static_single.get("max").map(String::as_str), Some("java.lang.Math"));
         assert!(t.static_on_demand.iter().any(|s| s == "java.lang.Math"));
+    }
+
+    /// Finding #540: un `import static X.*` importa los tipos miembro estáticos de `X` (§7.5.4), y
+    /// dos on-demand que traen el mismo nombre son ambiguos --incluido el `java.lang.*` implícito--.
+    #[test]
+    fn a_static_on_demand_import_brings_member_types() {
+        let (_t, e) = enter_src("import static java.util.Map.*; class A { Entry<String, String> e; }");
+        assert!(e.is_empty(), "{e:?}");
+        // `Thread.State` y `Future.State`: los dos de `java.base`, que es lo que ve el classpath de
+        // las pruebas. El JDK 25 dice "reference to State is ambiguous".
+        let (_t, e) = enter_src(
+            "import static java.lang.Thread.*; import static java.util.concurrent.Future.*; class A { State s; }",
+        );
+        assert!(e.iter().any(|x| x.message.contains("ambigua")), "{e:?}");
     }
 
     #[test]

@@ -326,6 +326,17 @@ pub fn compile_units_cp(
         enter::hoist_anonymous(unit, &mut table, &mut errors);
         marcar_unidad(&mut errors, desde, i);
     }
+    // **Una primera pasada de plegado, antes del atributado** (finding #489). El §5.2 permite
+    // estrechar una constante --`byte b = K;` con `K` un `static final int` en rango-- y para saberlo
+    // hay que tener el valor de `K` **mientras** se atribuye. `collect_const_fields` localiza los
+    // campos por la tabla de símbolos y no por los bindings del árbol, así que corre bien acá: pliega
+    // todos los que tienen inicializador literal. Los que referencian a otra constante necesitan el
+    // binding y quedan para la pasada de más abajo, que **extiende** este mapa en vez de pisarlo.
+    let mut const_previos = std::collections::HashMap::new();
+    for unit in units.iter() {
+        const_previos.extend(codegen::collect_const_fields(unit, &table));
+    }
+    table.set_const_fields(const_previos);
     for (i, unit) in units.iter_mut().enumerate() {
         let desde = errors.len();
         errors.extend(attribute::attribute(unit, &table));
@@ -376,6 +387,9 @@ fn compile_cp_single(
     errors.extend(sem_errors);
     enter::register_local_classes(&mut unit, &mut table, &mut errors);
     enter::hoist_anonymous(&mut unit, &mut table, &mut errors);
+    // La misma pasada adelantada que en `compile_cp` (finding #489).
+    let const_previos = codegen::collect_const_fields(&unit, &table);
+    table.set_const_fields(const_previos);
     errors.extend(attribute::attribute(&mut unit, &table));
     errors.extend(check::check(&unit, &table));
     errors.extend(flow::flow(&unit));

@@ -91,11 +91,11 @@ causas distintas, que vale distinguir porque se repiten:
 
 | # | Que |
 |---|---|
-| **#201** | 🟡 falta `synchronized` — `Vector`/`Stack`/`ByteArray*`/`Throwable` hechos; queda `Hashtable` |
+| **#201** | ~~falta `synchronized`~~ — **RESUELTO** (2026-09-21), 0 divergencias: los ultimos 20 eran `Hashtable` 13, `Collator` 2 y cinco sueltos |
 | **#202** | ~~falta `abstract`~~ — **RESUELTO**, 0 divergencias |
-| **#203** | 🟡 falta `final` — `System.out` y otros cuatro hechos; el resto pide cotejo por **descriptor**, no por nombre |
-| **#205** | 🟡 `ClassLoader`, `Collection.stream` y `Map.putAll` **hechos**; queda el resto del hueco de `Map` |
-| **#246** | **hay dos bibliotecas divergentes y la que se desarrolla no es la que corre** |
+| **#203** | ~~falta `final`~~ — **RESUELTO** (2026-09-21): 34 de 35; queda `CallSite.target`, que el JDK hace con `Unsafe` y nadie usa asi aca |
+| **#205** | ~~huecos de biblioteca~~ — **RESUELTO** (2026-09-21): `Map` ya declara `keySet`/`values`/`entrySet`/`putAll` y los 4 archivos compilan |
+| **#246** | ~~dos bibliotecas divergentes~~ — **RESUELTO** (2026-09-21): la VM arranca contra `KajiLibrary/` y corre igual **sin** `boot/` |
 
 ### Retirados
 
@@ -1950,33 +1950,43 @@ identica; **78 clases completas** (0 miembros faltantes), casi todas interfaces.
   concreto —, sin introducir ninguna clase nueva. El gate paso de 30 `-abstract` + 21 `-final` a
   **cero divergencias de modificadores**.
 
-- **#203 — 🟡 PARCIAL: falta `final` en 48 miembros (biblioteca).** El caso visible es **`System.out`**, que
+- **#203 — ✅ RESUELTO: falta `final` en 48 miembros (biblioteca).** El caso visible es **`System.out`**, que
   en el JDK es `public static final PrintStream` y aca es asignable. Un `final` de menos en un campo
   publico tambien cambia lo que el compilador puede plegar (ver #112).
 
-  - **2026-09-21: eran 35, quedan 21, y `System.out` ya no esta en la lista** --se arreglo en el
-    camino--. Medido con `tools/apidiff/apidiff.py` sobre el arbol recompilado.
-  - **Puestos 14**: los campos de `PrintStream` (`autoFlush`, `charset`), `PrintWriter.autoFlush`,
-    `StreamTokenizer.ctype`, `FutureTask.NEW`/`CANCELLED`, y los metodos que el JDK declara final
-    --`DecimalFormat.format`, los tres `Calendar.set`, `PriorityQueue.spliterator`,
-    `TreeMap.compare`, `ContinuationScope.getName`/`toString`--. Los `.class` regenerados con el
-    congelado, invariante verificado.
-  - **Los 21 que quedan no son un modificador, y por eso no se tocaron:**
-    - **13 campos** de `java.lang.reflect.{Field,Method,Constructor}` (`clazz`, `name`, `type`,
-      `modifiers`, `slot`, `parameterTypes`, `exceptionTypes`, `returnType`). La VM los llena
-      **nativamente** y el constructor en Java esta vacio: un `final` sin asignar no compila. El JDK
-      los tiene final porque los asigna en un constructor que su VM usa; igualarlo pide un cambio de
-      VM, no de fuente.
-    - **`CallSite.target`**: el JDK lo tiene final y lo cambia con `Unsafe` en `TARGET_OFFSET`;
-      nuestro `MutableCallSite.setTarget` lo asigna derecho, que con `final` no compila.
-    - **`SequenceInputStream.e`**: nuestro `close()` le pone `null`.
-    - **`ClassLoader.unnamedModule`**: se inicializa perezoso.
-    - **`WeakHashMap.loadFactor`**: lo asigna un `init(...)` privado, no el constructor.
-    - y los que el reporte cuenta por separado (`+final -transient`, 15), que son otra cosa: campos
-      donde ademas falta `transient`.
-  - **Compuertas:** las mismas que el #201 --van en el mismo binario y en el mismo lote de fuentes--.
+  - **Cerrado el 2026-09-21: 34 de 35, y la que queda es una diferencia declarada.** La cuenta de la
+    ficha (48) era de agosto; medida hoy con `tools/apidiff/apidiff.py` sobre el arbol recompilado
+    eran **35**, y `System.out` ya no estaba entre ellas.
+  - **Primera vuelta, 14**: los campos de `PrintStream` (`autoFlush`, `charset`),
+    `PrintWriter.autoFlush`, `StreamTokenizer.ctype`, `FutureTask.NEW`/`CANCELLED`, y los metodos que
+    el JDK declara final --`DecimalFormat.format`, los tres `Calendar.set`,
+    `PriorityQueue.spliterator`, `TreeMap.compare`, `ContinuationScope.getName`/`toString`--.
+  - **Segunda vuelta, 19 mas, y aca estaba el error de diagnostico.** Los 17 campos de
+    `java.lang.reflect.{Field,Method,Constructor}` parecian pedir un cambio de VM, y no: la VM
+    **aloca en crudo** (`objects_operations::try_allocate`) y escribe los campos **por offset**, sin
+    pasar por ningun constructor de Java. O sea que el constructor vacio no lo llamaba nadie --se lo
+    reemplazo por uno que asigna todo, que es lo que el `final` pide, y la VM hace exactamente lo
+    mismo que antes--. Con eso tambien salieron `WeakHashMap.loadFactor` (los tres constructores
+    chicos delegan en el completo, que es el unico que lo asigna) y `SequenceInputStream.e` (el
+    `close()` le ponia `null`; el JDK no lo hace).
+  - **Tercera vuelta, 1 mas**: `ClassLoader.unnamedModule` se mintaba perezoso; se minta en el
+    constructor, que ahora es uno solo --los otros tres delegan--. `Module(ClassLoader)` solo guarda
+    el loader, asi que no hay recursion.
+  - **La que queda, y por que se deja:** `CallSite.target`. El JDK lo tiene `final` y lo cambia con
+    `Unsafe`/`MethodHandleNatives` desde `MutableCallSite.setTarget`; el nuestro lo asigna derecho.
+    Igualarlo pide meterle `Unsafe` a una clase del nucleo que **nadie llama asi** hoy --no hay un
+    solo `setTarget` en la biblioteca ni en la VM--: seria maquinaria nueva sin nada que la ejercite,
+    en el camino del `invokedynamic`. Se deja escrito.
+  - **Verificado corriendo, no solo compilando:** una prueba de reflexion completa --`getDeclaredFields`
+    ordenados, `getInt`/`setInt`, `getDeclaredMethod` + `invoke`, `getDeclaredConstructor` +
+    `newInstance`--, mas `WeakHashMap` con los dos constructores y un `SequenceInputStream` de dos
+    streams, da las **ocho lineas identicas al JDK 25** en nuestra VM.
+  - **Estado del reporte: `-final` pasa de 35 a 1, y `-synchronized` (el #201) a 0.**
+  - **Compuertas** (las tres vueltas, cada una con la suya): recompilacion **4819/4820** --la falla
+    ajena de siempre--; los 48 diferenciales de texto iguales; la suite en **221 invocaciones, 2
+    rotas**, las dos ajenas.
 
-- **#205 — 🟡 PARCIAL (2026-08-24): 2 de los 3 huecos cerrados, 3 de los 4 archivos compilan.**
+- **#205 — ✅ RESUELTO: los 3 huecos cerrados, los 4 archivos compilan.**
   - **`java.lang.ClassLoader` — creado.** Existe porque la API necesita el **tipo**
     (`ClassTransformer.transform(ClassLoader, …)`, `PersistenceUnitInfo`), y ese es su alcance
     honesto: **no carga clases**. Nuestra VM resuelve por metaspace y boot path, sin delegacion de
@@ -2014,6 +2024,16 @@ identica; **78 clases completas** (0 miembros faltantes), casi todas interfaces.
     `jakarta/persistence/spi/ClassTransformer.java` y `.../PersistenceUnitInfo.java`.
   El diagnostico del javac ("no se encuentra el metodo/simbolo") es **correcto** en los cuatro casos.
 
+  - **Cerrado el 2026-09-21: el tercer hueco tambien esta.** `java.util.Map` declara hoy
+    `keySet()`, `values()`, `entrySet()` y `putAll(Map<? extends K, ? extends V>)`, que era
+    exactamente lo que faltaba: sin una enumeracion no habia con que recorrer el mapa origen.
+  - Medido: los **cuatro** archivos que el finding nombraba --`ClassTransformer`,
+    `PersistenceUnitInfo`, `Query` y `PersistenceConfiguration`-- compilan con **0 errores**, con el
+    javac de trabajo **y con el congelado**.
+  - Y corriendo, no solo compilando: una prueba con `putAll` entre un `HashMap` y un `TreeMap`,
+    `keySet`, `values`, `entrySet`, `Collection.stream().count()` y `ClassLoader.getSystemClassLoader()`
+    da **las seis lineas identicas al JDK 25** en nuestra VM.
+
 - **#206 — RETIRADO.** Ver "La regla" al final: las 11 clases que listaba como "izadas a top-level"
   son **package-private**, o sea internos, y por lo tanto libres.
 
@@ -2027,7 +2047,7 @@ verificaron con repro propio antes de asentarlos.**
 
 ### Tercera tanda: dogfooding de `java.util.stream` (2026-08-22)
 
-- **#218 — 🔴 una lambda pasada como ARGUMENTO a un metodo cuyo tipo declarante vino de un `.class`
+- **#218 — ✅ una lambda pasada como ARGUMENTO a un metodo cuyo tipo declarante vino de un `.class`
   del classpath no genera bytecode.**
 
   ```java
@@ -2046,6 +2066,16 @@ verificaron con repro propio antes de asentarlos.**
   **Consecuencia:** ningun codigo fuera de KajiLibrary puede usar lambdas contra la API de
   KajiLibrary. `stream.filter(x -> ...)` es hoy imposible, y por eso las suites de prueba del paquete
   hubo que escribirlas con clases nombradas.
+
+  - **Cerrado el 2026-09-21: ya no reproduce.** Medido hoy con la forma exacta de la ficha --`IH.java`
+    compilada primero a `IH.class`, y `Caller218.java` despues con `-cp` a ese directorio--:
+    `static int a(IH h) { return h.f(x -> x.length()); }` compila y emite
+    `aload_0; invokedynamic #0:apply; invokeinterface IH.f`. Nada de "todavia no soporta una
+    expresion lambda".
+  - Corriendo da `//218 4 5` --la lambda-argumento y el control en posicion de retorno-- **igual que
+    el JDK 25**, en nuestra VM y en la **HotSpot**.
+  - La consecuencia que la ficha nombraba se levanta sola: un `stream.filter(x -> ...)` contra la API
+    de KajiLibrary desde afuera ya es posible.
 
 #### Actualizaciones a findings existentes
 
@@ -2358,7 +2388,7 @@ Contrato **51,2 % → 81,2 %** (+79 miembros), `Collectors` de 4 a **37 factorie
 modificadores divergentes **9 → 0**, 39 asserts de runtime en verde. `StreamSupport` confirmado
 **inviable**: `java.util.Spliterator` no existe y los cinco metodos publicos lo toman por parametro.
 
-- **#246 — 🔴 HAY DOS BIBLIOTECAS ESTANDAR DIVERGENTES, Y LA QUE SE DESARROLLA NO ES LA QUE CORRE.**
+- **#246 — ✅ RESUELTO: la que se desarrolla **es** la que corre.**
   Es el hallazgo estructural de toda la barrida; venia apareciendo de a pedazos.
 
   > **Barrido sistematico (2026-08-24): la divergencia, medida entera.**
@@ -2420,7 +2450,60 @@ modificadores divergentes **9 → 0**, 39 asserts de runtime en verde. `StreamSu
   Mientras esto siga asi, "la biblioteca pasa el gate" y "la biblioteca funciona" son afirmaciones
   sobre **dos artefactos distintos**. Es la Fase E del roadmap: cerrar el circulo.
 
-- **#247 — 🔴 toda llamada a un metodo de una interfaz ANIDADA cargada del classpath se descarta en
+  **Cerrado el 2026-09-21. El circulo esta cerrado: ahora la VM arranca contra `KajiLibrary/`.**
+
+  `src/bin/run-headless.rs` arma el bootclasspath como
+  `[PathBuf::from("KajiLibrary"), PathBuf::from("boot")]` --en ese orden--, asi que en toda clase que
+  este en los dos **gana KajiLibrary**, que es el superset. `boot/` quedo de relleno.
+
+  | que se midio | resultado |
+  |---|---|
+  | clases en `boot/` | 122 |
+  | de esas, tambien en `KajiLibrary/` (o sea, **sombreadas**) | **98** |
+  | solo en `boot/` | 24 |
+  | de esas 24, cuya clase **envolvente** tambien esta sombreada (o sea, inalcanzables) | **23** |
+  | la que queda | `java/lang/fushite/Throwable`, una fixture huerfana que no nombra nadie ni en `src/` ni en la biblioteca |
+
+  Las 24 son todas anidadas o auxiliares --`$Node`, `$Sync`, `$Worker`, `$Entry`, las anonimas
+  `CompletableFuture$1`..`$7`--, y su envolvente la sirve KajiLibrary, asi que ya no se cargan.
+
+  **Y se comprobo por ejecucion, que es lo que vale:** corriendo con `--boot KajiLibrary` --o sea
+  **sin `boot/` en el bootclasspath**-- las **40** fixtures `java/*Test.class` dan la **misma salida**
+  que con el bootclasspath normal (la unica que "difiere" es `CharTest`, que panica igual en los dos
+  lados porque no tiene `run()`). `boot/` es prescindible.
+
+  Las tres divergencias que la ficha listaba tambien se fueron:
+
+  | Clase | lo que decia | hoy |
+  |---|---|---|
+  | `Throwable` | `KajiLibrary` no declara `backtrace` | lo declara |
+  | `Integer` | cero `equals`/`hashCode` | los tiene, y un `HashMap` con claves `Integer` encuentra |
+  | `java.lang.invoke.*` | formas distintas a proposito | sigue igual, y sigue siendo a proposito |
+
+  La consecuencia medible que la ficha nombraba --claves boxeadas a `Integer`-- se volvio a medir:
+  `HashMap<Integer,String>`, `equals`/`hashCode` de dos `Integer` iguales, `Integer.TYPE`/`Double.TYPE`/
+  `Boolean.TYPE`, `Thread.isDaemon()`/`getPriority()`, y `WeakHashMap` + `Collectors` --clases que
+  **solo** existen en `KajiLibrary`--: las **cinco lineas salen identicas al JDK 25**.
+
+
+  **Y la cifra que la ficha daba --93 miembros publicos en 40 clases-- se volvio a medir**, con un
+  comparador entre los dos arboles propios (`scratchpad/boot_vs_kaji.py`; `apidiff` no sirve para
+  esto, compara lo nuestro contra el JDK real). Normalizando lo que no es superficie --`throws`, los
+  argumentos genericos, los modificadores de implementacion (`native`/`final`/`synchronized`) y las
+  variables de tipo sueltas contra su borrado-- quedan **17 miembros en 12 clases**, y **ninguno es
+  API real del JDK que a KajiLibrary le falte**:
+
+  | los 17 | que son |
+  |---|---|
+  | 6 constructores sin argumentos (`Math()`, `System()`, `Class()`, `PrintStream()`, `MethodHandles()`, `AbstractQueuedSynchronizer()`) | el implicito de un *stub* de `boot/`; KajiLibrary declara los de verdad (privados, donde corresponde) |
+  | 8 firmas **simplificadas que `boot/` invento** (`awaitTermination()`, `getDelay()`, `schedule(Runnable, long)`, `scheduleAtFixedRate(Runnable, long, long)`, `ThreadPoolExecutor(int)`…) | el JDK las declara **con `TimeUnit`**, y esas son las que tiene KajiLibrary |
+  | 1 `MethodType.methodType(Class, Class, Class...)` | la divergencia **declarada** de `java.lang.invoke.*` |
+  | 2 artefactos de comparar miembros **declarados** clase por clase | `submit(Runnable)` lo hereda de `AbstractExecutorService`, y `thenCombine`/`thenCompose` estan con la firma **real** (`CompletionStage<? extends U>`) donde `boot/` tiene la simplificada |
+
+  O sea que se dio vuelta del todo: donde las dos difieren, la buena es **KajiLibrary**.
+  Lo que queda es **higiene, no el finding**: borrar `boot/` cuando nadie mas lo referencie.
+
+- **#247 — ✅ toda llamada a un metodo de una interfaz ANIDADA cargada del classpath se descarta en
   silencio.**
   ```java
   IntStream.Builder b = IntStream.builder();
@@ -2432,7 +2515,15 @@ modificadores divergentes **9 → 0**, 39 asserts de runtime en verde. `StreamSu
   falla es el **despacho**. Por eso `Stream.builder()`/`IntStream.builder()` quedan declarados e
   inertes. Misma familia que #239/#245, pero en posicion de llamada.
 
-- **#248 — 🔴 una llamada generica estatica se descarta en silencio cuando la inferencia tiene que
+  - **Cerrado el 2026-09-21: ya no reproduce.** El repro `repros/finding_247.java` compila y su
+    `acumula()` emite lo que la ficha pedia --`invokeinterface IntStream$Builder.accept:(I)V` dos
+    veces, `invokeinterface IntStream$Builder.build:()Ljava/util/stream/IntStream;`-- sin un solo
+    `pop`.
+  - Corriendo, `IntStream.builder()` con dos `accept`, `Stream.Builder` con `accept`+`add`, y un
+    `Map.Entry` recorrido con `entrySet()` dan **las tres lineas identicas al JDK 25**.
+  - `Stream.builder()`/`IntStream.builder()` dejan de estar "declarados e inertes".
+
+- **#248 — ✅ una llamada generica estatica se descarta en silencio cuando la inferencia tiene que
   bajar a una variable de tipo anidada en un argumento de tipo.** Con el parametro declarado
   **invariante** (`Function<T, Stream<U>>`) el call site compila **sin `invokestatic`**:
   ```
@@ -2443,6 +2534,46 @@ modificadores divergentes **9 → 0**, 39 asserts de runtime en verde. `StreamSu
   El llamador recibe el argumento equivocado, sin diagnostico. Declararlo como el JDK
   (`Function<T, ? extends Stream<? extends U>>`) lo hace resolver. **Sigue roto con comodines** en
   `Stream.mapMulti(BiConsumer<? super T, ? super Consumer<R>>)`.
+
+  - **Cerrado el 2026-09-21.** La causa esta en `contains` (§4.5.1, `types.rs`): un argumento de tipo
+    **concreto** se compara por invariancia, y solo se afloja cuando el argumento **es** una variable
+    del metodo. `Stream<U>` no lo es --es un parametrizado que la *menciona*--, asi que se median
+    `Stream<Integer>` y `Stream<U>` por igualdad y no daba. El comentario de `is_inference_var` ya
+    avisaba que no atraviesa los parametrizados "a proposito".
+  - **El arreglo no es aflojar el subtipado.** Se exige lo unico que ya se puede exigir --que los dos
+    tengan la **misma base**-- y lo de adentro queda para el Cap. 18. Asi `Stream<Integer>` entra en
+    `Stream<U>` pero `List<Integer>` no, y `String` tampoco.
+  - **Y esta acotado a la aplicabilidad, que es donde vale.** El primer intento aflojaba `contains`
+    para todo el subtipado, y se midio **antes** de gatearlo: con eso, adentro del cuerpo de un
+    metodo generico un `List<Stream<U>> a = ls;` --que el JDK **rechaza**-- pasaba a compilar. O sea
+    que cambiaba un programa rechazado de mas por uno **aceptado de mas**, que es el lado caro. La
+    version que quedo pasa la indulgencia por un parametro y solo la enciende `convertible`: en la
+    aplicabilidad esas variables son de inferencia y todavia no existen (§18.5.1), mientras que en
+    una asignacion o un override ya son un tipo fijo. Las asignaciones siguen con el estricto.
+  - Medido:
+
+    | | JDK 25 | congelado | ahora |
+    |---|---|---|---|
+    | el repro (`tomaInvariante` con `Function<T, Stream<U>>`) | compila | *no es aplicable* | **compila**, con su `invokestatic` y el `checkcast` |
+    | `tomaComodin` (control, la firma del JDK) | compila | compila | compila |
+    | `soloLista(Function<T, List<U>>)` vs `soloLista(Object)`, pasandole un `Function<String, Stream<Integer>>` | elige `Object` | -- | **elige `Object`** |
+    | `elige(Function<T, Stream<U>>)` vs `elige(Object)` | elige el generico | -- | **elige el generico** |
+    | anidamiento doble (`Function<K, Map<K, List<V>>>`) | compila | -- | **compila** |
+    | programas **ilegales** rechazados en la prueba de riesgo | 3 | 1 | **1** (no se aflojo nada nuevo) |
+
+    Las seis lineas de la prueba salen identicas al JDK 25 en nuestra VM.
+  - **Lo que la ficha pedia como objetivo se cumple**: `invariante()` y `conComodin()` emiten las dos
+    su `invokestatic` y devuelven 7.
+  - De paso se corrigio el comentario de `Collectors.flatMapping`, que afirmaba que con la forma
+    invariante **toda** llamada se descarta en silencio. Ya no es cierto. La declaracion se deja con
+    los comodines porque es la del JDK, no porque el compilador los necesite.
+  - **Compuertas:** recompilacion **4819/4820** --la falla ajena de siempre--; los 48 diferenciales de
+    texto iguales; la suite en **221 invocaciones, 2 rotas**, las dos ajenas. Y **los 6728 `.class` de
+    la biblioteca salen identicos** a los de antes del cambio: esto solo ensancha lo que se acepta, no
+    cambia lo que se emite de lo que ya compilaba.
+  - **Queda lo que la ficha ya declaraba aparte**: `Stream.mapMulti(BiConsumer<? super T, ? super
+    Consumer<R>>)`, con la variable anidada bajo **dos** comodines, sigue sin resolver. Es otra forma
+    y no la toca este arreglo.
 
 #### Re-atribuciones (no son defectos nuevos)
 
@@ -2985,7 +3116,7 @@ para necesitarlo.
 
 ## Tanda 2026-08-24 (g) -- `StringBuilder` y `StringBuffer` completos
 
-### #269 -- 🔴 VM: `System.arraycopy` supone que todo elemento mide cuatro bytes [CERRADO]
+### #269 -- ✅ VM: `System.arraycopy` supone que todo elemento mide cuatro bytes
 
 **El peor de la sesion, y estuvo a la vista todo el tiempo.** El nativo lo decia en su propio
 comentario:
@@ -3462,7 +3593,14 @@ estrechamiento al final --, asi que un parser propio seria una segunda implement
 capaz de discrepar con la primera. Lo unico que estas clases agregan es **el chequeo de rango**,
 que es donde de verdad se diferencian.
 
-### #275 -- 🔴 las caches de wrapper habian desaparecido, y JLS 5.1.7 las EXIGE
+### #275 -- ✅ las caches de wrapper habian desaparecido, y JLS 5.1.7 las EXIGE
+
+> **Re-verificados los tres el 2026-09-21, corriendo:** `Integer.valueOf(100) == Integer.valueOf(100)`
+> y el autoboxing de `100` dan **true**, y el de `1000` **false** (#275); un `catch
+> (IndexOutOfBoundsException)` atrapa el desborde de un `char[]` (#276); y `System.arraycopy` sobre
+> un `byte[]` y sobre un `char[]` copia bien (#269). Las tres lineas, identicas al JDK 25. El titulo
+> quedaba en 🔴 --el marcador de gravedad con que se levantaron-- y se leia como abierto.
+
 
 ```java
 Integer a = Integer.valueOf(100);
@@ -3521,7 +3659,7 @@ equivocada, que es literalmente #246.
 > la prueba de que la guarda sirve; y es la tercera vez en el dia que la documentacion de un
 > arreglo esta en `HEAD` y el arreglo no (ver #271/#272 y la nota de `FROZEN.md`).
 
-### #276 -- 🔴 `ArrayIndexOutOfBoundsException` no descendia de `IndexOutOfBoundsException`
+### #276 -- ✅ `ArrayIndexOutOfBoundsException` no descendia de `IndexOutOfBoundsException`
 
 ```java
 try { a[5] = 'x'; }
@@ -3550,22 +3688,45 @@ interfaces distinta**. La mayoria son libertad legitima (no tenemos `AbstractStr
 | `IllegalThreadStateException` | `RuntimeException` | `IllegalArgumentException` | ✅ arreglado |
 | `InvocationTargetException` | `Exception` | `ReflectiveOperationException` | ✅ arreglado |
 | `GenericSignatureFormatError` | `Error` | `ClassFormatError` | ✅ arreglado |
-| `ExecutionException` | `RuntimeException` | `Exception` | ⬜ **es unchecked donde deberia ser checked** |
-| `TimeoutException` | `RuntimeException` | `Exception` | ⬜ idem |
-| `ExecutorService` | `Executor` | `Executor, AutoCloseable` | ⬜ no se puede usar en try-with-resources |
-| `List` | `Collection` | `SequencedCollection` | ⬜ falta la interfaz de Java 21 |
-| `Deque` | `Queue` | `Queue, SequencedCollection` | ⬜ idem |
+| `ExecutionException` | `RuntimeException` | `Exception` | ✅ arreglado (2026-09-21) |
+| `TimeoutException` | `RuntimeException` | `Exception` | ✅ arreglado (2026-09-21) |
+| `ExecutorService` | `Executor` | `Executor, AutoCloseable` | ✅ arreglado (ver la fila de abajo) |
+| `List` | `Collection` | `SequencedCollection` | ✅ arreglado |
+| `Deque` | `Queue` | `Queue, SequencedCollection` | ✅ arreglado |
 | `ChronoLocalDate` y dos mas | -- | falta `Comparable` | ✅ arreglado |
 | `ExecutorService` | `Executor` | `Executor, AutoCloseable` | ✅ arreglado |
 | las anotaciones | sin `ACC_ANNOTATION` | con | ✅ arreglado — **y era del compilador** |
-| `PrintStream` | `(Object)` | `FilterOutputStream` | ⬜ no sirve donde se espera la base |
-| `MessageFormat` | `(Object)` | `Format` | ⬜ idem |
-| `List` / `Deque` | -- | falta `SequencedCollection` | ⬜ pide una vista inversa de verdad |
-| `ExecutionException` / `TimeoutException` | `RuntimeException` | `Exception` | ⬜ unchecked donde va checked |
+| `PrintStream` | `(Object)` | `FilterOutputStream` | ✅ arreglado |
+| `MessageFormat` | `(Object)` | `Format` | ✅ arreglado |
+| `List` / `Deque` | -- | falta `SequencedCollection` | ✅ arreglado |
+| `ExecutionException` / `TimeoutException` | `RuntimeException` | `Exception` | ✅ arreglado (2026-09-21) |
 
-Los dos primeros pendientes son los mas caros y por eso no los toque en esta tanda: pasar
-`ExecutionException` de unchecked a checked obliga a declarar `throws` en cada sitio que la
-propaga, y eso es una barrida por `java.util.concurrent` -- territorio de la otra sesion.
+**Cerradas todas el 2026-09-21.** Cinco --`ExecutorService`, `List`, `Deque`, `PrintStream` y
+`MessageFormat`-- ya estaban arregladas en el arbol y la tabla no lo decia: hoy `ExecutorService`
+dice `extends Executor, AutoCloseable`, `List` y `Deque` extienden `SequencedCollection` (que
+existe, con su `reversed()`), `PrintStream extends FilterOutputStream` y
+`MessageFormat extends Format`.
+
+Las otras cuatro son las dos excepciones, y **el temor de la nota vieja no se confirmo**. Pasarlas a
+`extends Exception` se midio antes de tocar nada: de los **70** fuentes de la biblioteca que nombran
+`Future`, `ExecutorService` o alguna de las dos, dejaban de compilar **4**, y los cuatro por lo
+mismo --un `get(...)` o su ayudante `report()` que lanza la excepcion sin declararla--. El JDK
+declara esos mismos `throws`; nosotros los habiamos omitido por el **#104** ("restating a compiled
+superinterface's clause is rejected"), que **ya no muerde**: escribirlos compila. Tocados
+`ForkJoinPool`, `ForkJoinTask`, `FutureTask` y `ScheduledThreadPoolExecutor`; **`CompletableFuture`
+no hizo falta**, ya declaraba `throws ExecutionException`.
+
+Es del lado silencioso: hasta hoy un `future.get()` sin `catch` ni `throws` compilaba con nuestro
+javac y **no compila contra el JDK real**. La suite lo confirmo de la mejor manera posible: al hacer
+la excepcion chequeada, **cinco fixtures nuestros dejaron de compilar** --`CcComposeTest`, `CeTest`,
+`CfTest`, `CkTest` y `PoolFutureTest`, los cinco atrapando `InterruptedException` alrededor de un
+`get()` y nada mas--. Se comprobo con el JDK 25 que **el tambien los rechaza** (*"unreported
+exception ExecutionException"*), asi que estaban mal escritos y el defecto los tapaba. Arreglados con
+`catch (InterruptedException | ExecutionException e)`, y sus 20 `.class` regenerados con el congelado.
+
+**Compuertas:** recompilacion **4819/4820** (la falla ajena de siempre); 48 diferenciales de texto
+iguales; suite **221 invocaciones, 2 rotas**, las dos ajenas --o sea de vuelta en la linea base una
+vez arreglados los cinco fixtures--.
 
 #### Segunda vuelta (2026-08-25): tres mas, y la de las anotaciones no era de la biblioteca
 
@@ -15978,11 +16139,11 @@ ternario aparecio que no cargaba ninguno.
 >
 > `Finding545` da `//545 3` en el JDK 25, en nuestra VM y en la **HotSpot**.
 >
-> **Queda la variante silenciosa**, que la ficha ya declaraba aparte y sigue igual a proposito: con
-> `cada(List.of("z"), x -> sb.append(s(x)))` elegimos `s(Object)` donde el JDK elige `s(String)`. La
-> `T` que sale de `List.of` no es fiable, la lambda se tipa con su cota y ahi se elige. Para cerrarla
-> haria falta que el objetivo llegue a la lambda con sus argumentos de tipo, que es lo mismo que le
-> falta al #549 para elegir `append(String)`.
+> **La variante silenciosa quedaba abierta, y se cerro el 2026-09-21 con el #558.** Decia: con
+> `cada(List.of("z"), x -> sb.append(s(x)))` elegimos `s(Object)` donde el JDK elige `s(String)`,
+> porque la `T` que sale de `List.of` no era fiable y la lambda se tipaba con su cota. La causa
+> resulto ser que en el *solving* combinado la llamada anidada no aportaba **sus argumentos**: con
+> eso puesto, `T = String` y la lambda se tipa bien. Hoy da `S`, igual que el JDK.
 >
 > **Compuertas** (las ocho de este lote van juntas: se midieron sobre el mismo binario):
 > recompilacion **4819/4820** --la unica falla es ajena, el fuente que otra sesion dejo con una
@@ -16255,10 +16416,11 @@ Salio midiendo el #498: son los residuos que **no** eran de la posicion con como
 > Las siete lineas de la prueba salen **identicas al JDK 25**, y **la HotSpot las corre**: antes
 > moria en la primera con `BootstrapMethodError`.
 >
-> **Queda una diferencia declarada**: en el `forEach` el JDK elige `append(String)` y nosotros
-> `append(Object)`. El resultado es el mismo y el sitio enlaza; para elegir la mas especifica de
-> verdad haria falta que el objetivo llegue con sus argumentos de tipo, que es lo que tratan el #545
-> y el #546.
+> **La diferencia declarada --el `forEach` eligiendo `append(Object)` donde el JDK elige
+> `append(String)`-- se cerro el 2026-09-21 con el #558.** Era lo mismo que el residuo del #545: el
+> objetivo no llegaba con sus argumentos de tipo porque la llamada anidada no aportaba los suyos al
+> sistema de restricciones. Hoy el `javap -v` tiene **los dos** *method handles*, `append(Object)`
+> para el `Consumer<Object>` y `append(String)` para el `forEach`, uno a uno como el del JDK.
 >
 > **Compuertas:** recompilacion **4819/4820** --la unica falla es ajena, el fuente que otra sesion
 > dejo con una variable declarada dos veces--; de los **40** fuentes de `KajiLibrary` con una
@@ -16670,6 +16832,99 @@ A favor, igual que el otro: **corta la compilacion**.
 
 Salio midiendo el #554.
 
+
+### #558 ⬜→✅ -- `collect(Collector<? super T, A, R>)` no infiere su `R` del argumento en linea
+
+> **Cerrado el 2026-09-21.** El *solving* combinado de §18.5.2.1 --`infer_call_nested`-- hacia entrar
+> las llamadas anidadas al mismo sistema de restricciones que la de afuera, pero cada una aportaba
+> **solo su retorno** con variables frescas: `Collector<T', ?, Map<K', List<T'>>>`. Nada ligaba `K'`,
+> y al resolver caia a `Object`.
+>
+> Eso alcanzaba mientras las anidadas eran `empty()`, `naturalOrder()` o `emptyList()` --que **no
+> tienen argumentos**, y por eso el #498 y el #546 se cerraron sin tocar esto--. Con
+> `groupingBy(f)` la `K` sale justamente del argumento.
+>
+> Ahora `NestedCall` se lleva tambien los tipos de **sus** argumentos y el sistema los reduce contra
+> sus parametros freshados, con el mismo trato del *spread* y la misma guarda que el bucle de afuera
+> (un argumento que menciona las variables del propio metodo no reduce: su restriccion sale de otro
+> lado).
+>
+> | forma | JDK 25 | antes | ahora |
+> |---|---|---|---|
+> | `collect(Collectors.groupingBy(f))` a un `Map<Integer, List<String>>` | compila | *tipo incompatible* | **compila** |
+> | idem con un clasificador `Function<String, String>` | compila | idem | **compila** |
+> | el colector ligado a un local (control) | compila | compilaba | igual |
+> | `collect(Collectors.toList())` / `toSet()`, `findFirst()`, `Collections.max` (controles) | | andaban | igual |
+>
+> Las nueve lineas de la prueba salen identicas al JDK 25.
+>
+> ### Lo que se llevo puesto de paso
+>
+> **Los dos residuos declarados del #545 y el #549 eran esto mismo**, y se fueron con el arreglo:
+>
+> | forma | JDK 25 | antes | ahora |
+> |---|---|---|---|
+> | `cada(List.of("z"), x -> sb.append(s(x)))` | `S` | **`O`** | **`S`** |
+> | `cada(Arrays.asList("q"), ...)` | `S` | **`O`** | **`S`** |
+> | `l.forEach(sb::append)` | `append(String)` | `append(Object)` | **`append(String)`** |
+>
+> En los tres la causa era la misma: la `T` que salia de `List.of`/`Arrays.asList` no estaba ligada
+> --su argumento no reducia--, la lambda se tipaba con la cota `Object` y ahi se elegia la sobrecarga.
+> El `javap -v` de la referencia a metodo ahora tiene **los dos** *method handles*,
+> `append(Object)` para el `Consumer<Object>` y `append(String)` para el `forEach`, uno a uno como el
+> del JDK.
+>
+> ### Compuertas
+>
+> Recompilacion **4819/4820** --la unica falla es la ajena de siempre--; los 48 diferenciales de
+> texto dan lo mismo; la suite, **221 invocaciones, 2 rotas**, las dos ajenas.
+>
+> **En el bytecode cambian 10 clases de 6728**, y el cambio es una **mejora**: aparece un `checkcast`
+> que antes faltaba. Sale de que la inferencia ahora liga la variable al tipo preciso, con lo cual el
+> borrado del retorno **si** necesita el cast. Se comprobo contra el oraculo: para
+> `L.add(Objects.requireNonNull(s, "s"))` con `L` un `List<String>`, el JDK 25 emite
+> `invokestatic requireNonNull:(Object,String)Object; checkcast java/lang/String; invokeinterface
+> List.add` -- **exactamente** lo que emitimos ahora, y el cast es justo el que faltaba antes. Las
+> clases tocadas (`FlightRecorder`, `StaticClass`, `DateTimeFormatter`, `Recording`) **cargan en la
+> HotSpot**, que es la que verifica.
+
+
+
+`KajiLibrary/repros/finding_558/Finding558.java`
+
+```java
+Map<Integer, List<String>> porLargo =
+        palabras.stream().collect(Collectors.groupingBy(new Largo558()));
+// error: tipo incompatible en `porLargo`
+```
+
+El JDK 25 lo compila. El colector, **medido solo**, sale con el tipo bien:
+
+| expresion | el tipo que le damos |
+|---|---|
+| `Collectors.<String, Integer>groupingBy(new Largo558())` | `Collector<String, cap#0 of Object, Map<Integer, List<String>>>` ✅ |
+| `stream().collect(<lo de arriba, en linea>)` | **`Map<Object, List<Object>>`** ❌ |
+
+O sea que la `R` de `collect` no toma el tercer argumento del colector: se queda con las variables
+del **anidado** sin instanciar. Lo que lo delimita es el control:
+
+| forma | JDK 25 | nosotros |
+|---|---|---|
+| `collect(Collectors.groupingBy(f))` a un `Map<Integer, List<String>>` | compila | *tipo incompatible* |
+| igual, con los testigos escritos (`Collectors.<String, Integer>groupingBy(f)`) | compila | *tipo incompatible* |
+| el colector ligado a un **local** con su tipo escrito, y despues `collect(c)` | compila | **compila** |
+| `collect(Collectors.toList())` / `toSet()` | compilan | compilan |
+| lo mismo en linea, asignado a `Object` | compila | compila |
+
+Que ande ligandolo a un local dice que no es el comodin de la posicion `A` ni el `collect`: es el
+**argumento poly en linea**, la familia del #286 / #545 / #546. Y que los testigos de tipo explicitos
+no alcancen dice que la perdida esta en el *solving* combinado, no en la inferencia del anidado por
+separado.
+
+A favor: **corta la compilacion**, no emite nada dudoso.
+
+Salio re-midiendo la consecuencia del #246 --`Collectors.groupingBy` con clasificador boxeado a
+`Integer`--, que por esto no se pudo escribir en la forma que la ficha del #246 usaba.
 
 ### #557 ⬜→✅ -- una creacion calificada de una interna de segundo nivel no resuelve
 

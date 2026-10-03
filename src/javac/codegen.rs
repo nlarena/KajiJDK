@@ -56,7 +56,7 @@ use super::class_writer::{
     BootstrapMethod, ClassFile, ConstantPool, ExceptionEntry, FieldInfo, InnerClassEntry, MethodInfo,
     ParamInfo, RecordComponent,
 };
-use super::symbol::{RType, Resolved, ScopeId, SymbolId, SymbolKind, SymbolTable};
+use super::symbol::{ImportEstatico, RType, Resolved, ScopeId, SymbolId, SymbolKind, SymbolTable};
 use super::types;
 
 // Flags de acceso (JVMS Table 4.1-B / 4.6-A).
@@ -1254,7 +1254,18 @@ fn super_enclosing_internal(
 }
 
 fn resolve_type_id(table: &SymbolTable, scope: ScopeId, name: &str) -> Option<SymbolId> {
-    if let Some(id) = table.resolve_type(scope, name).or_else(|| table.external(name)) {
+    if let Some(id) = table.resolve_type(scope, name) {
+        return Some(id);
+    }
+    // El tipo miembro de un `import static X.*` de la unidad, en el mismo lugar que en la pasada 1 y
+    // en la atribución (finding #540): antes del externo por nombre simple, que para un ambiguo
+    // contestaría con el homónimo de `java.lang` y el descriptor no coincidiría con lo atribuido.
+    match table.tipo_importado_estatico(scope, name) {
+        ImportEstatico::Uno(id) => return Some(id),
+        ImportEstatico::Ambiguo => return None,
+        ImportEstatico::Nada => {}
+    }
+    if let Some(id) = table.external(name) {
         return Some(id);
     }
     // Un tipo **del fuente** nombrado **cualificado** (#314). Los externos se indexan por nombre
@@ -2296,7 +2307,8 @@ fn gen_method(
     }
     // El método sintético `$values()` de un `enum` (§8.9.3) —el que arma el arreglo `$VALUES`— lleva
     // `ACC_SYNTHETIC`, igual que el campo `$VALUES`. Real javac: `$values()` = `0x100a`.
-    if m.name == "$values" {
+    // Y los puentes `access$` del desugar (#512), que el JDK marca `ACC_STATIC | ACC_SYNTHETIC`.
+    if m.name == "$values" || m.name.starts_with("access$") {
         method_flags |= ACC_SYNTHETIC;
     }
     if is_varargs(m) {
@@ -2345,6 +2357,16 @@ fn vtype_of_type(table: &SymbolTable, scope: ScopeId, ty: &Type) -> VType {
         Type::Array(_) => VType::Object(type_desc(table, scope, ty)),
         Type::Class(name) | Type::Parameterized { base: name, .. } => {
             match resolve_type_id(table, scope, name) {
+                // Lo mismo que en `vtype_of`, y **juntos**: si se borrara en uno solo, un local
+                // declarado `K` (`class K`) y el mismo valor venido de una expresion
+                // (`class java/lang/Object`) dejarian de coincidir, y el merge de un salto los
+                // mandaria a `Top`. Finding #544.
+                Some(id) if matches!(table.symbol(id).kind, SymbolKind::TypeVar { .. }) => {
+                    match types::erasure(table, &RType::TypeVar(id)) {
+                        RType::Unresolved => VType::Object("java/lang/Object".to_string()),
+                        e => vtype_of(table, &e),
+                    }
+                }
                 Some(id) => VType::Object(internal_name(table, id)),
                 None => VType::Object("java/lang/Object".to_string()),
             }
@@ -3112,7 +3134,17 @@ fn vtype_of(table: &SymbolTable, rt: &RType) -> VType {
         // aparte del que este finding pide.
         RType::Void | RType::Null | RType::Unresolved | RType::InferVar(_) => VType::Top,
         RType::Array(_) => VType::Object(rtype_desc(table, rt)),
-        RType::Class(id) | RType::TypeVar(id) => VType::Object(internal_name(table, *id)),
+        RType::Class(id) => VType::Object(internal_name(table, *id)),
+        // Una **variable de tipo se borra** en el frame (§4.6). El verificador de la JVM carga por
+        // nombre lo que encuentra ahí, y `K` no es ninguna clase: escribirla hacia que el `.class`
+        // ni siquiera se pudiera cargar (`NoClassDefFoundError: K`, antes de `main`). Nuestra VM no
+        // lee el `StackMapTable`, asi que de este lado no se veia. Finding #544.
+        RType::TypeVar(_) => match types::erasure(table, rt) {
+            // Sin `Object` cargado no hay erasure que escribir; el nombre plano es mejor que un
+            // `Top`, que dejaria el slot inutilizable.
+            RType::Unresolved => VType::Object("java/lang/Object".to_string()),
+            e => vtype_of(table, &e),
+        },
         RType::Parameterized { base, .. } => VType::Object(internal_name(table, *base)),
         // El verificador ve una variable de captura por su cota superior (su *erasure*).
         RType::Capture { upper, .. } => vtype_of(table, upper),
@@ -5248,7 +5280,7 @@ impl<'a> Emitter<'a> {
                     let cat = category(&self.ty_of(e));
                     self.load(cat, slot);
                 }
-                Some(Binding::Field(fid)) => self.read_field(fid, None),
+                Some(Binding::Field(fid)) => self.read_field(fid, None, Some(e)),
                 _ => {}
             },
             // `a.length` no es un campo: tiene su propio opcode.
@@ -5262,7 +5294,7 @@ impl<'a> Emitter<'a> {
             }
             ExprKind::Field { expr: recv, .. } => {
                 if let Some(Binding::Field(fid)) = e.binding {
-                    self.read_field(fid, Some(recv));
+                    self.read_field(fid, Some(recv), Some(e));
                 }
             }
             ExprKind::Assign { op: AssignOp::Assign, target, value } => {
@@ -5798,7 +5830,14 @@ impl<'a> Emitter<'a> {
     /// Saber el contexto pide un pase aparte; el `checkcast` de mas no rompe nada.
     fn synthetic_cast(&mut self, call: &Expr, declared: &RType) {
         let Some(site) = call.ty.clone() else { return };
-        let want = types::erasure(self.table, &site);
+        self.cast_de_borrado(&site, declared);
+    }
+
+    /// El cast sintetico, separado de la llamada: lo comparte la **lectura de un campo** cuyo tipo
+    /// declarado se borra (`class C<E> { E v; }` leido por un `C<String>` da un `Object` en la pila).
+    /// Ver `synthetic_cast`, que es el mismo caso para el retorno de un metodo. Finding #550.
+    fn cast_de_borrado(&mut self, site: &RType, declared: &RType) {
+        let want = types::erasure(self.table, site);
         let have = types::erasure(self.table, declared);
         // Solo referencias, solo si el sitio es **mas angosto**, y nunca si ya coinciden.
         if want == have || !is_ref(&want) || !is_ref(&have) {
@@ -6007,7 +6046,14 @@ impl<'a> Emitter<'a> {
 
     /// Lee un campo. `recv` es el receptor explícito (`o.f`); sin él es un campo **implícito** de
     /// `this` — o estático, y entonces no se empuja receptor.
-    fn read_field(&mut self, fid: SymbolId, recv: Option<&Expr>) {
+    ///
+    /// `sitio` es la expresion completa del acceso, y sirve para el **cast sintetico**: el tipo
+    /// declarado del campo puede **borrarse** (`class C<E> { E v; }` leido por un `C<String>` deja un
+    /// `Object` en la pila) y encadenar ahi --`c.v.isEmpty()`-- emitia un `invokevirtual
+    /// String.isEmpty` sobre un `Object`, que la JVM real rechaza al verificar. Nuestro interprete no
+    /// lo veia porque despacha por el objeto real. Es el mismo caso que el retorno de un metodo
+    /// generico, que ya lo tenia. Finding #550.
+    fn read_field(&mut self, fid: SymbolId, recv: Option<&Expr>, sitio: Option<&Expr>) {
         let Some((cls, name, desc, is_static, _)) = self.field_info(fid) else { return };
         let fref = self.pool.fieldref(&cls, &name, &desc);
         if is_static {
@@ -6023,6 +6069,12 @@ impl<'a> Emitter<'a> {
             self.u16(fref);
             self.pop(1); // el receptor
             self.push(vtype_of_desc(&desc));
+        }
+        if let (Some(e), Some(Resolved::Field(declarado))) = (sitio, self.table.resolved(fid)) {
+            let declarado = declarado.clone();
+            if let Some(t) = e.ty.clone() {
+                self.cast_de_borrado(&t, &declarado);
+            }
         }
     }
 
@@ -6290,7 +6342,12 @@ impl<'a> Emitter<'a> {
                 self.op(newarray_code(*p));
             }
             other => {
-                let internal = match vtype_of(self.table, other) {
+                // El elemento va **borrado** (§4.6, #285): el `new T[]{…}` que el desugar arma para
+                // un varargs generico toma el tipo de su elemento del lub de los argumentos, y el lub
+                // de dos `K` es `K`. `vtype_of` nombra a una variable de tipo por su nombre, asi que
+                // sin esto salia `anewarray K` --una clase que no existe-- y un `ArrayStoreException`
+                // en el primer `aastore`. El descriptor del resultado (`rtype_desc`) ya borraba.
+                let internal = match vtype_of(self.table, &super::types::erasure(self.table, other)) {
                     VType::Object(n) => n,
                     _ => "java/lang/Object".to_string(),
                 };
@@ -6547,7 +6604,8 @@ impl<'a> Emitter<'a> {
             self.push_cat(cat); // [.., aref, idx, viejo]
             if leave && !prefix {
                 self.op(dup_x2);
-                self.max_stack = self.max_stack.max(self.height() + stack_width(cat));
+                // La copia queda **debajo** durante la suma, asi que el pico es copia + delta.
+                self.max_stack = self.max_stack.max(self.height() + 2 * stack_width(cat));
             }
             sumar(self);
             if leave && prefix {
@@ -6600,7 +6658,12 @@ impl<'a> Emitter<'a> {
         self.push_cat(cat); // [.., o, viejo]
         if leave && !prefix {
             self.op(dup_x1);
-            self.max_stack = self.max_stack.max(self.height() + stack_width(cat));
+            // El pico no es la copia sola: la copia queda **debajo** mientras se apila el `delta`
+            // de la suma, que el modelo no ve porque la copia nunca entro en el. Contando uno solo,
+            // `return o.i++;` salia con `max_stack` uno corto y la JVM real lo rechazaba
+            // ("Operand stack overflow"); en un metodo con otro pico mas alto no se notaba. Lo
+            // destapo el puente `access$` de un `x++` (#512), que es exactamente ese metodo minimo.
+            self.max_stack = self.max_stack.max(self.height() + 2 * stack_width(cat));
         }
         sumar(self);
         if leave && prefix {

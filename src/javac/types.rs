@@ -272,13 +272,28 @@ pub fn erased_id(ty: &RType) -> Option<SymbolId> {
 /// base que `t`; ahí compara los argumentos por **containment** (§4.5.1). Un tipo crudo o el
 /// diamante contra un parametrizado se aceptan (unchecked, §4.8).
 pub fn is_subtype(table: &SymbolTable, s: &RType, t: &RType) -> bool {
+    subtipo(table, s, t, false)
+}
+
+/// Igual que [`is_subtype`], pero para decidir **aplicabilidad** (§18.5.1), donde las variables de
+/// tipo del metodo son **variables de inferencia**: todavia no existen, asi que un argumento de tipo
+/// que las menciona --`Stream<U>`-- no se puede comparar por invariancia. Ver
+/// [`misma_base_pendiente`]. Finding #248.
+///
+/// **No** se usa en ningun otro lado a proposito: afuera de la aplicabilidad esa `U` ya es un tipo
+/// fijo, y aflojarla haria compilar un `List<Stream<U>> a = ls;` que el JDK rechaza.
+pub fn is_subtype_pendiente(table: &SymbolTable, s: &RType, t: &RType) -> bool {
+    subtipo(table, s, t, true)
+}
+
+fn subtipo(table: &SymbolTable, s: &RType, t: &RType, pendiente: bool) -> bool {
     if s == t {
         return true;
     }
     match (s, t) {
         (RType::Prim(a), RType::Prim(b)) => widens_to(*a, *b),
         // Arrays: covariantes en el tipo elemento (§4.10.3).
-        (RType::Array(a), RType::Array(b)) => is_subtype(table, a, b),
+        (RType::Array(a), RType::Array(b)) => subtipo(table, a, b, pendiente),
         // Algo es subtipo de una captura **solo** por su cota **inferior** (`? super B`):
         // `s <: CAP` sii `s <: lower(CAP)` (transitivo por `lower <: CAP`). Sin cota inferior, nada
         // salvo la propia captura (que ya cubrió el `s == t` de arriba).
@@ -289,17 +304,19 @@ pub fn is_subtype(table: &SymbolTable, s: &RType, t: &RType) -> bool {
         // pasar un `List<? super T>` a un parámetro **del mismo tipo declarado** se rechazaba
         // (#253). El caso no es raro: es lo que hace cualquier reenvío de un parámetro con comodín.
         (_, RType::Capture { lower, .. }) => {
-            lower.as_ref().is_some_and(|lo| is_subtype(table, s, lo))
+            lower.as_ref().is_some_and(|lo| subtipo(table, s, lo, pendiente))
         }
         // Una variable de tipo es subtipo de sus cotas.
-        (RType::TypeVar(v), _) => bounds_of(table, *v).iter().any(|b| is_subtype(table, b, t)),
+        (RType::TypeVar(v), _) => {
+            bounds_of(table, *v).iter().any(|b| subtipo(table, b, t, pendiente))
+        }
         // Una variable de **captura** (§5.1.10) es subtipo de su cota **superior** (y de sus
         // supertipos): `CAP <: t` sii `upper(CAP) <: t`.
-        (RType::Capture { upper, .. }, _) => is_subtype(table, upper, t),
+        (RType::Capture { upper, .. }, _) => subtipo(table, upper, t, pendiente),
         // Una intersección es subtipo de `t` si **algún** miembro lo es (`A & B <: A`).
-        (RType::Intersection(ms), _) => ms.iter().any(|m| is_subtype(table, m, t)),
+        (RType::Intersection(ms), _) => ms.iter().any(|m| subtipo(table, m, t, pendiente)),
         // Y `s` es subtipo de una intersección si lo es de **todos** sus miembros.
-        (_, RType::Intersection(ms)) => ms.iter().all(|m| is_subtype(table, s, m)),
+        (_, RType::Intersection(ms)) => ms.iter().all(|m| subtipo(table, s, m, pendiente)),
         // Un array contra un tipo **no** array: solo sus tres raíces (§4.10.3). Sin este arm caía
         // al catch-all, donde `erased_id` de un array es `None` y la respuesta era un `false` liso:
         // `System.arraycopy(char[], int, Object, int, int)` **no resolvía**, y como `System` es un
@@ -315,23 +332,23 @@ pub fn is_subtype(table: &SymbolTable, s: &RType, t: &RType) -> bool {
                 return true; // todo tipo referencia es subtipo de Object
             }
             if sb == tb {
-                return same_base_ok(table, s, t);
+                return same_base_ok(table, s, t, pendiente);
             }
             // Buscar `t` entre los supertipos, sustituyendo al subir.
-            direct_supertypes(table, s).iter().any(|sup| is_subtype(table, sup, t))
+            direct_supertypes(table, s).iter().any(|sup| subtipo(table, sup, t, pendiente))
         }
     }
 }
 
 /// Con la **misma base**, `s <: t` sii cada argumento de `t` *contiene* al de `s` (§4.5.1).
 /// Si alguno de los dos es crudo o diamante, no hay nada que comparar (§4.8, unchecked).
-fn same_base_ok(table: &SymbolTable, s: &RType, t: &RType) -> bool {
+fn same_base_ok(table: &SymbolTable, s: &RType, t: &RType, pendiente: bool) -> bool {
     match (s, t) {
         (RType::Parameterized { args: sa, .. }, RType::Parameterized { args: ta, .. }) => {
             if sa.is_empty() || ta.is_empty() || sa.len() != ta.len() {
                 return true; // diamante o aridad rota: no bloqueamos
             }
-            sa.iter().zip(ta).all(|(a, b)| contains(table, b, a))
+            sa.iter().zip(ta).all(|(a, b)| contains(table, b, a, pendiente))
         }
         // Uno de los dos es crudo: conversión unchecked (§4.8) — se acepta.
         _ => true,
@@ -345,7 +362,7 @@ fn same_base_ok(table: &SymbolTable, s: &RType, t: &RType) -> bool {
 /// - `? super T` contiene a `S` si `T <: S`;
 /// - un argumento **concreto** solo se contiene a sí mismo — por eso `List<String>` **no** es
 ///   subtipo de `List<Object>` (la trampa clásica de los genéricos).
-fn contains(table: &SymbolTable, t: &RTypeArg, s: &RTypeArg) -> bool {
+fn contains(table: &SymbolTable, t: &RTypeArg, s: &RTypeArg, pendiente: bool) -> bool {
     match t {
         RTypeArg::Wildcard => true,
         // `? extends T` / `? super T` con `T` una **variable de inferencia** (var de tipo de método sin
@@ -373,7 +390,48 @@ fn contains(table: &SymbolTable, t: &RTypeArg, s: &RTypeArg) -> bool {
         // `<T> m(Box<T>)` a un `Box<CAP>`/`Box<String>` (incl. el caso de captura `swap`).
         RTypeArg::Type(tt) if is_inference_var(table, tt) => true,
         RTypeArg::Type(tt) => match s {
-            RTypeArg::Type(st) => st == tt,
+            RTypeArg::Type(st) => st == tt || (pendiente && misma_base_pendiente(table, st, tt)),
+            _ => false,
+        },
+    }
+}
+
+/// ¿`t` **menciona** una variable de tipo de un metodo, aunque sea adentro de un argumento?
+/// (`Stream<U>`, `List<Map<K, V>>`). Es la version recursiva de [`is_inference_var`], que a
+/// proposito no atraviesa los parametrizados. Finding #248.
+fn menciona_var_de_metodo(table: &SymbolTable, t: &RType) -> bool {
+    if is_inference_var(table, t) {
+        return true;
+    }
+    match t {
+        RType::Array(e) => menciona_var_de_metodo(table, e),
+        RType::Parameterized { args, .. } => args.iter().any(|a| match a {
+            RTypeArg::Type(x) => menciona_var_de_metodo(table, x),
+            RTypeArg::Extends(x) | RTypeArg::Super(x) => menciona_var_de_metodo(table, x),
+            RTypeArg::Wildcard => false,
+        }),
+        _ => false,
+    }
+}
+
+/// **Solo en aplicabilidad.** Un argumento de tipo que todavia tiene adentro una variable del metodo
+/// (`Stream<U>`) no se puede comparar por invariancia: la `U` no existe hasta que la inferencia la
+/// fije. Se exige entonces lo unico que ya se puede exigir --que los dos tengan la **misma base**--
+/// y lo de adentro queda para el Cap. 18.
+///
+/// Es la misma indulgencia que el brazo de arriba le da a la variable **pelada** (`Box<T>` acepta un
+/// `Box<String>`), un nivel hacia adentro y acotada: la base tiene que coincidir, asi que
+/// `List<Integer>` **no** entra en un `Stream<U>`. Sin esto, `<T, U, A> A f(Function<T, Stream<U>>, A)`
+/// --la firma de `Collectors.flatMapping`-- no aceptaba un `Function<String, Stream<Integer>>`.
+/// Finding #248.
+fn misma_base_pendiente(table: &SymbolTable, s: &RType, t: &RType) -> bool {
+    if !menciona_var_de_metodo(table, t) {
+        return false;
+    }
+    match (s, t) {
+        (RType::Array(se), RType::Array(te)) => misma_base_pendiente(table, se, te),
+        _ => match (erased_id(s), erased_id(t)) {
+            (Some(a), Some(b)) => a == b,
             _ => false,
         },
     }
@@ -569,6 +627,54 @@ pub fn lub(table: &SymbolTable, types: &[RType]) -> RType {
         return object_id(table).map_or(RType::Unresolved, RType::Class);
     }
 
+    // Las **variables de tipo** (#285). `erased_id` de una variable es `None`, asi que el filtro de
+    // abajo las descartaba sin decir nada, y eso mentia de dos maneras:
+    //
+    // - Sola, el lub quedaba `Unresolved`: `Map.entry(k, v)` con `k: K` de la clase infería
+    //   `Map.Entry<?, ?>` en vez de `Map.Entry<K, V>`, y ese tipo ya no entraba en un parametro
+    //   `Map.Entry<K, V>` (`out.add(Map.entry(k, v))` no resolvia a ningun metodo). Con una
+    //   variable de **metodo** pasaba igual, y lo tapaba la indulgencia con que `contains` trata a
+    //   esas variables. Pero lub(U) = U (§4.10.4): si todos los tipos son la misma variable, el lub
+    //   es esa variable.
+    // - Mezclada con otros, se la ignoraba: lub(K, String) daba `String`, que no es supertipo de
+    //   `K`. Los supertipos de una variable son ella misma y los de su cota (§4.10.2), y como la
+    //   variable no es supertipo de ningun otro tipo de la lista, el calculo se hace sobre su cota.
+    //   Se toma la **primera** cota: con `<T extends A & B>` se pierde `B`, y el resultado sale mas
+    //   general, que es seguro; mas angosto no sale nunca.
+    if let Some(&v @ RType::TypeVar(_)) = sin_nulos.first() {
+        if sin_nulos.iter().all(|t| *t == v) {
+            return v.clone();
+        }
+    }
+    // Una **captura** (§5.1.10) es tan opaca para `erased_id` como lo era una variable de tipo antes
+    // del #285, y se descartaba igual de callada: `Collections.singletonList(x.get(0))` con `x` de
+    // tipo `List<? extends Number>` inferia `List<Unresolved>`, que ya no entra en un
+    // `List<? extends Number>` --*"tipo incompatible"* sobre un programa legal--. Vale lo mismo que
+    // para la variable: si son todas la misma captura, el lub es esa captura (lub(CAP) = CAP); si no,
+    // el calculo se hace sobre su **cota superior**, que es por donde van sus supertipos. Finding
+    // #548.
+    if let Some(&c @ RType::Capture { .. }) = sin_nulos.first() {
+        if sin_nulos.iter().all(|t| *t == c) {
+            return c.clone();
+        }
+    }
+    let por_cota = |t: &RType| -> RType {
+        let mut t = t.clone();
+        // Una cota puede ser a su vez una variable (`<U extends T>`) o una captura; el tope es por si
+        // acaso.
+        for _ in 0..16 {
+            t = match t {
+                RType::TypeVar(v) => {
+                    bounds_of(table, v).into_iter().next().unwrap_or(RType::Unresolved)
+                }
+                RType::Capture { upper, .. } => *upper,
+                otro => return otro,
+            };
+        }
+        RType::Unresolved
+    };
+    let expandidos: Vec<RType> = types.iter().map(por_cota).collect();
+    let types = expandidos.as_slice();
     let resolved: Vec<&RType> =
         types.iter().filter(|t| !matches!(t, RType::Unresolved) && erased_id(t).is_some()).collect();
     let Some(&first) = resolved.first() else { return RType::Unresolved };
@@ -771,6 +877,31 @@ mod tests {
         let t = table_of("class A {} class Probe { A a; }");
         let a = field_ty(&t, "Probe", "a");
         assert_eq!(lub(&t, &[a.clone(), a.clone()]), a);
+    }
+
+    #[test]
+    fn lub_of_a_type_variable_with_itself_is_the_variable() {
+        // #285: antes daba `Unresolved`, y `Map.entry(k, v)` inferia `Map.Entry<?, ?>`.
+        let t = table_of("class Probe<K> { K a; K b; }");
+        let a = field_ty(&t, "Probe", "a");
+        assert!(matches!(a, RType::TypeVar(_)), "el campo es la variable: {a:?}");
+        assert_eq!(lub(&t, &[a.clone(), field_ty(&t, "Probe", "b")]), a);
+        assert_eq!(lub(&t, &[a.clone(), RType::Null]), a, "el null no cuenta");
+    }
+
+    #[test]
+    fn lub_of_a_type_variable_and_a_class_goes_through_its_bound() {
+        // #285: la variable se ignoraba, y lub(K, String) daba `String`, que no es supertipo de `K`.
+        let t = table_of(
+            "class Animal {}
+             class Dog extends Animal {}
+             class Probe<K, A extends Animal> { K k; A a; Dog d; String s; }",
+        );
+        let object = RType::Class(t.external("Object").expect("Object cargado"));
+        let (k, s) = (field_ty(&t, "Probe", "k"), field_ty(&t, "Probe", "s"));
+        assert_eq!(lub(&t, &[k, s]), object);
+        let (a, d) = (field_ty(&t, "Probe", "a"), field_ty(&t, "Probe", "d"));
+        assert_eq!(erasure(&t, &lub(&t, &[a, d])), erasure(&t, &field_ty(&t, "Probe", "a")));
     }
 
     #[test]

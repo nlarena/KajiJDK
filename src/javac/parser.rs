@@ -734,7 +734,7 @@ impl Parser {
         while !self.at(T::RBrace) && !self.at(T::Eof) {
             // Recuperación: un miembro mal formado se registra y se sincroniza al próximo `;`/borde,
             // sin abortar el resto del cuerpo de la clase.
-            if let Err(e) = self.member(&name, &mut members, &mut annotation_defaults) {
+            if let Err(e) = self.member(&name, &components, &mut members, &mut annotation_defaults) {
                 self.errors.push(e);
                 self.sync_to_body_boundary();
             }
@@ -935,6 +935,7 @@ impl Parser {
     fn member(
         &mut self,
         class_name: &str,
+        components: &[Param],
         members: &mut Vec<Member>,
         defaults: &mut Vec<(String, AnnotationValue)>,
     ) -> Result<()> {
@@ -967,6 +968,60 @@ impl Parser {
         // type annotations de las **cotas** (`<T extends @A Number>`, target 0x11/0x12) a
         // `TypeParam::bound_annos`; el buffer queda limpio para el tipo del miembro.
         let type_params = self.type_params()?;
+
+        // **Constructor canonico compacto de un `record`** (§8.10.4.2): `Nombre {` --sin lista de
+        // parametros--. Los parametros son los componentes, y las asignaciones a los campos las
+        // agrega el compilador **al final** del cuerpo escrito, que es justo lo que le da sentido a la
+        // forma: se valida y se normaliza sobre los parametros, y recien despues se guardan.
+        //
+        // Se arma aca, en el parser, porque es una **abreviatura sintactica**: lo que queda es un
+        // constructor canonico corriente, y de ahi en adelante todo lo trata igual --incluido el
+        // `has_ctor` de `record_members`, que por eso no sintetiza otro--. Finding #403.
+        if !components.is_empty()
+            && self.at(TokenKind::Identifier)
+            && self.peek().text == class_name
+            && self.kind_at(1) == TokenKind::LBrace
+        {
+            self.bump(); // nombre
+            let mut body = self.method_body()?;
+            if let Some(b) = &mut body {
+                for c in components {
+                    let campo = Expr::new(
+                        pos,
+                        ExprKind::Field {
+                            expr: Box::new(Expr::new(pos, ExprKind::This)),
+                            name: c.name.clone(),
+                        },
+                    );
+                    let valor = Expr::new(pos, ExprKind::Name(c.name.clone()));
+                    let asign = Expr::new(
+                        pos,
+                        ExprKind::Assign {
+                            op: AssignOp::Assign,
+                            target: Box::new(campo),
+                            value: Box::new(valor),
+                        },
+                    );
+                    b.0.push(Stmt::new(pos, StmtKind::Expr(asign)));
+                }
+            }
+            members.push(Member::Method(MethodDecl {
+                pos,
+                doc,
+                annotations,
+                modifiers,
+                type_params,
+                return_type: Type::Void,
+                name: class_name.to_string(),
+                params: components.to_vec(),
+                throws: Vec::new(),
+                body,
+                is_constructor: true,
+                return_annos: Vec::new(),
+                throws_annos: Vec::new(),
+            }));
+            return Ok(());
+        }
 
         // Constructor: `Nombre(` con Nombre == la clase.
         if self.at(TokenKind::Identifier)
@@ -1474,7 +1529,20 @@ impl Parser {
                 Stmt::new(init_pos, StmtKind::Block(Block(decls)))
             }))
         } else {
-            Some(Box::new(Stmt::new(init_pos, StmtKind::Expr(self.expr()?))))
+            // El inicializador puede ser una **lista** de expresiones separadas por comas
+            // (§14.14.1): `for (i = 0, n = 5; ...)` con las dos ya declaradas. Con una sola queda
+            // como estaba; con varias se envuelven en un bloque, igual que los declaradores.
+            let primera = Stmt::new(init_pos, StmtKind::Expr(self.expr()?));
+            if self.at(TokenKind::Comma) {
+                let mut exprs = vec![primera];
+                while self.eat(TokenKind::Comma) {
+                    let p = self.pos();
+                    exprs.push(Stmt::new(p, StmtKind::Expr(self.expr()?)));
+                }
+                Some(Box::new(Stmt::new(init_pos, StmtKind::Block(Block(exprs)))))
+            } else {
+                Some(Box::new(primera))
+            }
         };
         self.expect(TokenKind::Semi)?;
 
@@ -2460,7 +2528,7 @@ impl Parser {
         let mut members = Vec::new();
         let mut defaults = Vec::new();
         while !self.at(T::RBrace) && !self.at(T::Eof) {
-            self.member(name, &mut members, &mut defaults)?;
+            self.member(name, &[], &mut members, &mut defaults)?;
         }
         self.expect(T::RBrace)?;
         Ok(members)

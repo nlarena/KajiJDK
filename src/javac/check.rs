@@ -201,7 +201,86 @@ fn access_level(mods: &[Modifier]) -> u8 {
 
 /// El **tipo top-level** que encierra a un *binary name*: se corta en el primer `$` (el *nesting*).
 /// `com.foo.Outer$Inner` → `com.foo.Outer`; `Outer` → `Outer`. Es la unidad del acceso `private`.
-fn top_level_of(binary: &str) -> &str {
+/// ¿El miembro `member` es **accesible** desde la clase `from`?
+///
+/// Es la mitad de [`Checker::check_access`] que no necesita el receptor: los cuatro niveles de §6.6,
+/// con la regla de `protected` en su forma simple (mismo paquete, o una subclase -- propia o
+/// envolvente). La existe aparte porque §15.12.2.1 arma el conjunto de candidatos aplicables **solo
+/// con los accesibles**, y eso pasa en la atribución, mucho antes del chequeo de acceso.
+///
+/// **Es deliberadamente permisiva con lo que no sabe**: sin dueño-clase, o si el dueño es un tipo
+/// externo cuyo nombre no resuelve, contesta `true`. Filtrar de más acá no daría un error legible --
+/// haría desaparecer un candidato y el mensaje hablaría de otra cosa.
+pub(crate) fn accesible_desde(table: &SymbolTable, from: SymbolId, member: SymbolId) -> bool {
+    let sym = table.symbol(member);
+    let Some(owner) = sym.owner else { return true };
+    if !matches!(table.symbol(owner).kind, SymbolKind::Class { .. }) {
+        return true;
+    }
+    let en_interfaz = matches!(
+        &table.symbol(owner).kind,
+        SymbolKind::Class { kind: TypeKind::Interface, .. }
+    );
+    let level = if en_interfaz && !sym.modifiers.contains(&Modifier::Private) {
+        3
+    } else {
+        access_level(&sym.modifiers)
+    };
+    if level == 3 {
+        return true;
+    }
+    let binario = |c: SymbolId| match &table.symbol(c).kind {
+        SymbolKind::Class { binary, .. } => binary.clone(),
+        _ => table.symbol(c).name.clone(),
+    };
+    let owner_bin = binario(owner);
+    let from_bin = binario(from);
+    if level == 0 {
+        return top_level_of(&owner_bin) == top_level_of(&from_bin);
+    }
+    if package_of(&owner_bin) == package_of(&from_bin) {
+        return true;
+    }
+    if level == 2 {
+        // `protected`: alcanza con que **alguna** clase que encierra al que accede (o él mismo)
+        // herede del dueño -- §6.6.2 dice "en el cuerpo de una subclase", y ese cuerpo incluye el de
+        // sus anidadas.
+        let mut cur = Some(from);
+        while let Some(c) = cur {
+            if ancestros(table, c).contains(&owner) {
+                return true;
+            }
+            cur = table.symbol(c).owner;
+        }
+    }
+    false
+}
+
+/// Los supertipos de `cid`, transitivos, sin repetir. Versión libre de [`Checker::ancestors`], para
+/// [`accesible_desde`].
+pub(crate) fn ancestros(table: &SymbolTable, cid: SymbolId) -> Vec<SymbolId> {
+    let mut out = Vec::new();
+    let mut queue = vec![cid];
+    let mut seen = vec![cid];
+    while let Some(c) = queue.pop() {
+        let mut next: Vec<SymbolId> = Vec::new();
+        if let Some(s) = table.super_class(c) {
+            next.push(s);
+        }
+        next.extend(table.interfaces(c));
+        for s in next {
+            if seen.contains(&s) {
+                continue;
+            }
+            seen.push(s);
+            out.push(s);
+            queue.push(s);
+        }
+    }
+    out
+}
+
+pub(crate) fn top_level_of(binary: &str) -> &str {
     match binary.find('$') {
         Some(i) => &binary[..i],
         None => binary,
@@ -210,7 +289,7 @@ fn top_level_of(binary: &str) -> &str {
 
 /// El **paquete** de un *binary name* (lo previo al nombre del tipo top-level). Vacío = paquete sin
 /// nombre.
-fn package_of(binary: &str) -> &str {
+pub(crate) fn package_of(binary: &str) -> &str {
     let top = top_level_of(binary);
     match top.rfind('.') {
         Some(i) => &top[..i],
@@ -307,6 +386,7 @@ impl Checker<'_> {
                 self.method(m, cid, nth);
             }
             self.abstracts(class, cid);
+            self.ctor_por_omision(class, cid);
             self.sealed_rules(class, cid);
             // Control de acceso (§6.6): cada **uso** de un miembro tiene que ser accesible desde
             // esta clase. Se recorre el cuerpo de cada método/inicializador y se mira el binding que
@@ -589,19 +669,21 @@ impl Checker<'_> {
 
     /// Chequea que el miembro `member`, usado en `pos`, sea accesible desde la clase `from`.
     ///
-    /// Los tipos **externos** se eximen: se cargan parciales y sus flags de acceso no son
-    /// confiables (es la misma indulgencia que ya rige para ellos). La regla de `protected` usa la
-    /// forma simple del §6.6.1 (mismo paquete **o** subclase); la restricción extra del §6.6.2
-    /// —sobre el tipo del receptor— queda para después.
-    fn check_access(&mut self, from: SymbolId, member: SymbolId, pos: Pos) {
+    /// Corre igual para los miembros del fuente y los leidos de un `.class` (#506). La regla de
+    /// `protected` es la de §6.6.2 entera, receptor incluido: ver [`Self::protegido_desde`].
+    /// `recv` es el tipo **estatico del receptor** escrito en la expresion, o `None` si no hay
+    /// (un nombre simple, o sea `this`). Lo pide la regla de §6.6.2.1, y solo esa.
+    fn check_access(&mut self, from: SymbolId, member: SymbolId, pos: Pos, recv: Option<&RType>) {
         let sym = self.table.symbol(member);
         let Some(owner) = sym.owner else { return }; // un local/parámetro no tiene dueño-clase
         if !matches!(self.table.symbol(owner).kind, SymbolKind::Class { .. }) {
             return;
         }
-        if self.is_external(owner) {
-            return;
-        }
+        // Antes se eximia a **todo** tipo del classpath, con el argumento de que se cargan
+        // parciales y sus flags no son confiables. Los flags si estaban en el `.class`; lo que
+        // pasaba es que el lector los descartaba, asi que la exencion se estaba justificando con
+        // una consecuencia de si misma. Ahora se leen (finding #506) y el chequeo corre igual para
+        // los miembros de adentro y los de afuera.
         let mods = sym.modifiers.clone();
         // El nivel **efectivo**, no los modificadores escritos: en una interfaz, un miembro sin
         // modificador es `public` (§9.4), y este chequeo lo trataba como de paquete. El síntoma era
@@ -620,7 +702,14 @@ impl Checker<'_> {
             // privados de la que la encierra, y viceversa.
             top_level_of(&owner_bin) == top_level_of(&from_bin)
         } else if level == 2 {
-            package_of(&owner_bin) == package_of(&from_bin) || self.is_subclass(from, owner)
+            // §6.6.2: mismo paquete, o una subclase. Y si es por ser subclase, §6.6.2.1 pide
+            // ademas que el **receptor** sea de la subclase (o de una suya): `protected` deja que
+            // una subclase toque *lo suyo*, no lo de cualquier otra instancia de la superclase.
+            // Sin este segundo tramo, `class S extends JViewport { f(JViewport ajeno) {
+            // ajeno.computeBlit(...); } }` pasaba -- que es el unico de los seis casos del #506 que
+            // seguia compilando despues de leer los flags.
+            package_of(&owner_bin) == package_of(&from_bin)
+                || self.protegido_desde(from, owner, mods.contains(&Modifier::Static), recv)
         } else {
             // Acceso de paquete (sin modificador): mismo paquete.
             package_of(&owner_bin) == package_of(&from_bin)
@@ -636,6 +725,62 @@ impl Checker<'_> {
             );
             self.error(pos, msg);
         }
+    }
+
+    /// §6.6.2 entre paquetes: ¿hay una `S` que dé permiso? `S` es el que accede **o una clase que
+    /// lo encierra**, que herede de `owner`; y si el miembro es de instancia, el receptor tiene que
+    /// ser de `S` o de una subclase suya (§6.6.2.1).
+    ///
+    /// La regla dice *"en el cuerpo de una subclase"*, y el cuerpo de una clase incluye el de sus
+    /// anidadas: un `Listener` adentro de `MetalSliderUI extends BasicSliderUI` toca el `slider`
+    /// protegido con todo derecho, aunque el `Listener` en si no herede de nadie. Sin subir por los
+    /// enclosings, ese patron --que es el de casi todo Swing-- se rechazaba entero.
+    ///
+    /// Dos cosas que la version anterior --"la mas interna que herede, y ahi el receptor"-- tenia de
+    /// menos, las dos medidas contra el javac del JDK 25 (#512):
+    ///
+    /// - **Se prueba cada envolvente, no solo la mas interna.** Si una anidada `I` tambien extiende
+    ///   la base, `h.m()` con `h` de la externa `H` no le sirve a `I` pero si a `H`, y el JDK lo
+    ///   acepta. Es el bucle de `Resolve.isProtectedAccessible`, que sigue subiendo mientras la
+    ///   clase no sirva.
+    /// - **Un `static` no mira el receptor.** §6.6.2.1 restringe los campos y metodos *de
+    ///   instancia*; `Base.sm()` desde la subclase (o desde una anidada suya) es legal, y antes se
+    ///   rechazaba porque el receptor escrito --el tipo `Base`-- no es una subclase de `S`.
+    fn protegido_desde(
+        &self,
+        from: SymbolId,
+        owner: SymbolId,
+        estatico: bool,
+        recv: Option<&RType>,
+    ) -> bool {
+        let mut cur = Some(from);
+        while let Some(c) = cur {
+            if !matches!(self.table.symbol(c).kind, SymbolKind::Class { .. }) {
+                return false;
+            }
+            if self.is_subclass(c, owner) && (estatico || self.receptor_propio(c, recv)) {
+                return true;
+            }
+            cur = self.table.symbol(c).owner;
+        }
+        false
+    }
+
+    /// El receptor de un acceso `protected` entre paquetes es de la clase que accede o de una
+    /// subclase suya (§6.6.2.1). Sin receptor escrito --un nombre simple, o sea `this`-- vale.
+    ///
+    /// Se es deliberadamente **permisivo** con lo que no se sabe: un tipo que no resuelve a una
+    /// clase (una variable de tipo, una captura, un `Unresolved`) pasa. Este chequeo existe para
+    /// atajar el caso claro y nombrado; inventar un rechazo sobre un tipo que no se pudo resolver
+    /// cambiaria un agujero por un falso positivo, que es peor.
+    fn receptor_propio(&self, from: SymbolId, recv: Option<&RType>) -> bool {
+        let Some(rt) = recv else { return true };
+        let base = match rt {
+            RType::Class(id) | RType::Parameterized { base: id, .. } => *id,
+            RType::Capture { upper, .. } => return self.receptor_propio(from, Some(upper)),
+            _ => return true,
+        };
+        base == from || self.is_subclass(base, from)
     }
 
     /// `from` **hereda** de `owner` (para la regla de `protected`).
@@ -727,19 +872,99 @@ impl Checker<'_> {
                 }
             }
             StmtKind::Labeled { body, .. } => self.walk_stmt(from, body),
-            // Una clase local tiene su propio contexto de acceso; se compila aparte (barrera).
-            StmtKind::LocalClass(_)
-            | StmtKind::Break(_)
+            // Una clase local --o una anonima, que `enter` ya convirtio en local-- accede con su
+            // propio contexto: el de ella, con la cadena de envolventes arriba. Antes no se
+            // recorria, y adentro de una anonima se podia tocar cualquier `protected` de otro
+            // paquete sobre cualquier receptor: `new Runnable() { ... b.m(); }` con `b` de la
+            // superclase compilaba, y el JDK lo rechaza (#512).
+            StmtKind::LocalClass(lc) => self.walk_local(from, lc),
+            StmtKind::Break(_)
             | StmtKind::Continue(_)
             | StmtKind::Empty => {}
         }
     }
 
+    /// El control de acceso adentro de una clase local (o anonima) declarada en un cuerpo de `from`.
+    /// `enter` la registra como tipo anidado de `from` con su nombre unico, que es el que quedo en
+    /// la declaracion.
+    fn walk_local(&mut self, from: SymbolId, lc: &ClassDecl) {
+        let SymbolKind::Class { members, .. } = &self.table.symbol(from).kind else { return };
+        let Some(cid) = self
+            .table
+            .scope(*members)
+            .get(&lc.name)
+            .iter()
+            .copied()
+            .find(|&id| matches!(self.table.symbol(id).kind, SymbolKind::Class { .. }))
+        else {
+            return;
+        };
+        for member in &lc.members {
+            match member {
+                Member::Method(m) => {
+                    if let Some(b) = &m.body {
+                        self.walk_block(cid, b);
+                    }
+                }
+                Member::Field(f) => {
+                    if let Some(e) = &f.init {
+                        self.walk_expr(cid, e);
+                    }
+                }
+                Member::StaticInit(b) | Member::InstanceInit(b) => self.walk_block(cid, b),
+                Member::Type(n) => self.walk_local(cid, n),
+            }
+        }
+    }
+
+    /// §6.6.2.2: fuera de su paquete, un constructor `protected` solo se invoca con `super(...)`
+    /// --desde el constructor de una subclase-- o creando una **anonima** (`new C(...) { }`, que
+    /// `enter` ya convirtio en el `new` de una local, cuyo constructor es otro). Un `new C(...)` a
+    /// secas no, ni siquiera desde una subclase: `check_access` lo dejaba pasar porque para el un
+    /// `new` es un acceso sin receptor, y sin receptor la regla de la subclase se cumple.
+    fn new_protegido_ajeno(&self, from: SymbolId, ctor: SymbolId) -> bool {
+        let sym = self.table.symbol(ctor);
+        if !matches!(sym.kind, SymbolKind::Method { is_constructor: true, .. })
+            || !sym.modifiers.contains(&Modifier::Protected)
+        {
+            return false;
+        }
+        let Some(owner) = sym.owner else { return false };
+        package_of(&self.binary(owner)) != package_of(&self.binary(from))
+    }
+
     fn walk_expr(&mut self, from: SymbolId, e: &Expr) {
+        if let (ExprKind::NewObject { .. }, Some(Binding::Method(c))) = (&e.kind, e.binding) {
+            if self.new_protegido_ajeno(from, c) {
+                let owner = self.table.symbol(c).owner.map_or("?".to_string(), |o| self.table.symbol(o).name.clone());
+                let msg = format!(
+                    "el constructor de `{owner}` es `protected` y no es accesible desde `{}`: fuera de su paquete se invoca solo con `super(...)` o con una clase anonima (§6.6.2.2)",
+                    self.table.symbol(from).name
+                );
+                self.error(e.pos, msg);
+            }
+        }
         // El binding que dejó Attribute: si apunta a un miembro, se chequea acá.
+        // El receptor escrito, si lo hay: `a.b` y `a.m()`. Un nombre simple no tiene, y un
+        // `super.m()` tampoco cuenta -- §6.6.2.1 exime explicitamente al acceso por `super`.
+        // El receptor escrito, si lo hay: `a.b` y `a.m()`. Un nombre simple no tiene. Un acceso por
+        // `super` tampoco cuenta: §6.6.2.1 lo exime explicitamente --su tipo es siempre la
+        // superclase, que nunca es "S o una subclase de S", asi que sin la exencion `super.campo`
+        // quedaria prohibido siempre--.
+        fn sin_super(t: &Expr) -> Option<&RType> {
+            match t.kind {
+                ExprKind::Super => None,
+                _ => t.ty.as_ref(),
+            }
+        }
+        let recv = match &e.kind {
+            ExprKind::Field { expr, .. } => sin_super(expr),
+            ExprKind::Call { target: Some(t), .. } => sin_super(t),
+            _ => None,
+        };
         match e.binding {
-            Some(Binding::Field(f)) => self.check_access(from, f, e.pos),
-            Some(Binding::Method(m)) => self.check_access(from, m, e.pos),
+            Some(Binding::Field(f)) => self.check_access(from, f, e.pos, recv),
+            Some(Binding::Method(m)) => self.check_access(from, m, e.pos, recv),
             _ => {}
         }
         match &e.kind {
@@ -921,7 +1146,17 @@ impl Checker<'_> {
             (RType::Prim(a), RType::Prim(b)) => a == b,
             (RType::Void, RType::Void) => true,
             (RType::Prim(_), _) | (_, RType::Prim(_)) | (RType::Void, _) | (_, RType::Void) => false,
-            _ => types::is_subtype(self.table, &mine_ret, &parent_ret),
+            // **El retorno propio se captura antes de compararlo** (§5.1.10). Subir por los
+            // supertipos sustituye los parametros del tipo por sus argumentos, y un argumento que es
+            // un **comodin** no es un tipo: `arg_as_type` lo deja en `Unresolved`, asi que
+            // `GB<? super Z, E>` daba el supertipo `GA<Unresolved, Set<E>, E>` y la comparacion con
+            // `GA<? super Z, Set<E>, E>` fallaba. Con la captura hecha, el comodin pasa a ser una
+            // variable con cota inferior `Z`, se sustituye como cualquier tipo, y el *containment*
+            // de §4.5.1 la acepta --que es lo que el JDK hace y por lo que compila--.
+            //
+            // El del **padre** no se captura: sus comodines son justamente contra lo que hay que
+            // medir la contencion. Finding #123.
+            _ => types::is_subtype(self.table, &types::capture(self.table, &mine_ret), &parent_ret),
         };
         if !ok {
             let msg = format!(
@@ -1047,6 +1282,47 @@ impl Checker<'_> {
         out
     }
 
+    /// §8.8.9: una clase **sin constructor declarado** recibe uno por omision cuyo cuerpo es
+    /// `super()`, asi que la superclase tiene que tener un constructor **sin argumentos**.
+    ///
+    /// Sin este chequeo el emisor generaba el `invokespecial Base."<init>":()V` igual, apuntando a un
+    /// constructor que no existe: nuestra VM no lo verifica al cargar y una JVM real muere con
+    /// `NoSuchMethodError` **al construir el objeto**, lejos del archivo que tiene el problema.
+    /// Finding #515.
+    ///
+    /// Se es indulgente con lo que no se sabe: si de la superclase no se conoce **ningun**
+    /// constructor --puede ser un externo cargado parcial-- no se reclama nada. Solo se reporta el
+    /// caso inequivoco: se conocen sus constructores y ninguno es sin argumentos.
+    fn ctor_por_omision(&mut self, class: &ClassDecl, cid: SymbolId) {
+        // Una interfaz no construye; un `enum` y un `record` reciben constructores propios.
+        if class.kind != TypeKind::Class {
+            return;
+        }
+        // Si declara alguno, el `super(...)` es explicito y lo chequea la resolucion normal.
+        if class.members.iter().any(|m| matches!(m, Member::Method(me) if me.is_constructor)) {
+            return;
+        }
+        let Some(sup) = self.table.super_class(cid) else { return };
+        if self.binary(sup).replace('/', ".") == "java.lang.Object" {
+            return;
+        }
+        let ctors = super::attribute::constructors(self.table, sup);
+        if ctors.is_empty() {
+            return; // no se sabe: no se inventa un error
+        }
+        let hay_sin_args = ctors.iter().any(|&c| {
+            matches!(&self.table.symbol(c).kind, SymbolKind::Method { params, .. } if params.is_empty())
+        });
+        if !hay_sin_args {
+            let msg = format!(
+                "`{}` no declara constructor y `{}` no tiene uno sin argumentos",
+                class.name,
+                self.table.symbol(sup).name
+            );
+            self.error(class.pos, msg);
+        }
+    }
+
     /// §8.1.1.1: una clase concreta tiene que implementar todo lo `abstract` que hereda.
     ///
     /// Se saltea entera si algún ancestro es **externo**: de esos solo conocemos los miembros que
@@ -1062,14 +1338,16 @@ impl Checker<'_> {
         // ya cargó sus métodos —abstractos + `default` marcados— transitivamente, así que el chequeo
         // es confiable (finding #8: `implements List` sin implementar sus métodos ahora sí se reporta).
         // `Object` siempre está y sus métodos son concretos/conocidos: no exime.
-        let externally_extends_a_class = ancestors.iter().any(|&a| {
-            self.is_external(a)
-                && !self.is_interface(a)
-                && self.binary(a).replace('/', ".") != "java.lang.Object"
-        });
-        if externally_extends_a_class {
-            return;
-        }
+        // **Antes se salteaba el chequeo entero** si algun ancestro era una clase externa, con este
+        // motivo: "de una clase externa podriamos no ver todas las implementaciones concretas que
+        // hereda, y falso-reclamariamos". El lector de `.class` lee **todos** los metodos de la clase
+        // --igual que para las interfaces, donde el chequeo ya se hacia y se consideraba confiable--,
+        // asi que el motivo no se sostiene. Medido: sacada la exencion, `KajiLibrary` entera dio
+        // **cero** falsos positivos y seis defectos reales. Finding #284.
+        //
+        // Es el modo de falla mas caro: el compilador **acepta** una clase concreta a la que le falta
+        // un metodo abstracto heredado, y el programa arranca y muere con `AbstractMethodError` lejos
+        // de donde esta el error.
         // Se recorre la jerarquía juntando las dos listas por **firma borrada**, y al final se
         // reclama lo que quedó abstracto sin una implementación que lo tape. La firma se computa
         // **como se ve desde la clase** (§8.4.8.1): los parámetros de tipo del supertipo se sustituyen

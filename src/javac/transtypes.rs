@@ -29,7 +29,7 @@ use super::types;
 /// Punto de entrada: inserta las conversiones de boxing/unboxing en toda la unidad.
 pub fn trans_types(unit: &mut CompilationUnit, table: &SymbolTable) {
     let base = unit.package.as_deref().unwrap_or("").to_string();
-    let t = Trans { table };
+    let t = Trans { table, actual: std::cell::RefCell::new(String::new()) };
     for class in &mut unit.types {
         t.class(class, &base);
     }
@@ -37,6 +37,10 @@ pub fn trans_types(unit: &mut CompilationUnit, table: &SymbolTable) {
 
 struct Trans<'a> {
     table: &'a SymbolTable,
+    /// El FQN de la clase que se esta recorriendo. Hace falta para entrar a una clase **local**: su
+    /// nombre en la tabla es el de la envolvente mas el suyo (`register_local_classes` le pone el
+    /// unico, `1Local`), y desde un `Stmt` no hay otra forma de saber cual es la envolvente.
+    actual: std::cell::RefCell<String>,
 }
 
 impl Trans<'_> {
@@ -44,6 +48,7 @@ impl Trans<'_> {
         let fqn = qualify(enclosing_fqn, &class.name);
         let Some(cid) = self.table.class(&fqn) else { return };
         let scope = member_scope(self.table, cid);
+        let anterior = self.actual.replace(fqn.clone());
         for member in &mut class.members {
             match member {
                 Member::Method(m) => {
@@ -67,6 +72,7 @@ impl Trans<'_> {
                 Member::Type(nested) => self.class(nested, &fqn),
             }
         }
+        self.actual.replace(anterior);
     }
 
     /// `ret` es el tipo de retorno del método en curso — el *target* de un `return` (Void si no aplica).
@@ -162,6 +168,18 @@ impl Trans<'_> {
                 }
             }
             StmtKind::Labeled { body, .. } => self.stmt(body, scope, ret),
+            // **Una clase local o anonima se recorre como cualquier otra** (#554). Para cuando corre
+            // esta pasada, `register_local_classes` y `hoist_anonymous` ya dejaron cada una como un
+            // `LocalClass` adentro del cuerpo del metodo, y no habia brazo para eso: caia en el `_` de
+            // abajo y ninguno de sus cuerpos recibia un `valueOf` ni un `intValue`. Compilaba, y la VM
+            // --o el verificador de la HotSpot-- reventaba al primer `l.add(1)` o `return 41`.
+            //
+            // Su scope es el suyo, no el del metodo que la contiene: `class` lo saca de la tabla con
+            // el FQN, que es el de la clase en curso mas el nombre unico que le puso el registro.
+            StmtKind::LocalClass(lc) => {
+                let envolvente = self.actual.borrow().clone();
+                self.class(lc, &envolvente);
+            }
             _ => {}
         }
     }
@@ -202,7 +220,17 @@ impl Trans<'_> {
                 // Los operandos de una operación **numérica/relacional/lógica** se desempaquetan a su
                 // primitivo (§5.6). La igualdad `==`/`!=` se deja: con dos *wrappers* es identidad de
                 // referencia, no de valor.
-                if !matches!(op, BinOp::Eq | BinOp::Ne) {
+                //
+                // Y la **concatenación** tampoco: un `+` con un operando `String` no es una operación
+                // numérica (§15.18.1), asi que no hay promoción que aplicar -- cada operando se
+                // convierte a `String`, y de eso se encarga `concat_needs_value_of` en el emisor.
+                //
+                // Desempaquetar acá le metía un `intValue()` al envoltorio, y con `null` eso es un
+                // **NPE** donde el JDK imprime `null`. Invisible mientras el valor no fuera nulo --
+                // `"x" + Integer.valueOf(7)` da `x7` por los dos caminos--, que es lo que lo hacía
+                // caro. Finding #521.
+                let concatena = matches!(op, BinOp::Add) && self.es_string(&e.ty);
+                if !matches!(op, BinOp::Eq | BinOp::Ne) && !concatena {
                     self.unbox_operand(lhs);
                     self.unbox_operand(rhs);
                 }
@@ -467,6 +495,27 @@ impl Trans<'_> {
                 return;
             }
         }
+        // **El sentido contrario: un cast a una referencia desde un primitivo boxea** (§5.5, la
+        // conversion de cast incluye el boxing y despues el ensanchamiento de referencia). Sin esto
+        // `(Object) 1` emitia el `checkcast` sobre el `int` crudo: la HotSpot lo rechazaba al
+        // verificar y nuestra VM reventaba con *"checkcast: expected an object reference"*. Finding
+        // #551. `Type::Void` no llega aca --no hay cast a `void`-- y un destino primitivo sigue de
+        // largo, a lo de abajo.
+        if !matches!(ty, Type::Prim(_)) {
+            if let Some(RType::Prim(p)) = expr.ty.clone() {
+                // El `checkcast` **se descarta**: un cast de un primitivo a una referencia siempre es
+                // valido en compilacion --el boxeo da el wrapper y de ahi solo hay ensanchamiento de
+                // referencia (§5.5)--, asi que no hay nada que comprobar en ejecucion. El javac real
+                // tampoco lo emite: deja el `valueOf` solo. El tipo del nodo sigue siendo el del cast.
+                let destino = resolve_rtype(self.table, scope, ty);
+                self.wrap_box(expr, p);
+                let caja = std::mem::replace(expr.as_mut(), Expr::new(e.pos, ExprKind::Null));
+                e.kind = caja.kind;
+                e.binding = caja.binding;
+                e.ty = Some(destino);
+                return;
+            }
+        }
         let Type::Prim(destino) = ty.clone() else { return };
         let Some(src) = expr.ty.clone() else { return };
         if !is_ref(&src) {
@@ -502,6 +551,14 @@ impl Trans<'_> {
     }
 
     /// Desempaqueta un operando si es un *wrapper* (para la aritmética): `Integer` → `x.intValue()`.
+    /// El tipo es `java.lang.String`. Lo consulta la regla de concatenación (§15.18.1).
+    fn es_string(&self, ty: &Option<RType>) -> bool {
+        match ty {
+            Some(RType::Class(c)) => self.table.symbol(*c).name == "String",
+            _ => false,
+        }
+    }
+
     fn unbox_operand(&self, e: &mut Expr) {
         if let Some(RType::Class(c)) = &e.ty {
             if let Some(p) = types::unboxed(self.table, *c) {

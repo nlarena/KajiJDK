@@ -26,7 +26,9 @@ use super::ast::{
     LambdaBody, LocalInfo, Member, MethodDecl, MethodRefQualifier, Modifier, Pattern, Pos, PrimType, Stmt,
     StmtKind, SwitchBody, Type, TypeArg, TypeKind, UnOp,
 };
-use super::symbol::{RType, RTypeArg, Resolved, ScopeId, SymbolId, SymbolKind, SymbolTable};
+use super::symbol::{
+    ImportEstatico, RType, RTypeArg, Resolved, ScopeId, SymbolId, SymbolKind, SymbolTable,
+};
 use super::infer;
 use super::types;
 use super::Error;
@@ -148,7 +150,7 @@ fn attrib_class(table: &SymbolTable, errors: &mut Vec<Error>, class: &mut ClassD
                     // §5.2: una **constante** `int` que entra en el rango se asigna a `byte`/`short`/
                     // `char` sin cast (`static final byte MIN = -128;`).
                     let ok = assignable(env.table, &it, &declared)
-                        || constant_narrowing_ok(&declared, init);
+                        || constant_narrowing_ok(env.table, &declared, init);
                     if !ok {
                         let name = f.name.clone();
                         env.error(f.pos, format!("tipo incompatible en el inicializador de `{name}`"));
@@ -171,6 +173,56 @@ fn attrib_class(table: &SymbolTable, errors: &mut Vec<Error>, class: &mut ClassD
 fn attrib_local_class(env: &mut Env, lc: &mut ClassDecl) {
     let Some(cid) = env.table.resolve_type(env.class_scope, &lc.name) else { return };
     let scope = member_scope(env.table, cid);
+    // **Los inicializadores de campo, con los mismos locales que un cuerpo de metodo.**
+    //
+    // Se salteaban --el bucle de abajo hace `else { continue }` sobre todo lo que no sea un metodo--,
+    // asi que `class L { final String c = s + "!"; }` no veia la `s` del metodo que declara la local.
+    // Un inicializador de campo de una clase local ve esos locales igual que sus metodos (§8.1.3),
+    // asi que lleva el mismo `env.locals` clonado. Finding #465.
+    for member in &mut lc.members {
+        let Member::Field(f) = member else { continue };
+        let Some(init) = &mut f.init else { continue };
+        let declarado = resolve_rtype(env.table, scope, &f.ty);
+        let is_static = f.modifiers.contains(&Modifier::Static);
+        let mut sub = Env {
+            table: env.table,
+            errors: &mut *env.errors,
+            class: cid,
+            class_scope: scope,
+            ret: RType::Void,
+            has_this: !is_static,
+            final_field_ok: true,
+            locals: env.locals.clone(),
+            next_slot: if is_static { 0 } else { 1 },
+        };
+        sub.push();
+        let it = attrib_expr_to(&mut sub, init, Some(&declarado));
+        let ok = assignable(sub.table, &it, &declarado)
+            || constant_narrowing_ok(sub.table, &declarado, init);
+        if !ok {
+            let name = f.name.clone();
+            sub.error(f.pos, format!("tipo incompatible en el inicializador de `{name}`"));
+        }
+        sub.pop();
+    }
+    // Un **bloque de instancia** de la clase local ve los mismos locales, por lo mismo.
+    for member in &mut lc.members {
+        let Member::InstanceInit(b) = member else { continue };
+        let mut sub = Env {
+            table: env.table,
+            errors: &mut *env.errors,
+            class: cid,
+            class_scope: scope,
+            ret: RType::Void,
+            has_this: true,
+            final_field_ok: true,
+            locals: env.locals.clone(),
+            next_slot: 1,
+        };
+        sub.push();
+        attrib_body(&mut sub, b);
+        sub.pop();
+    }
     for member in &mut lc.members {
         let Member::Method(m) = member else { continue };
         let ret = resolve_rtype(env.table, scope, &m.return_type);
@@ -436,6 +488,14 @@ fn attrib_stmt(env: &mut Env, stmt: &mut Stmt) {
     let local = match &mut stmt.kind {
         StmtKind::LocalVar { ty, name, init, .. } => {
             let declared = resolve_rtype(env.table, env.class_scope, ty);
+            // Un tipo que no resolvió porque lo traen **dos** imports on-demand (finding #540). Un
+            // local de tipo sin resolver pasa sin error --indulgencia que es de antes y no de acá--,
+            // pero en este caso no hay ningún tipo que falte: sobra uno, y el JDK lo rechaza.
+            if let Some(base) = base_sin_resolver(&declared, ty) {
+                if env.table.tipo_importado_estatico(env.class_scope, base) == ImportEstatico::Ambiguo {
+                    env.error(pos, format!("la referencia a {base} es ambigua: la traen dos imports on-demand"));
+                }
+            }
             let is_var = matches!(ty, Type::Var);
             let target = match init {
                 Some(e) => {
@@ -446,7 +506,7 @@ fn attrib_stmt(env: &mut Env, stmt: &mut Stmt) {
                     // §5.2: `byte b = 5;` — una constante `int` en rango narrowea a byte/short/char.
                     let ok = is_var
                         || assignable(env.table, &it, &declared)
-                        || constant_narrowing_ok(&declared, e);
+                        || constant_narrowing_ok(env.table, &declared, e);
                     if !ok {
                         env.error(pos, format!("tipo incompatible en `{name}`"));
                     }
@@ -455,6 +515,20 @@ fn attrib_stmt(env: &mut Env, stmt: &mut Stmt) {
                 }
                 None => declared,
             };
+            // §6.4: el alcance de un parametro es **todo** el cuerpo del metodo, y el de un local
+            // va hasta el fin de su bloque, asi que declarar otro con el mismo nombre **mientras el
+            // primero sigue en alcance** no lo tapa: lo redeclara, y es un error. El JDK dice
+            // *"variable n is already defined in method f(int)"*.
+            //
+            // No hay sintoma al compilar --el programa hace otra cosa, en silencio--, que es lo que
+            // lo hacia caro. Finding #473.
+            //
+            // Reusar el nombre en bloques **hermanos** sigue valiendo: el scope del primero ya se
+            // saco de la pila cuando se declara el segundo. Y un campo homonimo tampoco cuenta:
+            // taparlo con un local si es legal, y `lookup_local` solo mira locales y parametros.
+            if env.lookup_local(name).is_some() {
+                env.error(pos, format!("la variable `{name}` ya está definida"));
+            }
             let slot = env.define(name, target.clone());
             Some(LocalInfo { slot, ty: target })
         }
@@ -474,7 +548,7 @@ fn attrib_stmt(env: &mut Env, stmt: &mut Stmt) {
                     // estrechamiento de constante igual que a `short s = 0;`. Sin esto,
                     // `short f() { return 0; }` --que es Java válido y aparece en cuanto se
                     // implementa una interfaz del DOM-- no compilaba. Ver #476.
-                    if !assignable(env.table, &t, &ret) && !constant_narrowing_ok(&ret, e) {
+                    if !assignable(env.table, &t, &ret) && !constant_narrowing_ok(env.table, &ret, e) {
                         env.error(p, "tipo de retorno incompatible".into());
                     }
                 }
@@ -511,7 +585,22 @@ fn attrib_stmt(env: &mut Env, stmt: &mut Stmt) {
         StmtKind::For { init, cond, update, body } => {
             env.push();
             if let Some(i) = init {
-                attrib_stmt(env, i);
+                // **Finding #510**: un `for (int i = 0, n = 5; ...)` declara **varios** (§14.14.1),
+                // y el parser los envuelve en un `Block` para que quepan en el único `Stmt` que el
+                // AST guarda ahí. Ese bloque **no es un scope**: las variables son del `for` y
+                // tienen que verse desde la condición, el update y el cuerpo. Atribuirlo como un
+                // bloque normal abría un scope propio y las perdía al cerrarlo, con el error
+                // desconcertante de que no se encontraba `i` en su propia condición.
+                match &mut i.kind {
+                    StmtKind::Block(b) => {
+                        for st in &mut b.0 {
+                            attrib_stmt(env, st);
+                        }
+                    }
+                    _ => {
+                        attrib_stmt(env, i);
+                    }
+                }
             }
             if let Some(c) = cond {
                 require_boolean(env, c, "for");
@@ -720,16 +809,113 @@ fn ctor_accessible(table: &SymbolTable, ctor: SymbolId, from: SymbolId) -> bool 
 /// **Fase 2** de la resolución de sobrecarga (§15.12.2.6): re-atribuye los argumentos **poly** de una
 /// llamada con el tipo de su parámetro —ya sustituido por el receptor— como *target*, que en la fase 1
 /// (síntesis, sin target) no estaba. Los no-poly no se tocan (evita re-resolver de más y re-emitir).
-fn reattribute_poly_args(env: &mut Env, recv: &RType, m: SymbolId, args: &mut [Expr]) {
+///
+/// Con `diferir`, una lambda o referencia a metodo cuyo parametro nombra un parametro de tipo **del
+/// propio metodo** no se toca: se devuelve su indice, y la atribuye [`reattribute_deferred`] cuando
+/// la inferencia ya fijo ese tipo.
+fn reattribute_poly_args(
+    env: &mut Env,
+    recv: &RType,
+    m: SymbolId,
+    args: &mut [Expr],
+    diferir: bool,
+) -> Vec<usize> {
+    let params: Vec<RType> = match env.table.resolved(m) {
+        Some(Resolved::Method { params, .. }) => {
+            params.iter().map(|p| substitute_member(env.table, recv, m, p)).collect()
+        }
+        _ => return Vec::new(),
+    };
+    let propios = if diferir { infer::method_type_params(env.table, m) } else { Vec::new() };
+    let mut diferidos = Vec::new();
+    for (i, a) in args.iter_mut().enumerate() {
+        // Un argumento **blando** --una llamada generica que la fase 1 tipo sin objetivo-- entra
+        // aca igual que una lambda: recien ahora se sabe contra que parametro va, y es ese el que
+        // instancia sus variables (§18.5.2). Findings #545 y #546.
+        if is_poly_arg(&a.kind) || argumento_blando(env.table, a) {
+            let es_funcional = matches!(a.kind, ExprKind::Lambda { .. } | ExprKind::MethodRef { .. });
+            if es_funcional
+                && !propios.is_empty()
+                && params.get(i).is_some_and(|p| infer::mentions_type_params(p, &propios))
+            {
+                diferidos.push(i);
+                continue;
+            }
+            attrib_expr_to(env, a, params.get(i));
+        }
+    }
+    diferidos
+}
+
+/// ¿El tipo que la fase 1 le dio a este argumento es el **suyo**, y no uno que dependa de una
+/// inferencia propia? Una llamada a un metodo generico, un diamante o un condicional no (su tipo sale
+/// de resolver algo, y ahi nuestra inferencia se puede equivocar); una lambda o referencia a metodo
+/// no aporta tipo y no molesta. Ver `inferencia_fiable`.
+fn tipo_exacto(table: &SymbolTable, a: &Expr) -> bool {
+    match &a.kind {
+        ExprKind::Call { .. } => match a.binding {
+            Some(Binding::Method(f)) => infer::method_type_params(table, f).is_empty(),
+            _ => false,
+        },
+        ExprKind::NewObject { ty: Type::Parameterized { args, .. }, .. } => !args.is_empty(),
+        ExprKind::Ternary { .. } | ExprKind::Switch { .. } => false,
+        _ => true,
+    }
+}
+
+/// ¿Es `t` un tipo que se puede usar tal cual para tipar un cuerpo? Clases, primitivos, arreglos,
+/// variables de tipo y parametrizados hechos de eso. Una interseccion, una captura o una variable
+/// de inferencia que quedo suelta, no.
+fn tipo_cerrado(t: &RType) -> bool {
+    match t {
+        RType::Class(_) | RType::Prim(_) | RType::TypeVar(_) => true,
+        RType::Array(e) => tipo_cerrado(e),
+        RType::Parameterized { args, .. } => args.iter().all(|a| match a {
+            RTypeArg::Type(x) => tipo_cerrado(x),
+            RTypeArg::Extends(x) | RTypeArg::Super(x) => tipo_cerrado(x),
+            RTypeArg::Wildcard => true,
+        }),
+        RType::Capture { .. }
+        | RType::Intersection(_)
+        | RType::InferVar(_)
+        | RType::Void
+        | RType::Null
+        | RType::Unresolved => false,
+    }
+}
+
+/// La otra mitad de [`reattribute_poly_args`]: atribuye las lambdas que esperaban a la inferencia,
+/// con el tipo de su parametro sustituido por lo inferido.
+///
+/// En `<T> void sort(List<T> l, Comparator<? super T> c)` la `T` sale del **otro** argumento, y
+/// `Collections.sort(l, (x, y) -> y.compareTo(x))` tipaba el cuerpo con `x: T` --cota `Object`-- y
+/// no encontraba `compareTo`. El desugar ya declaraba el metodo sintetico con la `T` inferida (el
+/// `ty` del argumento se sustituye mas abajo); lo unico que faltaba era que el cuerpo se tipara con lo
+/// mismo. Finding #286.
+///
+/// Solo se usa lo inferido que sea un tipo con miembros claros. Una interseccion, una captura o algo
+/// que la inferencia no cerro deja la variable como estaba: el cuerpo se tipa por su cota, igual que
+/// antes, en vez de contra un tipo dudoso.
+fn reattribute_deferred(
+    env: &mut Env,
+    recv: &RType,
+    m: SymbolId,
+    args: &mut [Expr],
+    diferidos: &[usize],
+    subst: &types::Subst,
+) {
     let params: Vec<RType> = match env.table.resolved(m) {
         Some(Resolved::Method { params, .. }) => {
             params.iter().map(|p| substitute_member(env.table, recv, m, p)).collect()
         }
         _ => return,
     };
-    for (i, a) in args.iter_mut().enumerate() {
-        if is_poly_arg(&a.kind) {
-            attrib_expr_to(env, a, params.get(i));
+    let subst: types::Subst =
+        subst.iter().filter(|(_, t)| tipo_cerrado(t)).map(|(k, t)| (*k, t.clone())).collect();
+    for &i in diferidos {
+        let p = params.get(i).map(|p| types::substitute(p, &subst));
+        if let Some(a) = args.get_mut(i) {
+            attrib_expr_to(env, a, p.as_ref());
         }
     }
 }
@@ -745,7 +931,21 @@ fn nested_generic_calls(table: &SymbolTable, args: &[Expr]) -> Vec<infer::Nested
         }
         if let Some(Binding::Method(f)) = a.binding {
             if !infer::method_type_params(table, f).is_empty() {
-                out.push(infer::NestedCall { arg_index: i, method: f, recv: call_recv(table, a, f) });
+                // Los tipos de **sus** argumentos van con ella: son los que fijan sus variables
+                // (#558). Lo que no tiene tipo todavia entra como `Unresolved` y no reduce.
+                let iargs = match &a.kind {
+                    ExprKind::Call { args, .. } => args
+                        .iter()
+                        .map(|x| x.ty.clone().unwrap_or(RType::Unresolved))
+                        .collect(),
+                    _ => Vec::new(),
+                };
+                out.push(infer::NestedCall {
+                    arg_index: i,
+                    method: f,
+                    recv: call_recv(table, a, f),
+                    args: iargs,
+                });
             }
         }
     }
@@ -951,7 +1151,7 @@ fn attrib_expr_to(env: &mut Env, expr: &mut Expr, target: Option<&RType>) -> RTy
             // directa; una simple (`=`) sí — con el narrowing de constante del §5.2 (`b = 5`).
             if *op == AssignOp::Assign
                 && !assignable(env.table, &vt, &lt)
-                && !constant_narrowing_ok(&lt, value)
+                && !constant_narrowing_ok(env.table, &lt, value)
             {
                 env.error(pos, "asignación de tipo incompatible".into());
             }
@@ -966,8 +1166,21 @@ fn attrib_expr_to(env: &mut Env, expr: &mut Expr, target: Option<&RType>) -> RTy
         ExprKind::Lambda { params, body } => {
             match target.and_then(|t| functional_sam(env.table, types::erased_id(t)?).map(|s| (t, s))) {
                 Some((t, sam)) => {
-                    let t = t.clone();
-                    let subst = types::subst_of(env.table, &t);
+                    // **La parametrizacion NO-comodin del destino** (§9.9, via §15.27.3): el
+                    // descriptor de la funcion no sale de `Comparator<? super String>` sino de
+                    // `Comparator<String>`. Sin esto, la sustitucion propagaba el comodin a los
+                    // parametros de la lambda, `x` quedaba sin tipo util y `x.compareTo(y)` no
+                    // resolvia -- con un error que hablaba del **generador**, dos fases mas adelante.
+                    // Finding #286.
+                    let t = sin_comodines(env.table, t);
+                    // Por `subst_for` y no por `subst_of`: el SAM puede estar declarado en una
+                    // **superinterfaz**. El `apply` de `UnaryOperator<String>` es el de
+                    // `Function<T, R>`, y con la sustitucion de `UnaryOperator` sola sus parametros
+                    // quedaban en la `T` de `Function`: `l.replaceAll(s -> s.toUpperCase())` o
+                    // `(a, b) -> a.concat(b)` como `BinaryOperator<String>` no encontraban el metodo.
+                    // Es lo mismo que el desugar ya hacia al bajarla (#208). Finding #286.
+                    let owner = env.table.symbol(sam).owner.unwrap_or(sam);
+                    let subst = types::subst_for(env.table, &t, owner);
                     let (sam_params, sam_ret) = match env.table.resolved(sam) {
                         Some(Resolved::Method { params: ps, ret, .. }) => (
                             ps.iter().map(|p| types::substitute(p, &subst)).collect::<Vec<_>>(),
@@ -1117,16 +1330,25 @@ fn attrib_expr_to(env: &mut Env, expr: &mut Expr, target: Option<&RType>) -> RTy
                 // **envolvente** (inner class). Se busca por la cadena de `owner`; el desugar
                 // reescribe el acceso a un método envolvente como `this$0.m()`.
                 None => {
-                    let mut found = env.class;
+                    let mut found = None;
                     let mut c = Some(env.class);
                     while let Some(cl) = c {
                         if !candidates(env.table, cl, &name).is_empty() {
-                            found = cl;
+                            found = Some(cl);
                             break;
                         }
                         c = enclosing_class(env.table, cl);
                     }
-                    RType::Class(found)
+                    // Si no lo tiene ni esta clase ni ninguna envolvente, puede ser un **metodo
+                    // importado estatico** (`max(1, 2)` con `import static java.lang.Math.max`). La
+                    // cadena de envolventes lo tapa, que es el orden del JLS. Finding #543.
+                    let found = found.or_else(|| {
+                        env.table
+                            .duenos_estaticos(env.class_scope, &name)
+                            .into_iter()
+                            .find(|&d| !candidates(env.table, d, &name).is_empty())
+                    });
+                    RType::Class(found.unwrap_or(env.class))
                 }
             };
             // **Capture conversion** del receptor (§5.1.10), **una sola vez**: así todas las
@@ -1220,7 +1442,10 @@ fn attrib_expr_to(env: &mut Env, expr: &mut Expr, target: Option<&RType>) -> RTy
                         // **forma** de la lambda (aridad del SAM, y valor-vs-`void`): `f(x -> x + 1)`
                         // elige `Function` sobre `Consumer`.
                         let cands = disambiguate_by_lambda(env.table, &recv, &cands, args);
-                        match resolve_overload(env, &cands, &arg_types, &name, pos, &recv) {
+                        let blandos = mascara_blanda(env.table, args);
+                        match resolve_overload_blanda(
+                            env, &cands, &arg_types, &name, pos, &recv, &blandos,
+                        ) {
                             Some(m) => {
                                 // **Fase 2** (§15.12.2.6 / §18.5.2): resuelta la sobrecarga se conocen
                                 // los tipos de los parámetros, y recién ahora se re-atribuye cada
@@ -1230,7 +1455,7 @@ fn attrib_expr_to(env: &mut Env, expr: &mut Expr, target: Option<&RType>) -> RTy
                                 // `Unresolved` y el emisor no podía bajarla) e instancia las variables
                                 // de un diamante/genérico argumento. La fase 1 usó el receptor para
                                 // resolver; el *target* de cada parámetro sale de sustituirlo con él.
-                                reattribute_poly_args(env, &recv, m, args);
+                                let diferidos = reattribute_poly_args(env, &recv, m, args, true);
                                 let ret = match env.table.resolved(m) {
                                     Some(Resolved::Method { ret, .. }) => ret.clone(),
                                     _ => RType::Unresolved,
@@ -1240,6 +1465,13 @@ fn attrib_expr_to(env: &mut Env, expr: &mut Expr, target: Option<&RType>) -> RTy
                                 // **inferida** para los params de tipo del propio método
                                 // (`id("hola")` ⇒ `T = String`, JLS §18.5.2).
                                 let ret = substitute_member(env.table, &recv, m, &ret);
+                                // ¿Se puede tipar con lo inferido el cuerpo de una lambda diferida? Solo si
+                                // la inferencia salio de argumentos con tipo **exacto**: con una llamada
+                                // generica anidada, un diamante o un condicional, la solucion puede ser
+                                // la equivocada (`ap(List.of("w"), x -> s(x.get(0)))` infiere
+                                // `List<Object>` donde el JDK dice `List<String>`) y tipar contra ella
+                                // cambiaria un error por una sobrecarga elegida mal, en silencio.
+                                let mut inferencia_fiable = true;
                                 // Un **type witness** (`this.<Integer>id(x)`) **fija** los parámetros
                                 // de tipo del método; sin él, se infieren (§18.5.2). Aplicar el
                                 // witness cierra el hueco de que un override deliberado se ignorara.
@@ -1269,10 +1501,18 @@ fn attrib_expr_to(env: &mut Env, expr: &mut Expr, target: Option<&RType>) -> RTy
                                     }
                                     // Re-tipar cada llamada anidada con su parte de la solución combinada.
                                     retype_nested_calls(env.table, args, &nres);
+                                    inferencia_fiable = ok
+                                        && nested.is_empty()
+                                        && args.iter().all(|a| tipo_exacto(env.table, a));
                                     s
                                 } else {
                                     witness_subst(env, m, &type_args)
                                 };
+                                if !diferidos.is_empty() {
+                                    let vacia = types::Subst::new();
+                                    let s = if inferencia_fiable { &subst } else { &vacia };
+                                    reattribute_deferred(env, &recv, m, args, &diferidos, s);
+                                }
                                 // Propagar la instanciación a los argumentos **poly**: su tipo se
                                 // fijó en la fase 2 con las variables de tipo del método aún sin
                                 // resolver (`Supplier<U>`); con `subst` ya inferida (`U = Process`)
@@ -1440,8 +1680,15 @@ fn attrib_expr_to(env: &mut Env, expr: &mut Expr, target: Option<&RType>) -> RTy
                 Type::Void => {
                     resolve_rtype(env.table, env.class_scope, &Type::Class("java.lang.Void".into()))
                 }
-                otro => resolve_rtype(env.table, env.class_scope, otro),
+                ref otro => resolve_rtype(env.table, env.class_scope, otro),
             };
+            // Un literal de un tipo que **no existe** se aceptaba en silencio y salía `Object.class`:
+            // finding #520. `enter.rs::check_type` ya chequea esto, pero solo sobre **firmas**
+            // --tipo de campo, retorno, parámetros--, y un literal de clase vive en un cuerpo, así
+            // que no pasaba por ningún lado. Un parámetro de tipo resuelve a `TypeVar` y no cae acá.
+            if let Some(nombre) = nombre_sin_resolver(ty, &arg) {
+                env.error(pos, format!("no se encuentra el símbolo: {nombre}"));
+            }
             let rt = match (clase, &arg) {
                 // Sin el argumento resuelto se cae al `Class` pelado de antes: es peor para inferir,
                 // pero es lo que había y no rompe nada que hoy funcione.
@@ -1461,9 +1708,7 @@ fn attrib_expr_to(env: &mut Env, expr: &mut Expr, target: Option<&RType>) -> RTy
             // `outer.new Inner(...)` (§15.9.2): el **calificador** designa la instancia envolvente
             // que se pasa como `this$0`. Se atribuye para tiparlo (el desugar lo empuja como primer
             // argumento del ctor); `Inner` se resuelve igual que en un `new` normal.
-            if let Some(o) = outer {
-                attrib_expr(env, o);
-            }
+            let calificador = outer.as_mut().map(|o| attrib_expr(env, o));
             // **Finding #519**: a los argumentos hay que aplicarles **capture conversion**
             // (§5.1.10) antes de la resolución, igual que en una llamada a método. Sin eso, un
             // `new Caja<Object>(v)` con `v` de tipo `Vector<?>` no encontraba el
@@ -1477,7 +1722,17 @@ fn attrib_expr_to(env: &mut Env, expr: &mut Expr, target: Option<&RType>) -> RTy
                     types::capture(env.table, &t)
                 })
                 .collect();
-            let rt = resolve_rtype(env.table, env.class_scope, ty);
+            // **El nombre de la clase se busca en el calificador** (§15.9.1), no en el alcance de
+            // donde se escribe: en `i.new Dentro()` con `Dentro` miembro de `Interna`, `Dentro` no
+            // se nombra desde afuera y quedaba sin resolver --y con eso la llamada de despues no
+            // encontraba ningun metodo y el generador cortaba--. Con una interna de **un** nivel
+            // salia bien de casualidad: su nombre tambien esta en alcance en la envolvente. Si el
+            // calificador no tiene ese miembro se resuelve como siempre, que es lo indulgente
+            // mientras nuestra carga de externos no modele toda la anidacion. Finding #557.
+            let rt = calificador
+                .as_ref()
+                .and_then(|q| nested_del_calificador(env.table, env.class_scope, q, ty))
+                .unwrap_or_else(|| resolve_rtype(env.table, env.class_scope, ty));
             // Se decora con el **constructor** resuelto: el codegen necesita su descriptor para
             // emitir el `invokespecial <init>`. Sin candidatos (tipo externo) queda en `None` y el
             // codegen cae al `()V`.
@@ -1492,7 +1747,10 @@ fn attrib_expr_to(env: &mut Env, expr: &mut Expr, target: Option<&RType>) -> RTy
                     let elegido = if cands.is_empty() {
                         None
                     } else {
-                        resolve_overload(env, &cands, &arg_types, &cname, pos, &rt)
+                        let blandos = mascara_blanda(env.table, args);
+                        resolve_overload_blanda(
+                            env, &cands, &arg_types, &cname, pos, &rt, &blandos,
+                        )
                     };
                     // Ningún constructor aplicó y **hay** argumentos: es un error del fuente, y
                     // hasta #293 se pasaba en silencio — el codegen caía al `()V` y emitía un
@@ -1559,7 +1817,7 @@ fn attrib_expr_to(env: &mut Env, expr: &mut Expr, target: Option<&RType>) -> RTy
             // (`new Box<long[]>(() -> …)`) quedaba `Unresolved` y el emisor no podía bajarla a
             // `invokedynamic` (finding #16). Es el espejo de [`reattribute_poly_args`] de una llamada.
             if let Some(Binding::Method(ctor)) = &binding {
-                reattribute_poly_args(env, &rt, *ctor, args);
+                reattribute_poly_args(env, &rt, *ctor, args, false);
             }
             (rt, binding)
         }
@@ -1620,14 +1878,83 @@ fn attrib_expr_to(env: &mut Env, expr: &mut Expr, target: Option<&RType>) -> RTy
         // `Indy` se atiende **antes** de este match (early return): acá es inalcanzable.
         ExprKind::Indy { .. } => unreachable!("Indy se re-atribuye antes del match general"),
     };
+    // **Una interseccion ya fijada no se recomputa.** El lub de dos clases que comparten interfaces
+    // (§4.10.4) --`String` e `Integer` dan `ConstantDesc & Comparable & Serializable`-- **no se puede
+    // escribir** en Java, asi que cuando el desugar necesita un tipo sintactico usa el primer
+    // miembro: el array de un varargs sale `new ConstantDesc[]{"a", Integer.valueOf(1)}`. La
+    // re-atribucion vuelve a inferir **desde ese array** y se queda con ese miembro solo, o sea
+    // `List<ConstantDesc>` donde la primera pasada habia dicho `List<ConstantDesc & Comparable &
+    // Serializable>`; y con eso `Comparable<?> c = l.get(0)` --legal, el JDK lo compila-- se
+    // rechazaba con *"tipo incompatible"*.
+    //
+    // Es el mismo trato que ya tiene un `Indy` bajado: lo que una pasada anterior fijo y esta no
+    // puede volver a expresar, se conserva. Solo se conserva cuando lo viejo **es** una interseccion
+    // y lo nuevo no: fuera de ese caso manda siempre la atribucion de ahora. Finding #548.
+    if let Some(previo) = &expr.ty {
+        if tiene_interseccion(previo) && !tiene_interseccion(&ty) {
+            let previo = previo.clone();
+            expr.binding = binding;
+            return previo;
+        }
+    }
     expr.ty = Some(ty.clone());
     expr.binding = binding;
     ty
 }
 
+/// ¿Hay una interseccion (§4.9) adentro de este tipo, aunque sea como argumento? Ver el comentario
+/// del final de [`attrib_expr_to`]. Finding #548.
+fn tiene_interseccion(t: &RType) -> bool {
+    match t {
+        RType::Intersection(_) => true,
+        RType::Array(e) => tiene_interseccion(e),
+        RType::Parameterized { args, .. } => args.iter().any(|a| match a {
+            RTypeArg::Type(x) => tiene_interseccion(x),
+            RTypeArg::Extends(x) | RTypeArg::Super(x) => tiene_interseccion(x),
+            RTypeArg::Wildcard => false,
+        }),
+        _ => false,
+    }
+}
+
 /// Resuelve un `Name`: local/param → campo (por la jerarquía) → nombre de tipo → error.
 /// El **tipo anidado** `name` declarado en `owner` (§8.5), o `None`. Busca un símbolo de clase con
 /// ese nombre en el scope de miembros del dueño.
+/// El tipo que nombra `ty` **como miembro del calificador** de una creacion calificada
+/// (`expr.new Clase()`, §15.9.1): ahi el nombre se busca en el tipo de `expr` y no en el alcance de
+/// la clase donde se escribe.
+///
+/// Devuelve `None` si el calificador no es una clase, si lo escrito no es un nombre simple --`a.new
+/// p.Q()` no es legal-- o si ese miembro no existe; quien llama resuelve entonces como siempre.
+/// Finding #557.
+fn nested_del_calificador(
+    table: &SymbolTable,
+    scope: ScopeId,
+    calificador: &RType,
+    ty: &Type,
+) -> Option<RType> {
+    let cid = match calificador {
+        RType::Class(c) | RType::Parameterized { base: c, .. } => *c,
+        _ => return None,
+    };
+    let (simple, args) = match ty {
+        Type::Class(name) => (name.as_str(), None),
+        Type::Parameterized { base, args } => (base.as_str(), Some(args)),
+        _ => return None,
+    };
+    if simple.contains('.') {
+        return None;
+    }
+    let nid = nested_type_in(table, cid, simple)?;
+    Some(match args {
+        None => RType::Class(nid),
+        Some(args) => RType::Parameterized {
+            base: nid,
+            args: args.iter().map(|a| resolve_rtype_arg(table, scope, a)).collect(),
+        },
+    })
+}
+
 fn nested_type(table: &SymbolTable, owner: SymbolId, name: &str) -> Option<SymbolId> {
     nested_type_in(table, owner, name)
 }
@@ -1703,7 +2030,20 @@ fn resolve_name(env: &mut Env, name: &str, pos: Pos) -> (RType, Option<Binding>)
     }
     if let Some(f) = lookup_field(env.table, env.class, name) {
         if let Some(Resolved::Field(t)) = env.table.resolved(f) {
-            return (t.clone(), Some(Binding::Field(f)));
+            // **El tipo del campo se sustituye por el de la clase desde la que se lo nombra.**
+            //
+            // Un campo **heredado** se declara con los parámetros de tipo de **su** clase, que son
+            // otros símbolos que los de la subclase aunque se escriban igual. Sin sustituir,
+            // `Caja<? super M>` declarado en `Base<M>` y leído desde `Hija<M>` conservaba la `M` de
+            // `Base`; al capturar el comodín, la cota inferior no resolvía y quedaba
+            // `cap of Object` -- de ahí el mensaje *"método `tomar(Caja<? extends cap#1 of Object>)`
+            // no es aplicable"*, que habla de `Object` sobre un código donde `Object` no aparece.
+            //
+            // El camino de `this.campo` ya sustituía (usa el tipo del receptor); el del nombre
+            // **suelto** no, y por eso `this.propio.tomar(v)` compilaba y `propio.tomar(v)` no.
+            // Los dos tienen que dar lo mismo. Finding #516.
+            let recv = types::self_type(env.table, env.class);
+            return (substitute_member(env.table, &recv, f, t), Some(Binding::Field(f)));
         }
     }
     // Un campo de instancia de una clase **envolvente** (inner class): se busca por la cadena de
@@ -1712,7 +2052,9 @@ fn resolve_name(env: &mut Env, name: &str, pos: Pos) -> (RType, Option<Binding>)
     while let Some(o) = encl {
         if let Some(f) = lookup_field(env.table, o, name) {
             if let Some(Resolved::Field(t)) = env.table.resolved(f) {
-                return (t.clone(), Some(Binding::Field(f)));
+                // Misma sustitución, con la envolvente como receptor.
+                let recv = types::self_type(env.table, o);
+                return (substitute_member(env.table, &recv, f, t), Some(Binding::Field(f)));
             }
         }
         encl = enclosing_class(env.table, o);
@@ -1720,6 +2062,17 @@ fn resolve_name(env: &mut Env, name: &str, pos: Pos) -> (RType, Option<Binding>)
     // ¿Un nombre de tipo (para un acceso estático `Tipo.x`)? Lo damos como la clase.
     if let Some(id) = env.table.resolve_type(env.class_scope, name) {
         return (RType::Class(id), Some(Binding::Class(id)));
+    }
+    // Un tipo miembro que trae un `import static X.*` de la unidad (`Entry.comparingByKey()` con
+    // `import static java.util.Map.*;`), finding #540. Si lo traen dos on-demand es ambiguo, y eso
+    // es un error aunque haya un externo homónimo cargado que contestaría más abajo.
+    match env.table.tipo_importado_estatico(env.class_scope, name) {
+        ImportEstatico::Uno(id) => return (RType::Class(id), Some(Binding::Class(id))),
+        ImportEstatico::Ambiguo => {
+            env.error(pos, format!("la referencia a {name} es ambigua: la traen dos imports on-demand"));
+            return (RType::Unresolved, None);
+        }
+        ImportEstatico::Nada => {}
     }
     // Ídem, para el nombre en posición de **expresión** (`StrictMath.log(x)`, `Tipo.uno()`): la
     // clase de este round que la unidad nombra corto. Es la posición donde faltaba, y por eso el
@@ -1730,8 +2083,25 @@ fn resolve_name(env: &mut Env, name: &str, pos: Pos) -> (RType, Option<Binding>)
     if let Some(id) = env.table.source_alias(name) {
         return (RType::Class(id), Some(Binding::Class(id)));
     }
+    // Un **campo** que la unidad nombra corto por un `import static` (§7.5.3/§7.5.4): `PI` con
+    // `import static java.lang.Math.*`. Va despues de los locales, los campos de la clase y sus
+    // envolventes --que lo tapan-- y antes de los tipos. Finding #543.
+    for dueno in env.table.duenos_estaticos(env.class_scope, name) {
+        if let Some(f) = lookup_field(env.table, dueno, name) {
+            if let Some(Resolved::Field(t)) = env.table.resolved(f) {
+                if env.table.symbol(f).modifiers.contains(&Modifier::Static) {
+                    let recv = types::self_type(env.table, dueno);
+                    return (substitute_member(env.table, &recv, f, t), Some(Binding::Field(f)));
+                }
+            }
+        }
+    }
     if let Some(id) = env.table.external(name) {
-        return (RType::Class(id), Some(Binding::Class(id)));
+        // Mismo filtro que en la pasada 1 de `enter`: el mapa de externos dice qué se **cargó**, no
+        // qué esta unidad puede **nombrar** (§6.5.5.1). Finding #491.
+        if env.table.externo_nombrable_corto(env.class_scope, id) {
+            return (RType::Class(id), Some(Binding::Class(id)));
+        }
     }
     let mut notes = symbol_notes(
         format!("variable {name}"),
@@ -1813,10 +2183,10 @@ fn conditional_numeric(
         return RType::Prim(PrimType::Short);
     }
     // (3) — la constante va del lado que **no** es el angosto.
-    if narrow(&lu) && matches!(ru, RType::Prim(PrimType::Int)) && constant_narrowing_ok(&lu, els) {
+    if narrow(&lu) && matches!(ru, RType::Prim(PrimType::Int)) && constant_narrowing_ok(env.table, &lu, els) {
         return lu;
     }
-    if narrow(&ru) && matches!(lu, RType::Prim(PrimType::Int)) && constant_narrowing_ok(&ru, then) {
+    if narrow(&ru) && matches!(lu, RType::Prim(PrimType::Int)) && constant_narrowing_ok(env.table, &ru, then) {
         return ru;
     }
     numeric_result(env, l, r, pos)
@@ -1884,18 +2254,65 @@ fn require_bool_operand(env: &mut Env, t: &RType, pos: Pos) {
 /// `static final short MAX = 32767;` y también `byte b = 1 + 2;` — sin cast. El valor lo pliega el
 /// evaluador §15.29 de `codegen` (literales, aritmética, bits y shift), restringido a las constantes
 /// de tipo **`int`** (una `long`/`float`/`double` sí necesita cast explícito).
-fn constant_narrowing_ok(to: &RType, init: &Expr) -> bool {
+/// La **parametrizacion no-comodin** de un tipo (§9.9): `X<? super B>` y `X<? extends B>` dan
+/// `X<B>`, y `X<?>` da `X<Object>`.
+///
+/// Es lo que §15.27.3 usa para sacar el descriptor de la funcion cuando el destino de una lambda
+/// lleva comodines. Un comodin dice "algo que no se cual es"; el cuerpo de la lambda necesita **un**
+/// tipo con el que trabajar, y la regla dice cual.
+///
+/// Se aplica solo al nivel de arriba, que es donde vive el descriptor. Lo que no sea un tipo
+/// parametrizado se devuelve igual.
+pub(super) fn sin_comodines(table: &SymbolTable, t: &RType) -> RType {
+    let RType::Parameterized { base, args } = t else { return t.clone() };
+    let objeto = || {
+        table
+            .external("Object")
+            .map_or(RType::Unresolved, RType::Class)
+    };
+    let args = args
+        .iter()
+        .map(|a| match a {
+            RTypeArg::Type(x) => RTypeArg::Type(concretar(x, &objeto)),
+            RTypeArg::Extends(b) | RTypeArg::Super(b) => RTypeArg::Type((**b).clone()),
+            RTypeArg::Wildcard => RTypeArg::Type(objeto()),
+        })
+        .collect();
+    RType::Parameterized { base: *base, args }
+}
+
+/// Una **variable de captura** vuelta al tipo del que salio: la cota inferior si la tiene --es la de
+/// un `? super B`, y ahi `B` es el tipo con el que se puede trabajar-- y si no, la superior.
+fn concretar(t: &RType, objeto: &dyn Fn() -> RType) -> RType {
+    match t {
+        RType::Capture { upper, lower, .. } => match lower {
+            Some(l) => (**l).clone(),
+            None => (**upper).clone(),
+        },
+        RType::Unresolved => objeto(),
+        otro => otro.clone(),
+    }
+}
+
+fn constant_narrowing_ok(table: &SymbolTable, to: &RType, init: &Expr) -> bool {
     let (lo, hi): (i32, i32) = match to {
         RType::Prim(PrimType::Byte) => (-128, 127),
         RType::Prim(PrimType::Short) => (-32768, 32767),
         RType::Prim(PrimType::Char) => (0, 65535),
         _ => return false,
     };
-    // El atributado corre **antes** de plegar los campos constantes de la unidad, así que las
-    // referencias a otra `final` no se resuelven aquí (mapa vacío): un `byte b = A;` con `A` constante
-    // es un caso diferido. Sí pliega literales y aritmética entre literales (`byte b = 1 + 2;`).
+    // **Finding #489.** Antes se pasaba un mapa **vacío**, con este motivo: el atributado corre antes
+    // de plegar los campos constantes de la unidad. Era cierto y bastaba con adelantar una pasada:
+    // `collect_const_fields` encuentra los campos por la **tabla de símbolos**, no por los bindings
+    // del árbol, así que puede correr antes del atributado y plegar todos los que tienen
+    // inicializador literal. Las que se refieren a **otra** constante siguen necesitando el binding y
+    // caen en la pasada de siempre, que es posterior y extiende el mapa.
+    //
+    // Sin esto, `static final int K = 0; byte f() { return K; }` --que §5.2 permite, porque la
+    // expresión es constante y entra en el rango-- daba "tipo de retorno incompatible", y el rodeo
+    // era un cast explícito. `java/awt/Font.java` todavía lo lleva escrito.
     matches!(
-        super::codegen::const_eval_int(init, &super::codegen::ConstFieldMap::new()),
+        super::codegen::const_eval_int(init, table.const_fields()),
         Some(v) if v >= lo && v <= hi
     )
 }
@@ -2095,7 +2512,7 @@ fn class_rtype(table: &SymbolTable, simple: &str) -> RType {
 /// primera que encuentre algún aplicable** (JLS §15.12.2): así, al agregar boxing y varargs en
 /// Java 5, ningún programa previo cambió de significado — la fase 1 replica las reglas de antes.
 #[derive(Clone, Copy, PartialEq)]
-enum Phase {
+pub(super) enum Phase {
     /// §15.12.2.2 — identidad, *widening* primitivo y de referencia. Sin boxing ni varargs.
     Strict,
     /// §15.12.2.3 — lo anterior **+ boxing/unboxing**. Sin varargs.
@@ -2110,6 +2527,44 @@ enum Phase {
 ///
 /// Usa el subtipado **estricto** a propósito: con la versión indulgente, cualquier par de tipos
 /// externos sería convertible y **todos** los candidatos resultarían aplicables.
+/// ¿El tipo que la fase 1 le puso a este argumento es **provisional**, porque salio de inferir las
+/// variables de un metodo generico sin objetivo? `Collections.emptyList()` llega como `List<Object>`
+/// --la `T` cayo a su cota-- y `List.of(id("a"))` como `List<Object>` por lo mismo un nivel mas
+/// adentro. El tipo de verdad lo da el **parametro** al que va (§18.5.2), y ese todavia no se sabe:
+/// se sabe recien cuando la sobrecarga esta elegida.
+///
+/// Los argumentos asi se comparan **por su borrado** en la aplicabilidad, y se vuelven a atribuir
+/// con el parametro como objetivo cuando ya hay metodo. Findings #545 y #546.
+fn argumento_blando(table: &SymbolTable, a: &Expr) -> bool {
+    let ExprKind::Call { args, .. } = &a.kind else { return false };
+    let Some(Binding::Method(f)) = a.binding else { return false };
+    if infer::method_type_params(table, f).is_empty() {
+        return false;
+    }
+    // **Y que sus propios argumentos no la fijen.** `Arrays.asList(1, 2)` es `List<Integer>` y no
+    // hay nada provisional en eso: aflojarlo haria entrar un `List<Integer>` en un `List<Nodo>` y
+    // elegiriamos la sobrecarga equivocada **en silencio**, que es el error caro. Se afloja cuando no
+    // hay argumentos --`Collections.emptyList()`-- o cuando alguno es a su vez provisional
+    // --`List.of(id("a"))`, `Map.entry(id("a"), 1)`--.
+    args.is_empty() || args.iter().any(|x| !tipo_exacto(table, x))
+}
+
+/// La mascara de [`argumento_blando`] de una lista de argumentos, o vacia si no hay ninguno --que es
+/// lo que deja la resolucion exactamente como estaba--.
+fn mascara_blanda(table: &SymbolTable, args: &[Expr]) -> Vec<bool> {
+    let m: Vec<bool> = args.iter().map(|a| argumento_blando(table, a)).collect();
+    if m.iter().any(|&b| b) { m } else { Vec::new() }
+}
+
+/// [`convertible`] para un argumento blando: si el tipo provisional no entra, se prueba el
+/// **borrado** de los dos. Asi `List<Object>` --la `T` que cayo a `Object`-- entra en un
+/// `List<Nodo>`, que es lo que va a ser de verdad cuando se re-atribuya con el objetivo. Lo que el
+/// borrado **no** afloja es la clase: un `Object` no pasa por un `String`. Findings #545 y #546.
+fn convertible_blando(table: &SymbolTable, from: &RType, to: &RType, boxing: bool) -> bool {
+    convertible(table, from, to, boxing)
+        || convertible(table, &types::erasure(table, from), &types::erasure(table, to), boxing)
+}
+
 fn convertible(table: &SymbolTable, from: &RType, to: &RType, boxing: bool) -> bool {
     // La indulgencia del **origen** vale para `Unresolved` --de un tipo que no cargamos no se puede
     // afirmar nada-- pero NO para una variable de tipo: de esa sí sabemos algo, su cota, y esa cota
@@ -2182,7 +2637,12 @@ fn convertible(table: &SymbolTable, from: &RType, to: &RType, boxing: bool) -> b
             types::unboxed(table, *c).is_some_and(|p| widening_ok(p, *b))
         }
         // Tipos referencia: subtipado estricto (con genéricos y containment).
-        _ if is_reference(from) && is_reference(to) => is_subtype_strict(table, from, to),
+        // **La aplicabilidad usa el subtipado de §18.5.1**, no el de §4.10.2: ahi las variables
+        // de tipo del metodo son de inferencia y un `Stream<U>` no se compara por invariancia
+        // (finding #248). Fuera de aca --asignaciones, override-- se sigue usando el estricto.
+        _ if is_reference(from) && is_reference(to) => {
+            types::is_subtype_pendiente(table, from, to)
+        }
         _ => false,
     }
 }
@@ -2419,7 +2879,16 @@ pub(crate) fn candidates(table: &SymbolTable, class: SymbolId, name: &str) -> Ve
 }
 
 /// ¿Es `m` aplicable a `args` en esta `phase`?
-fn applicable(table: &SymbolTable, m: SymbolId, args: &[RType], phase: Phase, recv: &RType) -> bool {
+pub(super) fn applicable(
+    table: &SymbolTable,
+    m: SymbolId,
+    args: &[RType],
+    phase: Phase,
+    recv: &RType,
+    // Que argumentos son **blandos** (ver [`argumento_blando`]): los suyos se comparan por el
+    // borrado. Vacia = ninguno, que es como se comportaba antes. Findings #545 y #546.
+    blandos: &[bool],
+) -> bool {
     let Some((raw, varargs)) = signature_of(table, m) else { return false };
     // Se **sustituye el receptor** en los parámetros (§15.12.2.2): una variable de tipo de **clase**
     // (`E` de `List<E>`) pasa a su argumento —incluida la variable de **captura** de un `? super B`,
@@ -2432,7 +2901,12 @@ fn applicable(table: &SymbolTable, m: SymbolId, args: &[RType], phase: Phase, re
         Phase::Strict | Phase::Loose => {
             let boxing = phase == Phase::Loose;
             params.len() == args.len()
-                && params.iter().zip(args).all(|(p, a)| convertible(table, a, p, boxing))
+                && params.iter().zip(args).enumerate().all(|(i, (p, a))| {
+                    match blandos.get(i) {
+                        Some(true) => convertible_blando(table, a, p, boxing),
+                        _ => convertible(table, a, p, boxing),
+                    }
+                })
         }
         // Fase 3: los `n-1` primeros contra sus params, y el **resto** contra el tipo elemento
         // del varargs.
@@ -2441,11 +2915,19 @@ fn applicable(table: &SymbolTable, m: SymbolId, args: &[RType], phase: Phase, re
                 return false;
             }
             let fixed = params.len() - 1;
-            if !params[..fixed].iter().zip(args).all(|(p, a)| convertible(table, a, p, true)) {
+            if !params[..fixed].iter().zip(args).enumerate().all(|(i, (p, a))| {
+                match blandos.get(i) {
+                    Some(true) => convertible_blando(table, a, p, true),
+                    _ => convertible(table, a, p, true),
+                }
+            }) {
                 return false;
             }
             let RType::Array(elem) = &params[fixed] else { return false };
-            args[fixed..].iter().all(|a| convertible(table, a, elem, true))
+            args[fixed..].iter().enumerate().all(|(k, a)| match blandos.get(fixed + k) {
+                Some(true) => convertible_blando(table, a, elem, true),
+                _ => convertible(table, a, elem, true),
+            })
         }
     }
 }
@@ -2465,7 +2947,7 @@ fn passes_inference(table: &SymbolTable, m: SymbolId, args: &[RType], recv: &RTy
 /// ¿Es `a` **más específico** que `b` (JLS §15.12.2.5)? Lo es si cada parámetro de `a` es
 /// subtipo del de `b` — intuitivamente, si `a` acepta menos cosas. Para los primitivos el
 /// subtipado es el *widening* (`int <: long`, §4.10.1), así que `f(int)` gana a `f(long)`.
-fn more_specific(table: &SymbolTable, a: SymbolId, b: SymbolId) -> bool {
+pub(super) fn more_specific(table: &SymbolTable, a: SymbolId, b: SymbolId) -> bool {
     let (Some((pa, _)), Some((pb, _))) = (signature_of(table, a), signature_of(table, b)) else {
         return false;
     };
@@ -2482,9 +2964,26 @@ fn resolve_overload(
     pos: Pos,
     recv: &RType,
 ) -> Option<SymbolId> {
+    resolve_overload_blanda(env, cands, args, name, pos, recv, &[])
+}
+
+/// Igual, pero con la mascara de [`argumento_blando`]: los argumentos cuyo tipo salio de una
+/// inferencia sin objetivo se comparan por el borrado. Findings #545 y #546.
+fn resolve_overload_blanda(
+    env: &mut Env,
+    cands: &[SymbolId],
+    args: &[RType],
+    name: &str,
+    pos: Pos,
+    recv: &RType,
+    blandos: &[bool],
+) -> Option<SymbolId> {
     for phase in [Phase::Strict, Phase::Loose, Phase::Varargs] {
-        let mut applicables: Vec<SymbolId> =
-            cands.iter().copied().filter(|&m| applicable(env.table, m, args, phase, recv)).collect();
+        let mut applicables: Vec<SymbolId> = cands
+            .iter()
+            .copied()
+            .filter(|&m| applicable(env.table, m, args, phase, recv, blandos))
+            .collect();
         if applicables.is_empty() {
             continue; // esta fase no encontró nada: probar la siguiente
         }
@@ -2493,7 +2992,10 @@ fn resolve_overload(
         // **único** candidato no se filtra: ahí, aplicable o no, el resultado (o el error) lo da el
         // sitio de la llamada —y así no se rompe el *solving combinado* de un argumento poly, cuyo tipo
         // provisional todavía es prematuro—.
-        if applicables.len() > 1 {
+        // Con algun argumento **blando** no se corre: el filtro mide contra el tipo provisional,
+        // que es justo el que no vale, y descartaria la sobrecarga buena --`g(List<Nodo>)` contra un
+        // `List<Object>` que todavia no se instancio--. Findings #545 y #546.
+        if applicables.len() > 1 && blandos.is_empty() {
             let refined: Vec<SymbolId> =
                 applicables.iter().copied().filter(|&m| passes_inference(env.table, m, args, recv)).collect();
             if !refined.is_empty() {
@@ -2511,6 +3013,25 @@ fn resolve_overload(
         // cargar), `convertible` lo dio por convertible a **toda** sobrecarga: el desempate por *más
         // específico* no es fiable y no se debe reportar "ambigua" (espejo del guard de params
         // `Unresolved` de arriba). Se elige `best` en silencio.
+        // **§15.12.2.1: el conjunto de aplicables se arma solo con los ACCESIBLES.** Iba al reves --se
+        // juntaban todos y el acceso se chequeaba despues, si quedaba uno-- y por eso una sobrecarga
+        // que el sitio de la llamada ni siquiera puede ver empataba con la buena y la llamada salia
+        // "ambigua". El caso que lo destapo es `new DatagramSocket(null)`: el `(SocketAddress)`
+        // publico y el `(DatagramSocketImpl)` protected, los dos aplicables a `null` y ninguno mas
+        // especifico que el otro -- pero desde otro paquete el protected no existe. Findings #343 y
+        // #485, que son el mismo.
+        //
+        // El filtro **no se aplica si deja el conjunto vacio**: ahi el problema no es la ambiguedad
+        // sino el acceso, y el error bueno lo da el chequeo de mas adelante, que sabe decir cual es el
+        // miembro y por que no se ve.
+        let visibles: Vec<SymbolId> = applicables
+            .iter()
+            .copied()
+            .filter(|&m| super::check::accesible_desde(env.table, env.class, m))
+            .collect();
+        if !visibles.is_empty() {
+            applicables = visibles;
+        }
         let args_lenient = args.iter().any(lenient);
         return Some(choose_most_specific(env, &applicables, name, pos, args_lenient));
     }
@@ -2766,6 +3287,21 @@ fn lookup_field(table: &SymbolTable, class: SymbolId, name: &str) -> Option<Symb
 }
 
 /// Resuelve un `Type` sintáctico a [`RType`] en `scope`.
+/// El nombre escrito de un tipo que **no resolvió**, para el literal de clase (finding #520).
+///
+/// Se compara la forma escrita con la resuelta porque solo la primera tiene el nombre que hay que
+/// poner en el mensaje. Se baja por los arrays --`NoExiste[].class` es el mismo error-- y se ignora
+/// todo lo que no sea un nombre de clase: un primitivo, `void` y un parámetro de tipo resuelven
+/// bien, y un `Unresolved` que venga de otro lado no es asunto de este chequeo.
+fn nombre_sin_resolver<'a>(ty: &'a Type, rt: &RType) -> Option<&'a str> {
+    match (ty, rt) {
+        (Type::Array(inner_ty), RType::Array(inner_rt)) => nombre_sin_resolver(inner_ty, inner_rt),
+        (Type::Class(name), RType::Unresolved) => Some(name),
+        (Type::Parameterized { base, .. }, RType::Unresolved) => Some(base),
+        _ => None,
+    }
+}
+
 pub(crate) fn resolve_rtype(table: &SymbolTable, scope: ScopeId, ty: &Type) -> RType {
     match ty {
         Type::Void => RType::Void,
@@ -2818,7 +3354,27 @@ fn source_class_named(table: &SymbolTable, name: &str) -> Option<SymbolId> {
     None
 }
 
+/// El nombre escrito de un tipo declarado que **no resolvió**, bajando por los arreglos a la par en
+/// el tipo sintáctico y en el resuelto. `None` si resolvió o si no es un nombre de clase.
+fn base_sin_resolver<'a>(declared: &RType, ty: &'a Type) -> Option<&'a str> {
+    match (declared, ty) {
+        (RType::Array(r), Type::Array(t)) => base_sin_resolver(r, t),
+        (RType::Unresolved, Type::Class(n)) => Some(n),
+        (RType::Unresolved, Type::Parameterized { base, .. }) => Some(base),
+        _ => None,
+    }
+}
+
 fn resolve_type_name(table: &SymbolTable, scope: ScopeId, name: &str) -> RType {
+    // Reintento de la forma binaria (finding #514), igual que en `enter.rs`.
+    let rt = resolve_type_name_exacto(table, scope, name);
+    if matches!(rt, RType::Unresolved) && name.contains('$') {
+        return resolve_type_name_exacto(table, scope, &name.replace('$', "."));
+    }
+    rt
+}
+
+fn resolve_type_name_exacto(table: &SymbolTable, scope: ScopeId, name: &str) -> RType {
     if let Some(id) = table.resolve_type(scope, name) {
         if matches!(table.symbol(id).kind, SymbolKind::TypeVar { .. }) {
             RType::TypeVar(id)
@@ -2827,6 +3383,13 @@ fn resolve_type_name(table: &SymbolTable, scope: ScopeId, name: &str) -> RType {
         }
     } else if let Some(id) = source_class_named(table, name) {
         RType::Class(id)
+    } else if let ImportEstatico::Uno(id) = table.tipo_importado_estatico(scope, name) {
+        // Un tipo miembro traído por un `import static X.*` de la unidad (§7.5.4, finding #540).
+        RType::Class(id)
+    } else if table.tipo_importado_estatico(scope, name) == ImportEstatico::Ambiguo {
+        // Ambiguo: no se elige ninguno. Seguir de largo le daria el nombre al `java.lang` o al
+        // externo homónimo, que es compilar en silencio lo que el JDK rechaza.
+        RType::Unresolved
     } else if let Some(id) = table.java_lang_source(name) {
         // El `import java.lang.*` implícito sobre los tipos del fuente de este round (§7.3).
         RType::Class(id)
@@ -2871,7 +3434,16 @@ fn resolve_type_name(table: &SymbolTable, scope: ScopeId, name: &str) -> RType {
             // --pero era otra--. Escribir el nombre completo es justamente lo que se hace para
             // desambiguar, así que tiene que ganar. Ver #478.
             RType::Class(id)
-        } else if let Some(id) = table.external(simple) {
+            // **El nombre escrito tiene que ser el nombre completo del tipo.** Este ultimo recurso
+            // busca por el **ultimo segmento**, y asi aceptaba un calificado a medias: `reflect.Field`
+            // resolvia a `java.lang.reflect.Field` aunque no exista ningun paquete `reflect`, y el JDK
+            // lo rechaza (*"package reflect does not exist"*). Java no tiene nombres de paquete
+            // relativos: o se escribe entero, o el primer identificador nombra algo en alcance --y de
+            // eso se ocupa el camino de los anidados, mas arriba--. Finding #542.
+        } else if let Some(id) = table
+            .external(simple)
+            .filter(|&id| table.binary_name(id).is_some_and(|b| b.replace('$', ".") == name))
+        {
             RType::Class(id)
         } else {
             RType::Unresolved

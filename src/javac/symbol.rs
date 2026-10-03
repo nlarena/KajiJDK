@@ -151,6 +151,40 @@ pub struct Symbol {
 /// Un ámbito: una tabla `nombre → símbolos` (varios por nombre, para el *overloading*) con un
 /// enlace al scope que lo encierra.
 #[derive(Debug)]
+/// Lo que declara la **cabecera** de una unidad de compilación, que es lo que decide si un tipo
+/// del classpath se puede nombrar **corto** ahí (§6.5.5.1). Ver
+/// [`SymbolTable::externo_nombrable_corto`].
+struct InfoUnidad {
+    /// El paquete de la unidad; vacío para el paquete sin nombre.
+    paquete: String,
+    /// Si tiene **algún** `import ...*` (no cuál: ver `externo_nombrable_corto`).
+    on_demand: bool,
+    /// Los tipos `X` de sus `import static X.*`, ya como símbolos. Sus tipos miembro estáticos y
+    /// accesibles son nombrables corto en esta unidad y **solo** en esta (§7.5.4, finding #540).
+    estaticos_on_demand: Vec<SymbolId>,
+    /// Los `import static X.m;` de la unidad: `(nombre del miembro, clase `X`)`. Un import
+    /// estatico de **un solo miembro** hace nombrable corto ese campo, ese metodo o ese tipo, y le
+    /// gana a cualquier on-demand (§7.5.3). Finding #543.
+    estaticos_single: Vec<(String, SymbolId)>,
+    /// Los prefijos de sus `import X.*` de tipos, tal como se escribieron. Solo sirven para
+    /// detectar el choque con un tipo miembro importado estático: dos on-demand que traen el mismo
+    /// nombre simple son ambiguos (§6.4.1, §7.5.2, §7.5.4).
+    comodines: Vec<String>,
+}
+
+/// Lo que un `import static X.*` de la unidad aporta a un nombre de tipo simple (§7.5.4). Ver
+/// [`SymbolTable::tipo_importado_estatico`].
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ImportEstatico {
+    /// Ningún `import static X.*` de la unidad trae un tipo con ese nombre, o lo tapa algo de
+    /// precedencia mayor (el propio paquete). La resolución sigue por donde seguía.
+    Nada,
+    /// Lo trae exactamente uno, y ningún otro on-demand compite.
+    Uno(SymbolId),
+    /// Dos on-demand distintos traen el mismo nombre: el JDK lo rechaza al **usarlo**.
+    Ambiguo,
+}
+
 pub struct Scope {
     pub enclosing: Option<ScopeId>,
     pub owner: Option<SymbolId>,
@@ -202,6 +236,23 @@ pub struct SymbolTable {
     /// Los `@interface` del classpath con `@Retention(RUNTIME)`, por nombre binario. Ver
     /// `mark_runtime_retained`.
     runtime_retained: std::collections::HashSet<String>,
+    /// Los tipos del **classpath** que son miembros NO estaticos de otra clase, o sea que su
+    /// constructor lleva la instancia envolvente de cabecera. Por nombre **binario**, como
+    /// `runtime_retained`. Ver `mark_inner_instance` y el finding #480.
+    inner_instances: std::collections::HashSet<String>,
+    /// Los flags de acceso de la **propia** entrada `InnerClasses` de cada tipo miembro del
+    /// classpath, por nombre binario. Son los únicos que dicen la verdad: en la cabecera del
+    /// `.class` un miembro `protected` sale `ACC_PUBLIC` y uno `private` sale de paquete, así que
+    /// con esos no se puede decidir qué importa un `import static X.*` (finding #540).
+    inner_access: HashMap<String, u16>,
+    /// Lo que declara la cabecera de cada unidad, indexado por el **scope de la unidad** (el que
+    /// `enter` intercala entre la clase y el paquete para los `import`, findings #352 y #493).
+    ///
+    /// Es el contexto que le faltaba a la consulta de externos. `externals` está indexado por
+    /// nombre simple y es global a la compilación, así que "cargado" y "visible desde acá" eran
+    /// lo mismo: bastaba que una unidad hermana --o el arrastre de una firma-- trajera un tipo
+    /// para que todas lo pudieran nombrar sin importarlo. Finding #491.
+    unidades: HashMap<ScopeId, InfoUnidad>,
     /// Posición de fuente de cada símbolo declarado (para errores de fases que trabajan sobre
     /// la tabla, como la detección de ciclos).
     positions: HashMap<SymbolId, (u32, u32)>,
@@ -254,7 +305,10 @@ impl SymbolTable {
             externals: HashMap::new(),
             source_aliases: HashMap::new(),
             externals_fqn: HashMap::new(),
+            unidades: HashMap::new(),
             runtime_retained: std::collections::HashSet::new(),
+            inner_instances: std::collections::HashSet::new(),
+            inner_access: HashMap::new(),
             positions: HashMap::new(),
             static_single: HashMap::new(),
             static_on_demand: Vec::new(),
@@ -413,6 +467,254 @@ impl SymbolTable {
         id
     }
 
+    /// Anota lo que declara la cabecera de una unidad, en **su** scope. Ver
+    /// [`Self::externo_nombrable_corto`].
+    pub fn registrar_unidad(
+        &mut self,
+        scope: ScopeId,
+        paquete: &str,
+        on_demand: bool,
+        estaticos_on_demand: Vec<SymbolId>,
+        estaticos_single: Vec<(String, SymbolId)>,
+        comodines: Vec<String>,
+    ) {
+        self.unidades.insert(
+            scope,
+            InfoUnidad {
+                paquete: paquete.to_string(),
+                on_demand,
+                estaticos_on_demand,
+                estaticos_single,
+                comodines,
+            },
+        );
+    }
+
+    /// Las clases donde buscar un **miembro** (campo o metodo) que la unidad nombra corto por un
+    /// `import static` (§7.5.3 y §7.5.4). Finding #543.
+    ///
+    /// En orden: primero las de un `import static X.m;` que nombra **justo a ese miembro** --que le
+    /// gana a cualquier on-demand-- y despues los `X` de los `import static X.*`. Quien llama decide
+    /// si busca un campo o un metodo; aca solo se dice **donde** mirar.
+    ///
+    /// Sale de la info de **la unidad**, no de `static_single`/`static_on_demand`, que son globales a
+    /// la compilacion: con esos, el import de una unidad se filtraria a sus hermanas (#493-B).
+    pub fn duenos_estaticos(&self, scope: ScopeId, name: &str) -> Vec<SymbolId> {
+        let Some(info) = self.info_de_unidad(scope) else {
+            return Vec::new();
+        };
+        let mut out: Vec<SymbolId> = info
+            .estaticos_single
+            .iter()
+            .filter(|(m, _)| m == name)
+            .map(|(_, d)| *d)
+            .collect();
+        out.extend(info.estaticos_on_demand.iter().copied());
+        out.dedup();
+        out
+    }
+
+    /// El tipo que un `import static X.*` **de esta unidad** trae para el nombre simple `name`
+    /// (§7.5.4, finding #540).
+    ///
+    /// Un import estático on-demand importa los miembros estáticos accesibles de `X`, y un tipo
+    /// miembro estático es uno de ellos: con `import static java.util.Map.*;`, `Entry` a secas es
+    /// legal. Se contesta desde la info de **la unidad**, no desde `static_on_demand`, que es global
+    /// a la compilación: con ese, el import de una unidad se filtraría a sus hermanas (#493-B).
+    ///
+    /// Quien llama ya consultó la cadena de scopes, así que lo que gana siempre --los tipos de la
+    /// unidad, sus `import` de un solo tipo y los tipos del propio paquete que están en el round--
+    /// ya contestó. Lo que queda por mirar acá es el orden entre on-demand (§6.4.1: ninguno tapa a
+    /// otro):
+    ///
+    /// - el **propio paquete** desde el classpath le gana: dice `Nada` y se sigue como antes.
+    /// - un homónimo **accesible** de `java.lang` (el `import java.lang.*` implícito, §7.3) o de un
+    ///   `import X.*` de tipos de la unidad hace `Ambiguo`, igual que dos estáticos distintos.
+    ///
+    /// De los on-demand de tipos se mira lo que ya está **cargado**: `try_load` los prueba cuando la
+    /// unidad escribe el nombre, así que en la práctica están. Si alguno faltara, el resultado sería
+    /// `Uno` en vez de `Ambiguo`: se aceptaría un programa que el JDK rechaza, que es la dirección
+    /// barata del error.
+    pub fn tipo_importado_estatico(&self, scope: ScopeId, name: &str) -> ImportEstatico {
+        if name.contains('.') {
+            return ImportEstatico::Nada;
+        }
+        let Some(info) = self.info_de_unidad(scope) else {
+            return ImportEstatico::Nada;
+        };
+        let mut elegido: Option<SymbolId> = None;
+        for &dueno in &info.estaticos_on_demand {
+            let Some(id) = self.tipo_miembro_estatico_importable(dueno, name, &info.paquete) else {
+                continue;
+            };
+            match elegido {
+                // El mismo tipo traído dos veces (`import static p.Sub.*` y `p.Base.*`) no es ambiguo.
+                Some(otro) if otro != id => return ImportEstatico::Ambiguo,
+                _ => elegido = Some(id),
+            }
+        }
+        let Some(id) = elegido else {
+            return ImportEstatico::Nada;
+        };
+        // El propio paquete precede a todo on-demand (§6.5.5.1). Los del round ya los encontró la
+        // cadena de scopes; acá falta el que viene del classpath.
+        let propio =
+            if info.paquete.is_empty() { name.to_string() } else { format!("{}.{name}", info.paquete) };
+        if self.classes.get(&propio).or_else(|| self.externals_fqn.get(&propio)).is_some() {
+            return ImportEstatico::Nada;
+        }
+        // Los on-demand de tipos que compiten: el `java.lang.*` implícito y los `import X.*`.
+        let mut rivales: Vec<String> = vec![format!("java.lang.{name}")];
+        rivales.extend(info.comodines.iter().map(|p| format!("{p}.{name}")));
+        for escrito in &rivales {
+            if let Some(rival) = self.simbolo_por_nombre_escrito(escrito) {
+                if rival != id && self.tipo_accesible_desde(rival, &info.paquete) {
+                    return ImportEstatico::Ambiguo;
+                }
+            }
+        }
+        ImportEstatico::Uno(id)
+    }
+
+    /// El tipo miembro `name` de `dueno` --declarado ahí o **heredado**, que §7.5.4 también cuenta y
+    /// el JDK importa-- si es estático y accesible desde el paquete `paquete`.
+    ///
+    /// Se toma el **primero** que aparece y recién después se filtra: un miembro no estático
+    /// declarado en `dueno` oculta al heredado homónimo, y entonces no se importa ninguno.
+    fn tipo_miembro_estatico_importable(
+        &self,
+        dueno: SymbolId,
+        name: &str,
+        paquete: &str,
+    ) -> Option<SymbolId> {
+        let SymbolKind::Class { members, .. } = &self.symbols[dueno].kind else {
+            return None;
+        };
+        let propio = self.scopes[*members]
+            .get(name)
+            .iter()
+            .copied()
+            .find(|&sid| matches!(self.symbols[sid].kind, SymbolKind::Class { .. }));
+        let id = propio.or_else(|| self.inherited_member_type(dueno, name))?;
+        (self.tipo_miembro_es_estatico(id) && self.tipo_accesible_desde(id, paquete)).then_some(id)
+    }
+
+    /// ¿Es **estático** ese tipo miembro? Una interfaz, un enum, un record o una anotación anidados
+    /// lo son siempre, y también todo tipo miembro de una interfaz (§8.5.1, §9.5). Del classpath lo
+    /// dice su entrada `InnerClasses` (`inner_instances`, #480).
+    fn tipo_miembro_es_estatico(&self, id: SymbolId) -> bool {
+        let sym = &self.symbols[id];
+        let SymbolKind::Class { kind, binary, .. } = &sym.kind else {
+            return false;
+        };
+        let Some(dueno) = sym.owner else {
+            return !self.inner_instances.contains(binary.as_str());
+        };
+        if !matches!(kind, TypeKind::Class) || sym.modifiers.contains(&Modifier::Static) {
+            return true;
+        }
+        matches!(
+            &self.symbols[dueno].kind,
+            SymbolKind::Class { kind: TypeKind::Interface | TypeKind::Annotation, .. }
+        )
+    }
+
+    /// ¿Es accesible ese tipo desde el paquete `paquete`, a los fines de un import (§6.6)?
+    ///
+    /// Un import no está **dentro** de ninguna subclase, así que un `protected` de otro paquete no
+    /// cuenta: queda lo público y, en el mismo paquete, todo lo que no sea privado.
+    fn tipo_accesible_desde(&self, id: SymbolId, paquete: &str) -> bool {
+        let sym = &self.symbols[id];
+        let SymbolKind::Class { binary, .. } = &sym.kind else {
+            return false;
+        };
+        let top = binary.split('$').next().unwrap_or(binary);
+        let suyo = top.rsplit_once('.').map_or("", |(pre, _)| pre);
+        let (publico, privado) = match (sym.owner, self.inner_access.get(binary.as_str())) {
+            // Del fuente: los modificadores escritos, y un miembro de interfaz es público (§9.5).
+            (Some(dueno), _) => {
+                let de_interfaz = matches!(
+                    &self.symbols[dueno].kind,
+                    SymbolKind::Class { kind: TypeKind::Interface | TypeKind::Annotation, .. }
+                );
+                (
+                    sym.modifiers.contains(&Modifier::Public) || de_interfaz,
+                    sym.modifiers.contains(&Modifier::Private),
+                )
+            }
+            // Un miembro del classpath: los flags de su `InnerClasses`, no los de la cabecera.
+            (None, Some(&flags)) => (flags & 0x0001 != 0, flags & 0x0002 != 0),
+            (None, None) => (sym.modifiers.contains(&Modifier::Public), false),
+        };
+        publico || (!privado && suyo == paquete)
+    }
+
+    /// El símbolo que designa un nombre cualificado **escrito en el fuente**, probando las formas
+    /// anidadas: `a.b.C.D.E`, `a.b.C.D$E`, `a.b.C$D$E`, ...
+    ///
+    /// Un tipo anidado se escribe con puntos en el fuente (`java.util.Map.Entry`) y con `$` en la
+    /// tabla de externos (`java.util.Map$Entry`), y desde el nombre escrito no se sabe **cuántos** de
+    /// los últimos segmentos son anidamiento y cuántos son paquete. Las claves son exactas, así que
+    /// una forma que no corresponde simplemente no está; no hay falsos positivos que ganarían por
+    /// orden.
+    pub fn simbolo_por_nombre_escrito(&self, fqn: &str) -> Option<SymbolId> {
+        if let Some(sym) = self.class(fqn).or_else(|| self.external_fqn(fqn)) {
+            return Some(sym);
+        }
+        // `.` y `$` ocupan un byte, así que los índices siguen valiendo después de cada reemplazo.
+        let mut cand = fqn.to_string();
+        for (idx, _) in fqn.match_indices('.').rev() {
+            cand.replace_range(idx..idx + 1, "$");
+            if let Some(sym) = self.class(&cand).or_else(|| self.external_fqn(&cand)) {
+                return Some(sym);
+            }
+        }
+        None
+    }
+
+    /// La info de cabecera de la unidad a la que pertenece `scope`, subiendo por la cadena.
+    fn info_de_unidad(&self, scope: ScopeId) -> Option<&InfoUnidad> {
+        let mut actual = Some(scope);
+        while let Some(id) = actual {
+            if let Some(info) = self.unidades.get(&id) {
+                return Some(info);
+            }
+            actual = self.scopes[id].enclosing;
+        }
+        None
+    }
+
+    /// ¿Se puede nombrar **corto** ese tipo del classpath desde `scope`? (§6.5.5.1)
+    ///
+    /// Dice sí en `java.lang` --auto-importado (§7.3)--, en el propio paquete de la unidad, y en
+    /// cualquier unidad con un `import ...*`. Los `import` de un solo tipo no llegan hasta acá:
+    /// viven en el scope de la unidad, así que `resolve_type` ya los encontró antes.
+    ///
+    /// **Por qué un comodín alcanza para rendirse**, en vez de mirar contra qué prefijo importa:
+    /// `externals` está indexado por nombre simple y entre dos homónimos gana el que se cargó
+    /// primero, así que el binario que hay bajo esa clave puede no ser el que la unidad quiso. Con
+    /// un `import java.util.*` y la clave `List` tomada por un `java.awt.List` traído de rebote,
+    /// comparar el prefijo **rechazaría** un programa que el JDK compila — y de los dos errores
+    /// posibles, ese es el que no se puede cometer.
+    ///
+    /// Un scope **sin** info de unidad (los sintéticos del desugar) también dice sí, por lo mismo.
+    pub fn externo_nombrable_corto(&self, scope: ScopeId, id: SymbolId) -> bool {
+        let Some(info) = self.info_de_unidad(scope) else {
+            return true;
+        };
+        if info.on_demand {
+            return true;
+        }
+        let Some(binary) = self.binary_name(id) else {
+            return true;
+        };
+        // `java.awt.event.MouseEvent` da `java.awt.event`. Un anidado (`java.util.Map$Entry`) da
+        // `java.util`, que no es su paquete a los fines del JLS pero deja pasar el caso — la
+        // dirección segura.
+        let paquete = binary.rsplit_once('.').map_or("", |(pre, _)| pre);
+        paquete == "java.lang" || paquete == info.paquete
+    }
+
     /// El tipo externo modelado con ese nombre simple, si está registrado.
     ///
     /// Ojo: con dos homónimos de paquetes distintos, acá está el que se cargó **primero**. Para
@@ -479,6 +781,27 @@ impl SymbolTable {
     /// sobre el tipo que resolvió, no sobre como se escribió.
     pub fn mark_runtime_retained(&mut self, binary: &str) {
         self.runtime_retained.insert(binary.to_string());
+    }
+
+    /// Anota que ese tipo del classpath es una **interna de instancia**: un miembro no `static`, que
+    /// recibe la externa como primer parametro de todo constructor.
+    ///
+    /// Se guarda aparte y por nombre binario porque un tipo externo se registra **sin `owner`** --los
+    /// anidados entran como simbolos de nivel superior con un `$` en el nombre--, asi que la
+    /// pregunta no se puede contestar recorriendo la tabla. Finding #480.
+    pub fn mark_inner_instance(&mut self, binary: &str) {
+        self.inner_instances.insert(binary.to_string());
+    }
+
+    /// Ver [`Self::mark_inner_instance`].
+    pub fn is_inner_instance(&self, binary: &str) -> bool {
+        self.inner_instances.contains(binary)
+    }
+
+    /// Anota los flags de la entrada `InnerClasses` propia de un tipo miembro del classpath. Ver el
+    /// campo `inner_access`.
+    pub fn mark_inner_access(&mut self, binary: &str, flags: u16) {
+        self.inner_access.insert(binary.to_string(), flags);
     }
 
     /// ¿Ese tipo del classpath es una anotación retenida en runtime? Ver el finding #467: sin esto

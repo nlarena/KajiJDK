@@ -313,6 +313,13 @@ impl BoundSet {
             }
             (RTypeArg::Extends(inner), RTypeArg::Extends(x)) => self.reduce_target(table, inner, x),
             (RTypeArg::Super(inner), RTypeArg::Super(x)) => self.reduce(table, x, inner),
+            // Un argumento **invariante** del retorno contra un wildcard del target (§18.2.3,
+            // `‹T <= ? extends X›` ⇒ `T <: X` y `‹T <= ? super X›` ⇒ `X <: T`). Faltaban, y eran el
+            // #498: `List<? extends Nodo> f() { return Collections.emptyList(); }` no le daba a `α`
+            // ninguna cota, `α` caía a `Object` y `List<Object>` ya no entraba en el retorno. Con un
+            // `?` a secas el containment es `true` y no aporta nada.
+            (RTypeArg::Type(t), RTypeArg::Extends(x)) => self.reduce_target(table, t, x),
+            (RTypeArg::Type(t), RTypeArg::Super(x)) => self.reduce(table, x, t),
             _ => {}
         }
     }
@@ -747,6 +754,10 @@ pub struct NestedCall {
     pub arg_index: usize,
     pub method: SymbolId,
     pub recv: RType,
+    /// Los tipos de **sus propios** argumentos. Sin esto, la anidada solo aportaba su retorno y las
+    /// variables que sus argumentos fijan quedaban sueltas: `groupingBy(f)` no ligaba su `K` y el
+    /// `collect` de afuera terminaba con `Map<Object, List<Object>>`. Finding #558.
+    pub args: Vec<RType>,
 }
 
 /// El resultado por cada llamada anidada: la sustitución de **sus** parámetros de tipo, para re-tipar
@@ -788,6 +799,8 @@ pub fn infer_call_nested(
     let mut all_ids = m_ids.clone();
     // Por cada anidada: sus variables frescas + su retorno reescrito con ellas.
     let mut nested_info: Vec<(usize, Vec<SymbolId>, Vec<u32>, RType)> = Vec::new();
+    // Los pares `(argumento de una anidada, su parámetro freshado)` que se reducen mas abajo (#558).
+    let mut nested_reduce: Vec<(RType, RType)> = Vec::new();
     for nc in nested {
         let inner_params = method_type_params(table, nc.method);
         if inner_params.is_empty() {
@@ -797,14 +810,48 @@ pub fn infer_call_nested(
         fresh.extend(i_fresh.iter().map(|(k, v)| (*k, v.clone())));
         origin.extend(i_origin);
         all_ids.extend(i_ids.iter().copied());
+        let irecv = match table.symbol(nc.method).owner {
+            Some(o) => types::subst_for(table, &nc.recv, o),
+            None => HashMap::new(),
+        };
+        // **Los argumentos de la anidada también restringen** (§18.5.2.1): la `K` de
+        // `groupingBy(Function<T, K> f)` sale de `f`, no del retorno. Se guardan los pares
+        // `(argumento, parámetro freshado)` y se reducen abajo, cuando ya existe el `BoundSet`.
+        // Sin esto, `collect(Collectors.groupingBy(f))` daba `Map<Object, List<Object>>` — finding
+        // #558. Alcanzaba mientras las anidadas eran `empty()`/`naturalOrder()`, que no tienen
+        // argumentos.
+        if let Some(Resolved::Method { params: iparams, varargs: ivarargs, .. }) =
+            table.resolved(nc.method)
+        {
+            let ilast = iparams.len().saturating_sub(1);
+            for (k, ia) in nc.args.iter().enumerate() {
+                if matches!(ia, RType::Unresolved) {
+                    continue;
+                }
+                // El mismo trato del *spread* que el bucle de afuera.
+                let p = if *ivarargs && k >= ilast && !matches!(ia, RType::Array(_)) {
+                    match iparams.get(ilast) {
+                        Some(RType::Array(elem)) => Some(elem.as_ref()),
+                        other => other,
+                    }
+                } else {
+                    iparams.get(k)
+                };
+                let Some(p) = p else { continue };
+                // Y la misma guarda: un argumento que menciona las variables del **propio** método
+                // anidado --una lambda re-atribuida con su parámetro-- generaría una igualdad
+                // espuria. Su restricción real sale de otro lado.
+                if mentions_type_params(ia, &inner_params) {
+                    continue;
+                }
+                let p = types::substitute(&types::substitute(p, &irecv), &i_fresh);
+                nested_reduce.push((ia.clone(), p));
+            }
+        }
         // El retorno de la anidada con sus parámetros de clase fijados por su receptor, y sus
         // parámetros de tipo reemplazados por las variables frescas.
         let inner_ret = match table.resolved(nc.method) {
             Some(Resolved::Method { ret, .. }) => {
-                let irecv = match table.symbol(nc.method).owner {
-                    Some(o) => types::subst_for(table, &nc.recv, o),
-                    None => HashMap::new(),
-                };
                 types::substitute(&types::substitute(&ret, &irecv), &i_fresh)
             }
             _ => RType::Unresolved,
@@ -813,6 +860,11 @@ pub fn infer_call_nested(
     }
 
     let mut bounds = BoundSet::new(all_ids, origin, fresh.clone());
+    // Primero lo de las anidadas: sus argumentos fijan sus variables, y esas aparecen en el retorno
+    // que el bucle de abajo reduce contra el parámetro de afuera (#558).
+    for (a, p) in &nested_reduce {
+        bounds.reduce(table, a, p);
+    }
     // Índice del último parámetro (el de `...` en un método de aridad variable) y su tipo de
     // **elemento** (`T[]` → `T`): un argumento del *spread* restringe la variable de tipo contra el
     // elemento, no contra el array. Sin esto, `<T> count(T... xs)` llamado `count("a","b")` reducía
@@ -900,7 +952,7 @@ fn fresh_vars(table: &SymbolTable, params: &[SymbolId]) -> (Vec<u32>, Subst, Has
 /// Sirve para detectar un argumento **poly** re-atribuido con el tipo crudo de su parámetro (`Sup<U>`),
 /// que no debe reducirse contra las variables frescas de la misma invocación (ver el bucle de
 /// [`infer_call_nested`]).
-fn mentions_type_params(ty: &RType, vars: &[SymbolId]) -> bool {
+pub(crate) fn mentions_type_params(ty: &RType, vars: &[SymbolId]) -> bool {
     match ty {
         RType::TypeVar(v) => vars.contains(v),
         RType::Array(e) => mentions_type_params(e, vars),
@@ -1140,6 +1192,28 @@ mod tests {
     }
 
     #[test]
+    fn a_wildcard_target_bounds_the_variable() {
+        // #498: `Lst<? extends Num> xs = make()` da `α <: Num`, y `Lst<? super Num>` da `Num <: α`.
+        // Las dos resuelven a `Num`; antes `α` caía a `Object`.
+        let src = "class Lst<E> {} class Num {}
+                   class C { <T> Lst<T> make() { return null; } }
+                   class Args { Lst<? extends Num> ext; Lst<? super Num> sup; Lst<?> nada; }";
+        assert_eq!(infer_first_to(src, "make", &[], Some("ext")), "Num");
+        assert_eq!(infer_first_to(src, "make", &[], Some("sup")), "Num");
+        assert_eq!(infer_first_to(src, "make", &[], Some("nada")), "Object");
+    }
+
+    #[test]
+    fn a_wildcard_target_does_not_override_the_argument() {
+        // El argumento da `Int <: α`; el `? extends Num` del target solo acota por arriba, y la
+        // cota inferior manda (`Lst<? extends Num> l = envolver(new Int())` ⇒ `α = Int`).
+        let src = "class Lst<E> {} class Num {} class Int extends Num {}
+                   class C { <T> Lst<T> envolver(T x) { return null; } }
+                   class Args { Int i; Lst<? extends Num> ext; }";
+        assert_eq!(infer_first_to(src, "envolver", &["i"], Some("ext")), "Int");
+    }
+
+    #[test]
     fn the_target_type_widens_what_the_argument_suggested() {
         // El argumento da `String <: α` y el target `α = Object`: son compatibles y gana el
         // target, que es lo que hace legal `Lst<Object> l = envolver("s")`.
@@ -1241,7 +1315,12 @@ mod tests {
         let box_string = field_type(&t, t.class("Args").unwrap(), "bs");
         // arg0 = empty() (anidada, su tipo se ignora), arg1 = Box<String>.
         let arg_types = vec![RType::Unresolved, box_string];
-        let nested = vec![NestedCall { arg_index: 0, method: empty, recv: RType::Class(cid) }];
+        let nested = vec![NestedCall {
+            arg_index: 0,
+            method: empty,
+            recv: RType::Class(cid),
+            args: Vec::new(),
+        }];
         let (out, nres, ok) =
             infer_call_nested(&t, &RType::Class(cid), pick, &arg_types, &nested, None);
         assert!(ok, "satisfacible");
