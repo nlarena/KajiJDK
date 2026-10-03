@@ -650,15 +650,29 @@ impl Analyzer {
             ExprKind::Switch { selector, cases } => {
                 let f = self.expr_after(flow, selector);
                 for c in cases {
+                    // Las **variables de patrón** del case están siempre asignadas dentro del brazo
+                    // --las vincula el propio match-- y valen también en la guarda. Es exactamente
+                    // lo que hace la forma **sentencia** en `switch_stmt`; que acá faltara era la
+                    // razón por la que `return switch (o) { case Integer i -> i; ... }` se quejaba
+                    // de que `i` podía no estar inicializada, con la forma de dos puntos pasando.
+                    let mut entry = f.clone();
+                    for l in &c.labels {
+                        if let CaseLabel::Pattern(pat) = l {
+                            for slot in pattern_slots(pat) {
+                                entry.da.insert(slot);
+                                entry.du.remove(&slot);
+                            }
+                        }
+                    }
                     if let Some(g) = &c.guard {
-                        self.expr_cond(&f, g);
+                        self.expr_cond(&entry, g);
                     }
                     match &c.body {
                         SwitchBody::Arrow(st) => {
-                            self.stmt(f.clone(), st);
+                            self.stmt(entry, st);
                         }
                         SwitchBody::Colon(sts) => {
-                            let mut cur = Some(f.clone());
+                            let mut cur = Some(entry);
                             for st in sts {
                                 match cur {
                                     Some(cs) => cur = self.stmt(cs, st),

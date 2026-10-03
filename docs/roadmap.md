@@ -354,6 +354,41 @@ El motor base: un frame y un puñado de opcodes aritméticos.
 - [ ] **El agujero que `emitdiff` no puede ver, y es el único que invalida clases** — la `StackMapTable` que emitimos la **rechaza una JVM real** cuando un slot de local se reusa entre scopes de `catch`: el frame del handler arrastra el tipo del local **muerto** (finding #559). `emitdiff` desensambla con `javap -p -c`, que no imprime stack maps, así que jamás lo iba a encontrar — medir B6 con él **no cubre los atributos**, sólo el código
 - **✅ Éxito (parcial):** el `.class` emitido y los diagnósticos son indistinguibles de los de `javac` para el núcleo del lenguaje.
 
+### Hito B7 · `switch` sobre patrones 🟣 — ✅ hecho (2026-10-03)
+
+> El último hueco **de desarrollo** del compilador: no un defecto anotado sino una construcción del
+> lenguaje que no estaba. La mitad de abajo ya existía desde que se cerró `invokedynamic`
+> (`SwitchBootstraps.typeSwitch` corre en la VM); faltaba el lado del compilador.
+
+**Lo que anda ahora**, verificado corriendo: patrones de tipo (`case Integer i ->`), guardas
+(`when`), deconstrucción de records con anidamiento (`case Hole(Circle(int r)) ->`), la forma
+**expresión** y la forma **sentencia**, y el `switch` **exhaustivo sobre un `sealed` sin `default`**.
+
+**Cinco causas, en cinco lugares distintos**, y ninguna era donde el mensaje de error apuntaba:
+
+| Dónde | Qué pasaba |
+|---|---|
+| [`flow.rs`](../src/javac/flow.rs) | el `switch` **expresión** no marcaba como asignadas las variables de patrón; la forma sentencia sí. Por eso `case Integer i -> i` decía *`i` puede no haber sido inicializada* |
+| [`transtypes.rs`](../src/javac/transtypes.rs) | la conversión de desboxeo **envolvía** el switch (`switch(...).intValue()`), y el desugar sólo hoistea un switch que es el operando **directo** de un `return`/`yield`. Ahora la conversión baja a **cada brazo**, que es lo que hace el `javac` real (§15.28). Era la razón por la que `case Integer i -> i.intValue()` compilaba y `case Integer i -> i` no |
+| [`desugar.rs`](../src/javac/desugar.rs) | `is_lowerable_switch_expr` exigía `default`, que un switch exhaustivo **no escribe** —el real lo rechaza como inalcanzable—. Se baja igual, con el `default` implícito de §14.11.1.1 que lanza `MatchException` |
+| [`desugar.rs`](../src/javac/desugar.rs) | un record **anidado** no se resolvía (`table.class` es un mapa por FQN y el patrón escribe el nombre simple): los componentes se saltaban en silencio y el brazo quedaba nombrando variables que nadie declaró. Ahora se prueba la cadena de clases envolventes |
+| [`check.rs`](../src/javac/check.rs) | una columna **primitiva** no la cubría nada en la exhaustividad: `case Circle(int r)` se declaraba no exhaustivo donde `case Circle(String r)` pasaba |
+
+Más `MatchException` entre los tipos core de `java.lang` en [`enter.rs`](../src/javac/enter.rs), por el
+mismo motivo por el que ya estaba `NullPointerException`: lo nombra código que **sintetiza el desugar**.
+
+**Cómo se verificó, que es lo que hace al hito.** [`java/PatTest.java`](../java/PatTest.java) ejercita
+las cinco formas en 15 valores observados, y los tres caminos **coinciden**: `javac` real + JVM real,
+el nuestro + nuestra VM, y **el nuestro + JVM real** —el más duro, porque es el que valida la
+`StackMapTable`—. Y no cambia la emisión de lo que ya compilaba: 45 archivos de `KajiLibrary` que
+usan `switch`, **66 `.class`, cero diferencias** contra el compilador anterior al cambio.
+
+- [ ] **Lo que queda:** la forma **`case X:`** con patrones. El bajado junta los brazos sólo de la
+  forma flecha, porque con dos puntos hay caída de un grupo al siguiente y la cadena de
+  `if (instanceof)` no la modela. El diagnóstico ahora lo dice así en vez de culpar al generador
+- [ ] **El `bin/` congelado queda atrás de esta funcionalidad**: `PatTest.java` no compila con él. Si
+  la biblioteca llega a usar un `switch` de patrones, hace falta refrescarlo primero
+
 ---
 
 ## FASE C — Las bibliotecas (escritas en Java, compiladas por tu `javac`)

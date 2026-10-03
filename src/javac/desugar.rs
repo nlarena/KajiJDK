@@ -2009,8 +2009,19 @@ impl Desugarer<'_> {
             let arm = self.match_pattern(&pat, name(&tvar), inner);
             stmts.push(arm);
         }
-        if let Some(d) = default_body {
-            stmts.push(d);
+        match default_body {
+            Some(d) => stmts.push(d),
+            // Sin `default` escrito, §14.11.1.1 pone uno **implicito** que lanza `MatchException`: un
+            // switch de patrones es exhaustivo (lo exige `check`), asi que llegar al final significa
+            // que el selector no caso con nada y eso es un error en tiempo de ejecucion, no una
+            // caida silenciosa. Tambien es lo que hace que el temporal de una switch-expresion
+            // hoisteada quede escrito en **todos** los caminos que llegan a leerlo.
+            None => stmts.push(st(StmtKind::Throw(ex(ExprKind::NewObject {
+                ty: Type::Class("MatchException".into()),
+                args: Vec::new(),
+                body: None,
+                outer: None,
+            })))),
         }
         s.kind = StmtKind::Labeled { label, body: Box::new(st(StmtKind::Block(Block(stmts)))) };
     }
@@ -2079,11 +2090,32 @@ impl Desugarer<'_> {
     /// *accessors*. Vacío si el tipo no es un record conocido de esta unidad.
     fn record_components(&self, ty: &Type) -> Vec<String> {
         let (Type::Class(n) | Type::Parameterized { base: n, .. }) = ty else { return Vec::new() };
-        self.table
-            .class(n)
-            .and_then(|id| self.records.get(&id))
-            .cloned()
-            .unwrap_or_default()
+        self.record_id(n).and_then(|id| self.records.get(&id)).cloned().unwrap_or_default()
+    }
+
+    /// El `SymbolId` del record nombrado en un patrón. `table.class` es un mapa por **FQN**, y en un
+    /// patrón el nombre viene como se escribió --`P`, no `U1.P`--, así que un record **anidado** no
+    /// se encontraba: `record_components` devolvía la lista vacía, el bajado se saltaba **todos** los
+    /// componentes con un `continue`, y el cuerpo del brazo quedaba nombrando variables que nadie
+    /// declaró. El síntoma era *"no se encuentra el símbolo: a"*, que no dice nada del problema.
+    ///
+    /// Se prueba el nombre tal cual (top-level o ya calificado) y después calificándolo con la clase
+    /// en curso y cada una de sus envolventes, de la más cercana a la más lejana --que es el orden en
+    /// que un nombre simple se resuelve (§6.5.5)--.
+    fn record_id(&self, written: &str) -> Option<SymbolId> {
+        if let Some(id) = self.table.class(written) {
+            return Some(id);
+        }
+        let mut prefix = self.cur_fqn.as_str();
+        loop {
+            if let Some(id) = self.table.class(&qualify(prefix, written)) {
+                return Some(id);
+            }
+            match prefix.rfind('.') {
+                Some(cut) => prefix = &prefix[..cut],
+                None => return None,
+            }
+        }
     }
 
     /// ¿El selector es un `enum` (que conocemos) y todas las etiquetas son constantes suyas (o
@@ -4945,7 +4977,15 @@ fn is_lowerable_switch_expr(e: &Expr) -> bool {
     // Alcanza con que tenga `default`: así la asignación definitiva ve que la variable siempre se
     // escribe. Las etiquetas pueden ser constantes **o patterns** (con sus guardas): la
     // switch-sentencia resultante la baja después la pasada de patterns, que corre a continuación.
-    cases.iter().any(|c| c.is_default)
+    //
+    // Un **switch de patrones exhaustivo no escribe `default`**, y es la forma idiomatica: sobre un
+    // `sealed`, cubrir cada permitido es cubrir todo y el `javac` real rechaza el `default` como
+    // inalcanzable... pero el valor igual se asigna siempre, porque §14.11.1.1 le da un default
+    // **implicito** que lanza `MatchException`. Ese implicito lo emite `pattern_switch_here`, asi
+    // que aca basta con dejarlo pasar. Exigir `default` dejaba `return switch (s) { case A a -> 1;
+    // case B b -> 2; }` sin hoistear y el codegen cortaba con *"no soporta un switch cuyo selector
+    // no es int"*.
+    cases.iter().any(|c| c.is_default) || is_pattern_switch(cases)
 }
 
 /// `x = switch(…){…}`: una asignación **simple** cuyo valor es una switch-expresión bajable.

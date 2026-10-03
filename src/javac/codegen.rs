@@ -4688,6 +4688,19 @@ impl<'a> Emitter<'a> {
         cases: &[SwitchCase],
     ) -> Option<(Vec<Label>, Label, Label)> {
         if category(&self.ty_of(selector)) != 0 {
+            // Un `switch` de patrones que llega hasta ací es uno que el desugar **no supo** bajar, y
+            // hoy eso significa una sola cosa: la forma de **dos puntos**. `pattern_switch_here`
+            // junta los brazos sólo de `SwitchBody::Arrow`, porque con `case X:` hay caída de un
+            // grupo al siguiente y la cadena de `if (instanceof)` a la que se baja no la modela.
+            // Decirlo así, y no "el selector no es int", le ahorra a quien lo lea buscar en el
+            // generador un problema que está en el desugar.
+            if cases.iter().flat_map(|c| &c.labels).any(|l| matches!(l, CaseLabel::Pattern(_))) {
+                self.unsupported(
+                    pos,
+                    "un `switch` de patrones en la forma `case X:` (sólo la forma `case X ->`)",
+                );
+                return None;
+            }
             self.unsupported(pos, "un `switch` cuyo selector no es `int` (lo baja el desugar)");
             return None;
         }
@@ -10812,6 +10825,46 @@ mod tests {
             jvm.attributes.iter().any(|a| jvm.utf8(a.name_index) == Some("PermittedSubclasses")),
             "`Shape` debe llevar el atributo PermittedSubclasses",
         );
+    }
+
+    // ---- Hito B7: `switch` sobre patrones ----
+
+    /// De punta a punta, las cuatro formas que las causas del hito tenian rotas: el brazo que
+    /// devuelve la variable de patron (pide desboxeo, y la conversion envolvia el switch), el
+    /// exhaustivo **sin** `default` (no se hoisteaba por no tener uno), la deconstruccion con un
+    /// nivel anidado (el record no resolvia su nombre) y la columna primitiva (no la cubria nada).
+    ///
+    /// Compilar alcanza para custodiarlas: cada una **cortaba** la compilacion. Que el bytecode
+    /// *acuerde* con el JDK real lo cubre `java/PatTest.java`, que corre por los tres caminos.
+    #[test]
+    fn a_pattern_switch_compiles_in_every_shape() {
+        let classes = compile_all(
+            "sealed interface Sh permits Ci, Hole {} \
+             record Ci(int r) implements Sh {} \
+             record Hole(Sh inner) implements Sh {} \
+             class U { \
+                 static int unbox(Object o) { \
+                     return switch (o) { case Integer i -> i; default -> -1; }; \
+                 } \
+                 static int exhaustivo(Sh s) { \
+                     return switch (s) { case Ci c -> 1; case Hole h -> 2; }; \
+                 } \
+                 static int deconstruye(Sh s) { \
+                     return switch (s) { case Ci(int r) -> r; \
+                         case Hole(Ci(int r)) -> 1000 + r; case Hole(Sh other) -> 2000; }; \
+                 } \
+                 static int guarda(Object o) { \
+                     return switch (o) { case Integer i when i > 3 -> i; default -> 0; }; \
+                 } \
+             }",
+        );
+        for esperada in ["U", "Ci", "Hole"] {
+            assert!(
+                classes.iter().any(|(n, _)| n.ends_with(esperada)),
+                "falta la clase {esperada}: {:?}",
+                classes.iter().map(|(n, _)| n).collect::<Vec<_>>(),
+            );
+        }
     }
 
     // ---- APT fase 4: el mecanismo del Filer ----

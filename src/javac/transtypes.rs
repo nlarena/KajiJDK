@@ -444,8 +444,49 @@ impl Trans<'_> {
     }
 
     /// Envuelve `e` con la conversión que lleva de su tipo al `target`, si hace falta una (§5.1.7/8).
+    /// Baja una conversión al **valor de cada brazo** de una switch-expresión y retipa el switch.
+    ///
+    /// Devuelve `false` --y no toca nada-- si algún brazo produce su valor de una forma que esta
+    /// pasada no sabe reescribir (un bloque con `yield`, o la forma de dos puntos). En ese caso el
+    /// llamador envuelve el switch como antes: es peor, pero es lo que ya hacía, y no empeora nada.
+    fn coerce_switch_arms(&self, e: &mut Expr, target: &RType) -> bool {
+        let ExprKind::Switch { cases, .. } = &e.kind else { return false };
+        // Primero mirar: o se pueden todos los brazos, o no se toca ninguno.
+        let todos = cases.iter().all(|c| match &c.body {
+            SwitchBody::Arrow(st) => matches!(st.kind, StmtKind::Expr(_) | StmtKind::Throw(_)),
+            SwitchBody::Colon(_) => false,
+        });
+        if !todos {
+            return false;
+        }
+        let ExprKind::Switch { cases, .. } = &mut e.kind else { unreachable!() };
+        for c in cases.iter_mut() {
+            if let SwitchBody::Arrow(st) = &mut c.body {
+                // Un `throw` no produce valor: no hay nada que convertir.
+                if let StmtKind::Expr(v) = &mut st.kind {
+                    self.coerce(v, target);
+                }
+            }
+        }
+        e.ty = Some(target.clone());
+        true
+    }
+
     fn coerce(&self, e: &mut Expr, target: &RType) {
         let Some(src) = e.ty.clone() else { return };
+        // Una **switch-expresión** no se envuelve: la conversión baja a **cada brazo**, que es lo que
+        // hace el `javac` real (§15.28: cada resultado se convierte al tipo del switch).
+        //
+        // Envolverla la rompe, y no en esta pasada sino en la siguiente: el desugar sólo hoistea una
+        // switch-expresión cuando es el operando **directo** de un `return`/`yield` o el valor de una
+        // asignación (`lower_switch_stmt`). Con el desboxeo encima, `return switch (o) { case Integer
+        // i -> i; ... }` pasaba a ser `return switch(...).intValue()` --el switch como receptor de una
+        // llamada--, nadie lo hoisteaba, y el codegen se topába con un switch de patrones que no sabe
+        // emitir: *el generador de bytecode todavía no soporta un `switch` cuyo selector no es `int`*.
+        // Por eso `case Integer i -> i.intValue()` compilaba y `case Integer i -> i` no.
+        if matches!(e.kind, ExprKind::Switch { .. }) && self.coerce_switch_arms(e, target) {
+            return;
+        }
         match (&src, target) {
             // box: primitivo → referencia (wrapper, super del wrapper, o parámetro de tipo borrado).
             (RType::Prim(p), t) if is_ref(t) => self.wrap_box(e, *p),

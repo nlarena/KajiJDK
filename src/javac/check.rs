@@ -1627,6 +1627,18 @@ impl Checker<'_> {
         if matches!(ty, Type::Var) {
             return true;
         }
+        // Una columna **primitiva** la cubre el patrón del **mismo** primitivo: `Circle(int r)` sobre
+        // `record Circle(int r)`. `pattern_type_id` resuelve sólo tipos referencia, así que sin esto
+        // la columna `int` no la cubría nada: `cover_column` tampoco podía partirla (no tiene
+        // `erased_id`) y la tupla entera se declaraba no exhaustiva. Es la razón por la que
+        // `case Circle(int r)` fallaba donde `case Circle(String r)` pasaba, con la misma forma.
+        //
+        // Se exige **igualdad** de primitivo, no ensanchamiento: un patrón primitivo que ensancha
+        // (`long l` sobre una columna `int`, JEP 455) también es total, pero eso es una regla aparte
+        // y conviene no darla por válida sin medirla.
+        if let RType::Prim(p) = c0 {
+            return matches!(ty, Type::Prim(q) if q == p);
+        }
         match self.pattern_type_id(from, ty) {
             Some(id) => types::is_subtype(self.table, c0, &RType::Class(id)),
             None => false,
@@ -2302,6 +2314,63 @@ mod tests {
         record Square() implements Shape {} \
         record Box(Shape s) {} \
         record Pair(Shape a, Shape b) {} ";
+
+    /// Los records de `RECORDS` no tienen **ni un componente primitivo**, y por eso la columna
+    /// primitiva sin cubrir sobrevivio tanto: la forma que la destapa necesita un `int` adentro.
+    const PRIMS: &str = "sealed interface Sh permits Ci, Sq, Hole {} \
+        record Ci(int r) implements Sh {} \
+        record Sq(int side) implements Sh {} \
+        record Hole(Sh inner) implements Sh {} ";
+
+    #[test]
+    fn a_primitive_component_pattern_covers_its_column() {
+        // `type_pattern_covers` resolvia solo tipos **referencia**, asi que la columna `int` no la
+        // cubria nada y la tupla entera se declaraba no exhaustiva: `case Ci(int r)` fallaba donde
+        // `case Ci(String r)` pasaba, con la misma forma. Hito B7.
+        ok(&format!(
+            "{PRIMS} class U {{ int f(Sh s) {{ return switch (s) {{ \
+             case Ci(int r) -> r; case Sq(int side) -> side; case Hole h -> 0; }}; }} }}"
+        ));
+    }
+
+    #[test]
+    fn a_widening_primitive_component_pattern_does_not_cover() {
+        // La cobertura exige **igualdad** de primitivo, no ensanchamiento: `long` sobre una columna
+        // `int` tambien es total segun JEP 455, pero esa regla no esta medida y no se da por valida.
+        some(
+            &format!(
+                "{PRIMS} class U {{ int f(Sh s) {{ return switch (s) {{ \
+                 case Ci(long r) -> 1; case Sq(int side) -> side; case Hole h -> 0; }}; }} }}"
+            ),
+            "no es exhaustivo",
+        );
+    }
+
+    #[test]
+    fn a_nested_record_pattern_over_a_sealed_component_is_exhaustive() {
+        // La forma que el `javac` real acepta y la nuestra rechazaba: `Hole` se parte en los
+        // permitidos de su componente, y el patron total del ultimo brazo cierra el resto.
+        ok(&format!(
+            "{PRIMS} class U {{ int f(Sh s) {{ return switch (s) {{ \
+             case Ci(int r) -> r; case Sq(int side) -> side; \
+             case Hole(Ci(int r)) -> 1000 + r; case Hole(Sh other) -> 2000; }}; }} }}"
+        ));
+    }
+
+    #[test]
+    fn a_pattern_variable_is_assigned_in_an_expression_switch_arm() {
+        // La asignacion definitiva ligaba las variables de patron en el `switch` **sentencia** y no
+        // en el **expresion**, asi que la forma idiomatica se quejaba de su propia variable. Hito B7.
+        ok("class U { int f(Object o) { \
+            return switch (o) { case Integer i -> i; case String s -> s.length(); default -> -1; }; } }");
+    }
+
+    #[test]
+    fn a_pattern_variable_is_assigned_inside_its_guard() {
+        // Y vale tambien en la guarda, no solo en el cuerpo del brazo.
+        ok("class U { int f(Object o) { \
+            return switch (o) { case Integer i when i > 3 -> i; default -> 0; }; } }");
+    }
 
     #[test]
     fn a_record_pattern_missing_a_component_subtype_is_not_exhaustive() {

@@ -42,6 +42,9 @@ const JAVA_LANG: &[&str] = &[
     "NoSuchFieldError",
     // Lo lanza el `switch` sobre patterns cuando el selector es `null` y no hay `case null` (§14.11.1).
     "NullPointerException",
+    // Lo lanza el `default` **implícito** de un `switch` de patrones exhaustivo que no escribió uno
+    // (§14.11.1.1): si el selector no casó con ningún patrón, el caso no es caer en silencio.
+    "MatchException",
     // Lo lanza el `valueOf(String)` sintético de todo `enum` cuando el nombre no matchea (§8.9.3).
     "IllegalArgumentException",
 ];
