@@ -30,10 +30,15 @@ const ACC_FINAL: u16 = 0x0010;
 
 /// One element of the annotation: the accessor's `name`, its return `descriptor`, and the resolved
 /// `value` to bake in (the use-site value, or the `@interface`'s default).
+///
+/// `value: None` means **neither**: the use site did not write it and the `@interface` declares no
+/// default. That accessor is still emitted, throwing `IncompleteAnnotationException` the way the JDK
+/// does, because the alternative --- leaving it out --- produces a class that claims to implement the
+/// `@interface` and does not, and the call then lands on the interface's bodyless abstract method.
 pub struct Element {
     pub name: String,
     pub descriptor: String,
-    pub value: ResolvedValue,
+    pub value: Option<ResolvedValue>,
 }
 
 /// Generate the `.class` bytes for the class an instance of `annotation_interface` is. `synthetic`
@@ -73,15 +78,40 @@ pub fn generate_annotation_class(
     for e in elements {
         let (_params, ret) = split_return(&e.descriptor);
         let mut code = Vec::new();
-        let peak = emit_typed(&mut code, &mut cf.pool, &ret, &e.value);
-        code.push(return_opcode(&ret));
+        let peak = match &e.value {
+            Some(v) => {
+                let peak = emit_typed(&mut code, &mut cf.pool, &ret, v);
+                code.push(return_opcode(&ret));
+                peak.max(1)
+            }
+            // `new IncompleteAnnotationException(<@interface>.class, "<name>"); athrow`. No branch,
+            // so no stack map frame is needed; four slots is the peak (`new`, `dup`, two arguments).
+            None => {
+                let exc = "java/lang/annotation/IncompleteAnnotationException";
+                let class_index = cf.pool.class(exc);
+                let ctor = cf.pool.methodref(
+                    exc,
+                    "<init>",
+                    "(Ljava/lang/Class;Ljava/lang/String;)V",
+                );
+                let iface_class = cf.pool.class(annotation_interface);
+                let name_string = cf.pool.string(&e.name);
+                push_u16(&mut code, 0xbb, class_index); // new
+                code.push(0x59); // dup
+                push_u16(&mut code, 0x13, iface_class); // ldc_w <@interface>.class
+                push_u16(&mut code, 0x13, name_string); // ldc_w "<name>"
+                push_u16(&mut code, 0xb7, ctor); // invokespecial <init>
+                code.push(0xbf); // athrow
+                4
+            }
+        };
         let name_index = cf.pool.utf8(&e.name);
         let desc_index = cf.pool.utf8(&e.descriptor);
         cf.methods.push(MethodInfo {
             access_flags: ACC_PUBLIC,
             name_index,
             descriptor_index: desc_index,
-            max_stack: peak.max(1),
+            max_stack: peak,
             max_locals: 1, // just `this`; elements take no parameters
             code,
             stack_map: None,
@@ -355,12 +385,12 @@ mod tests {
             Element {
                 name: "since".to_string(),
                 descriptor: "()Ljava/lang/String;".to_string(),
-                value: ResolvedValue::Str("9".to_string()),
+                value: Some(ResolvedValue::Str("9".to_string())),
             },
             Element {
                 name: "forRemoval".to_string(),
                 descriptor: "()Z".to_string(),
-                value: ResolvedValue::Bool(true),
+                value: Some(ResolvedValue::Bool(true)),
             },
         ];
         let bytes = generate_annotation_class("Host$$Anno$0", "java/lang/Deprecated", &elements);
@@ -382,23 +412,52 @@ mod tests {
             Element {
                 name: "value".to_string(),
                 descriptor: "()Ljava/lang/annotation/RetentionPolicy;".to_string(),
-                value: ResolvedValue::Enum {
+                value: Some(ResolvedValue::Enum {
                     type_descriptor: "Ljava/lang/annotation/RetentionPolicy;".to_string(),
                     const_name: "RUNTIME".to_string(),
-                },
+                }),
             },
             Element {
                 name: "names".to_string(),
                 descriptor: "()[Ljava/lang/String;".to_string(),
-                value: ResolvedValue::Array(vec![
+                value: Some(ResolvedValue::Array(vec![
                     ResolvedValue::Str("a".to_string()),
                     ResolvedValue::Str("b".to_string()),
-                ]),
+                ])),
             },
         ];
         let bytes = generate_annotation_class("Host$$Anno$1", "Marker", &elements);
         let parsed = ParsedClass::from_bytes(&bytes).expect("spun annotation class must parse");
         assert!(parsed.methods.iter().any(|mi| parsed.utf8(mi.name_index) == Some("value")));
         assert!(parsed.methods.iter().any(|mi| parsed.utf8(mi.name_index) == Some("names")));
+    }
+
+    /// An element with **no value and no default** still gets its accessor, and that accessor throws
+    /// `IncompleteAnnotationException`. What this pins is that the method **exists**: leaving it out
+    /// --- which is what happened until 2026-10-03 --- yields a class that claims to implement the
+    /// `@interface` and does not, so the call lands on the interface's bodyless abstract method and
+    /// the interpreter panics reading `current_code()[pc]`. Found closing #505, on a
+    /// `@DataAmount` whose `value()` default our javac does not emit (#560).
+    #[test]
+    fn a_valueless_element_still_gets_an_accessor_and_it_throws() {
+        let elements = vec![Element {
+            name: "value".to_string(),
+            descriptor: "()Ljava/lang/String;".to_string(),
+            value: None,
+        }];
+        let bytes = generate_annotation_class("Host$$Anno$2", "Marker", &elements);
+        let parsed = ParsedClass::from_bytes(&bytes).expect("spun annotation class must parse");
+        let code = parsed
+            .method_code_by_name("value", "()Ljava/lang/String;")
+            .expect("the accessor is emitted even with no value, and it has a body");
+        assert_eq!(code.code.first(), Some(&0xbb), "it starts with `new`");
+        assert_eq!(code.code.last(), Some(&0xbf), "and ends with `athrow`");
+        assert!(
+            (0..parsed.constant_pool.len() as u16)
+                .any(|i| parsed.class_name(i).is_some_and(
+                    |n| n == "java/lang/annotation/IncompleteAnnotationException"
+                )),
+            "and the exception it throws is the one the JDK uses"
+        );
     }
 }

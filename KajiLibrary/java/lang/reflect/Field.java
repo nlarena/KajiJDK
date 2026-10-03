@@ -347,23 +347,33 @@ public final class Field extends AccessibleObject implements Member {
 
     // ---- annotations ----
     //
-    // A KajiLibrary subset: field-level RUNTIME annotation reflection is not wired (Class-level is;
-    // see Class.getAnnotation). A field carrying no runtime annotation -- the common case -- gets the
-    // right empty answer; one that does would need a field-attribute native like the class one.
+    // Wired on 2026-10-03 (finding #505). This used to answer "none" to everything, and the comment
+    // that stood here said a field-attribute native would be needed -- this is that native. What it
+    // cost while it was missing: a `@Label("Ruta") String ruta` on a JFR event reflected with its
+    // label `null`, the single remaining divergence of `jdk.jfr.EventType` against the JDK.
+
+    /**
+     * The annotations written on this field, retained at run time.
+     *
+     * <p>It comes out of a native for the same two reasons as {@link Method}'s: the
+     * {@code field_info}'s {@code RuntimeVisibleAnnotations} attribute has to be read, and the
+     * instance handed back is of a class the VM builds on the fly -- an annotation is an interface,
+     * and no class implements it.
+     */
+    private native java.lang.annotation.Annotation[] declaredAnnotations0();
 
     public java.lang.annotation.Annotation[] getDeclaredAnnotations() {
-        return new java.lang.annotation.Annotation[0];
+        return declaredAnnotations0();
     }
 
+    // Redeclared because the JDK declares them on `Field` too; the implementation is
+    // `AccessibleObject`'s, which answers off `getDeclaredAnnotations()`.
     public <T extends java.lang.annotation.Annotation> T getAnnotation(Class<T> annotationClass) {
-        if (annotationClass == null) {
-            throw new NullPointerException();
-        }
-        return null;
+        return super.getAnnotation(annotationClass);
     }
 
     public <T extends java.lang.annotation.Annotation> T[] getAnnotationsByType(Class<T> annotationClass) {
-        return (T[]) Array.newInstance(annotationClass, 0);
+        return super.getAnnotationsByType(annotationClass);
     }
 
     /** This field's type as an {@link AnnotatedType} (carrying no type annotations here). */

@@ -2695,6 +2695,24 @@ pub fn dispatch(
                 &objects,
             )))
         }
+        // Las anotaciones de un **campo**. Gemelo del de arriba, y lo que cerro el #505: `Class` y
+        // `Method` leian sus anotaciones y `Field` no, asi que un `@Label("Ruta") String ruta` se
+        // reflejaba sin etiqueta. Un campo se identifica por su nombre nada mas --no hay sobrecarga
+        // de campos-- asi que no hace falta el descriptor que el de `Method` tiene que armar.
+        ("java/lang/reflect/Field", "declaredAnnotations0", "()[Ljava/lang/annotation/Annotation;") => {
+            let this = reference(&args[0]);
+            let clazz_at = field_offset(metaspace, "java/lang/reflect/Field", "clazz");
+            let owner = mirror_name(metaspace, heap.read_u32(this + clazz_at) as usize);
+            let name_at = field_offset(metaspace, "java/lang/reflect/Field", "name");
+            let name = strings::read(heap, heap.read_u32(this + name_at) as usize);
+            let objects = field_annotation_objects(metaspace, heap, &owner, &name);
+            Some(Value::Reference(reference_array(
+                metaspace,
+                heap,
+                "[Ljava/lang/annotation/Annotation;",
+                &objects,
+            )))
+        }
         // Los `access_flags` **crudos** del class file, sin las correcciones que `getModifiers`
         // aplica a una clase anidada -- que ahi devuelve los del `InnerClasses` y no los del
         // encabezado. La diferencia importa justo para lo que este metodo se usa: decidir accesos.
@@ -4235,6 +4253,39 @@ fn method_annotation_objects(
     spin_annotation_objects(metaspace, heap, &resolved, &format!("{owner}$$MAnno${tag}"))
 }
 
+/// Las anotaciones de un **campo**, como objetos en el heap.
+///
+/// Igual que [`method_annotation_objects`] pero buscando el atributo en el `field_info`. Un nombre de
+/// campo es unico en su clase, asi que basta para encontrarlo; la clase sintetica se nombra con la
+/// clase y el campo para que dos campos anotados con la misma anotacion no compartan una que lleve
+/// valores distintos.
+fn field_annotation_objects(
+    metaspace: &mut MetaspaceService,
+    heap: &mut HeapService,
+    owner: &str,
+    name: &str,
+) -> Vec<usize> {
+    let resolved: Vec<ResolvedAnnotation> = match metaspace.get_or_load(owner) {
+        Some(cf) => cf
+            .fields
+            .iter()
+            .find(|f| cf.utf8(f.name_index) == Some(name))
+            .and_then(|f| {
+                f.attributes
+                    .iter()
+                    .find(|a| cf.utf8(a.name_index) == Some("RuntimeVisibleAnnotations"))
+                    .map(|a| annotations::resolve(cf, &a.info))
+            })
+            .unwrap_or_default(),
+        None => Vec::new(),
+    };
+    let tag: String = name
+        .chars()
+        .map(|c| if c.is_ascii_alphanumeric() { c } else { '_' })
+        .collect();
+    spin_annotation_objects(metaspace, heap, &resolved, &format!("{owner}$$FAnno${tag}"))
+}
+
 fn annotation_objects(
     metaspace: &mut MetaspaceService,
     heap: &mut HeapService,
@@ -4307,17 +4358,19 @@ fn annotation_elements(
         if m.is_static() || name.starts_with('<') || !desc.starts_with("()") {
             continue;
         }
+        // Sin valor en el uso y sin `AnnotationDefault`, el elemento **no se saltea**: `None` le dice
+        // a la fabrica que emita un accesor que tira `IncompleteAnnotationException`. Saltearlo
+        // dejaba la clase sintetica sin ese metodo, y entonces la llamada se iba al **abstracto** de
+        // la `@interface` --sin cuerpo-- y el interprete panicaba leyendo `current_code()[pc]`. Es la
+        // forma de la casa: el que falta es un subconjunto legal mientras lo diga; el que se calla
+        // revienta despues y lejos.
         let value = if let Some((_, v)) = ann.elements.iter().find(|(n, _)| n.as_str() == name) {
-            v.clone()
-        } else if let Some(def) =
-            m.attributes.iter().find(|a| cf.utf8(a.name_index) == Some("AnnotationDefault"))
-        {
-            match annotations::resolve_default(cf, &def.info) {
-                Some(v) => v,
-                None => continue,
-            }
+            Some(v.clone())
         } else {
-            continue;
+            m.attributes
+                .iter()
+                .find(|a| cf.utf8(a.name_index) == Some("AnnotationDefault"))
+                .and_then(|def| annotations::resolve_default(cf, &def.info))
         };
         out.push(Element { name: name.to_string(), descriptor: desc.to_string(), value });
     }

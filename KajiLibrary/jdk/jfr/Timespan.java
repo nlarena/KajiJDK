@@ -45,5 +45,10 @@ public @interface Timespan {
      *
      * @return the value
      */
-    String value() default NANOSECONDS;
+    // El literal y no la constante `NANOSECONDS`, que es lo que dice lo mismo: nuestro javac **no emite el
+    // `AnnotationDefault`** cuando el default es una referencia a una constante (finding #560), y sin
+    // ese atributo `@Timespan` sin valor explicito queda sin valor del todo -- `EventType` lo rechaza con
+    // *the value of the member value ... is missing*. Las dos formas son el mismo constante de
+    // compilacion; cuando el #560 se arregle, vuelve a ser `NANOSECONDS`.
+    String value() default "NANOSECONDS";
 }

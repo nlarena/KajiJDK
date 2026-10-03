@@ -367,24 +367,10 @@ public final class Method extends Executable {
         return declaredAnnotations0();
     }
 
-    /**
-     * The annotation of that type, or null.
-     *
-     * <p>It compares by {@code isInstance} and not by name: the synthetic class the VM builds
-     * implements the annotation's interface, so the type check is the right one and does not need
-     * to look at {@code annotationType()}.
-     */
+    // Redeclarado porque el JDK lo declara en `Method`; la busqueda vive en `AccessibleObject` desde
+    // el #505, para que no haya dos que contesten lo mismo.
     public <T extends Annotation> T getAnnotation(Class<T> annotationClass) {
-        if (annotationClass == null) {
-            throw new NullPointerException();
-        }
-        Annotation[] all = declaredAnnotations0();
-        for (int i = 0; i < all.length; i++) {
-            if (annotationClass.isInstance(all[i])) {
-                return (T) all[i];
-            }
-        }
-        return null;
+        return super.getAnnotation(annotationClass);
     }
 
     /** One (empty) annotation row per parameter. */

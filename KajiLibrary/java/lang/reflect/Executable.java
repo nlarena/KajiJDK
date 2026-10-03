@@ -266,14 +266,15 @@ public abstract class Executable extends AccessibleObject implements Member, Gen
         return new Annotation[0];
     }
 
+    // Redeclarados porque el JDK los declara aca tambien; la implementacion es la de
+    // `AccessibleObject`, que contesta sobre `getDeclaredAnnotations()`. Antes del #505 estos dos
+    // devolvian "nada" por su cuenta y tapaban la del padre, por lo que `Method.getAnnotation` tenia
+    // que repetir la busqueda para funcionar.
     public <T extends Annotation> T getAnnotation(Class<T> annotationClass) {
-        if (annotationClass == null) {
-            throw new NullPointerException();
-        }
-        return null;
+        return super.getAnnotation(annotationClass);
     }
 
     public <T extends Annotation> T[] getAnnotationsByType(Class<T> annotationClass) {
-        return (T[]) Array.newInstance(annotationClass, 0);
+        return super.getAnnotationsByType(annotationClass);
     }
 }
