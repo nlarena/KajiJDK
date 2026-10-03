@@ -526,7 +526,10 @@ fn attrib_stmt(env: &mut Env, stmt: &mut Stmt) {
             // Reusar el nombre en bloques **hermanos** sigue valiendo: el scope del primero ya se
             // saco de la pila cuando se declara el segundo. Y un campo homonimo tampoco cuenta:
             // taparlo con un local si es legal, y `lookup_local` solo mira locales y parametros.
-            if env.lookup_local(name).is_some() {
+            // **`_` se exceptua** (JEP 456): una variable sin nombre no se puede referenciar, asi
+            // que declarar varias en el mismo alcance no es ambiguo y el JLS lo permite
+            // explicitamente. Cada una pide su propio slot, que es lo unico que necesitan.
+            if name != "_" && env.lookup_local(name).is_some() {
                 env.error(pos, format!("la variable `{name}` ya está definida"));
             }
             let slot = env.define(name, target.clone());

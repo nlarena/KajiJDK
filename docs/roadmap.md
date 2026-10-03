@@ -461,6 +461,46 @@ veces** —alta, porque la respuesta sale mal en silencio—, y **#562**, que el
 de patrón es *el `if`* y no *donde la condición vale* (§6.3.1), lo que rechaza el idiom de guarda
 `if (!(e instanceof T v)) return;` que el real acepta.
 
+### Hito B9 · Variables sin nombre (JEP 456) 🟣 — ✅ hecho (2026-10-03)
+
+> Las **siete** posiciones donde `_` declara algo: local (`int _ = f()`, `var _ = f()`), recurso de
+> try-with-resources, `for` extendido, parámetro de `catch`, parámetro de lambda, patrón de tipo
+> (`case Integer _`) y componente de una deconstrucción (`R(int _, int b)`, y `R(_, int b)`).
+
+**Casi todo fue parser, y la razón es una sola:** `_` es **keyword** desde Java 9. Entonces ningún
+programa puede nombrar una variable `_`, y un `_` en posición de expresión **no parsea como nombre**.
+Guardar literalmente el nombre `"_"` ya cumple las dos reglas del JEP —no se puede referenciar, y
+varias en el mismo alcance no son ambiguas— sin un flag nuevo en el AST ni cambios aguas abajo. Las
+siete posiciones salieron de un ayudante, `decl_name`, usado donde antes iba `expect_ident`.
+
+**Pero dos cosas no salían de ahí, y las dos las encontró la prueba, no la lectura:**
+
+- **Dos `_` en el mismo alcance chocaban.** La atribución chequea redeclaración por nombre (finding
+  #473, puesto justamente porque redeclarar no da síntoma al compilar), y `_` hay que exceptuarlo: el
+  JLS lo permite explícitamente. La excepción es **sólo** para `_`, y el test lo custodia con su
+  control —un nombre repetido de verdad sigue siendo un error—.
+- **Un `_` solo —que es `var _`— no se puede declarar.** El bajado le daba un `var _ = null`: un slot
+  de **referencia** donde después se guarda el componente, y si el componente es un `int` la JVM real
+  rechaza la clase con *VerifyError: Bad type on operand stack*. **Nuestra VM, que no verifica, lo
+  dejaba pasar y contestaba bien de casualidad** —el caso más claro hasta ahora de por qué las
+  pruebas de estos hitos se corren también contra HotSpot y no sólo contra nosotros—. Arreglado
+  salteándolo: una variable sin nombre no se liga, ni se declara ni se asigna.
+
+**El diagnóstico de leerla tiene su propio mensaje**: *una variable sin nombre (`_`) no se puede leer
+(JEP 456): dale un nombre*, en vez del genérico "se esperaba una expresión" que manda a buscar un
+error de sintaxis donde hay una regla del lenguaje.
+
+**Verificación.** [`java/UndTest.java`](../java/UndTest.java), 10 valores, los tres caminos
+coinciden. Suite: 804 pasan, 0 fallan. Emisión: 90 archivos de `KajiLibrary` al azar, **262 `.class`,
+cero diferencias** (release contra release). Ni el `javac` real ni nosotros ponemos `_` en la
+`LocalVariableTable`.
+
+- [ ] **Lo que queda:** un componente `var` **con nombre** en una deconstrucción bajo `instanceof`
+  (`o instanceof R(var a, int b)`) no se baja: el hoisteo necesita escribir el tipo de cada variable
+  afuera y de un `var` no lo sabe —el tipo del componente lo resuelve la atribución y no llega al
+  desugar—. Corta en el emisor con su diagnóstico. En un `switch` **sí** funciona, porque ahí la
+  variable se declara con su inicializador y la re-atribución la infiere
+
 ---
 
 ## FASE C — Las bibliotecas (escritas en Java, compiladas por tu `javac`)

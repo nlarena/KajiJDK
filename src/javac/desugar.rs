@@ -1995,6 +1995,9 @@ impl Desugarer<'_> {
         if !leftmost_deconstruct(cond) {
             return Vec::new();
         }
+        if leftmost_has_named_var(cond) {
+            return Vec::new(); // corta el emisor; ver `has_named_var_component`
+        }
         let flag = self.fresh("m");
         let ovar = self.fresh("o");
         let StmtKind::If { cond, then, els } =
@@ -2144,6 +2147,14 @@ impl Desugarer<'_> {
         declare: bool,
     ) -> Stmt {
         let bind_var = |ty: &Type, var: &str, valor: Expr| -> Stmt {
+            // Una variable **sin nombre** (JEP 456) no se liga: nadie la puede leer, así que
+            // declararla o asignarla es código muerto. Y con `_` solo --que es `var _`-- declararla
+            // es **incorrecto**: `var _ = null` da un slot de referencia donde después se guarda el
+            // componente, y si es un `int` la JVM real rechaza la clase con *Bad type on operand
+            // stack*. Nuestra VM, que no verifica, lo dejaba pasar y contestaba bien de casualidad.
+            if var == "_" {
+                return st(StmtKind::Empty);
+            }
             if declare {
                 local(ty.clone(), var.to_string(), valor)
             } else {
@@ -5182,6 +5193,18 @@ fn leftmost_deconstruct(cond: &Expr) -> bool {
 /// Saca la deconstrucción de la posición que [`leftmost_deconstruct`] encontró, la reemplaza por el
 /// nombre de la bandera, y devuelve sus tres partes: el operando, el tipo del record y los patrones
 /// de sus componentes.
+/// ¿La deconstrucción que [`leftmost_deconstruct`] encontró tiene un componente `var` con nombre?
+fn leftmost_has_named_var(cond: &Expr) -> bool {
+    match &cond.kind {
+        ExprKind::InstanceOf { deconstruct: Some(comps), .. } => {
+            comps.iter().any(has_named_var_component)
+        }
+        ExprKind::Binary { op: BinOp::And | BinOp::Or, lhs, .. } => leftmost_has_named_var(lhs),
+        ExprKind::Unary { op: UnOp::Not, expr, .. } => leftmost_has_named_var(expr),
+        _ => false,
+    }
+}
+
 fn take_leftmost_deconstruct(cond: &mut Expr, flag: &str) -> Option<(Expr, Type, Vec<Pattern>)> {
     match &mut cond.kind {
         ExprKind::InstanceOf { deconstruct: Some(_), .. } => {
@@ -5204,8 +5227,21 @@ fn take_leftmost_deconstruct(cond: &mut Expr, flag: &str) -> Option<(Expr, Type,
 /// record no está acá: lo declara el propio match.
 fn pattern_vars(p: &Pattern) -> Vec<(Type, String)> {
     match p {
+        // Una variable **sin nombre** no se declara: ver la nota de `bind_var`.
+        Pattern::Type { name, .. } if name == "_" => Vec::new(),
         Pattern::Type { ty, name, .. } => vec![(ty.clone(), name.clone())],
         Pattern::Record { components, .. } => components.iter().flat_map(pattern_vars).collect(),
+    }
+}
+
+/// ¿Algún componente **con nombre** se declaró con `var`? El hoisteo del `instanceof` necesita
+/// escribir el tipo de cada variable afuera, y de un `var` no lo sabe: el tipo del componente lo
+/// resuelve la atribución y no llega hasta acá. Entonces no se baja, y corta el emisor con su
+/// diagnóstico en vez de emitir un slot del tipo equivocado. (`_` no cuenta: no se declara.)
+fn has_named_var_component(p: &Pattern) -> bool {
+    match p {
+        Pattern::Type { ty, name, .. } => name != "_" && matches!(ty, Type::Var),
+        Pattern::Record { components, .. } => components.iter().any(has_named_var_component),
     }
 }
 

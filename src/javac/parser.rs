@@ -210,6 +210,25 @@ impl Parser {
         }
     }
 
+    /// El nombre de algo que se **declara**, que puede ser `_` (JEP 456).
+    ///
+    /// Se guarda literalmente `"_"`, y eso alcanza: `_` es keyword desde Java 9, así que ningún
+    /// programa puede nombrar una variable así ni **leerla** --un `_` en posición de expresión no
+    /// parsea como nombre--, que son justo las dos reglas del JEP. Dos `_` en el mismo alcance no
+    /// chocan porque cada declaración pide su propio slot y nadie los busca por nombre.
+    fn decl_name(&mut self) -> Result<String> {
+        if self.at(TokenKind::Underscore) {
+            self.bump();
+            return Ok("_".to_string());
+        }
+        self.expect_ident()
+    }
+
+    /// ¿El token actual puede ser el nombre de algo que se declara? (Un identificador o `_`.)
+    fn at_decl_name(&self) -> bool {
+        self.at(TokenKind::Identifier) || self.at(TokenKind::Underscore)
+    }
+
     fn expect_ident(&mut self) -> Result<String> {
         if self.at(TokenKind::Identifier) {
             Ok(self.bump().text)
@@ -1356,7 +1375,7 @@ impl Parser {
             self.reset(save);
             return Ok(None);
         };
-        if !self.at(TokenKind::Identifier) {
+        if !self.at_decl_name() {
             self.pending_type_annos.truncate(annos_mark);
             self.reset(save);
             return Ok(None);
@@ -1367,7 +1386,7 @@ impl Parser {
         let mut decls = Vec::new();
         loop {
             let pos = self.pos();
-            let name = self.expect_ident()?;
+            let name = self.decl_name()?;
             // Declarador **al estilo C**: `int y[]` es lo mismo que `int[] y` (§10.2), y los `[]`
             // van por variable, no por declaración: en `int a[], b;` solo `a` es array.
             let vty = self.extra_array_dims(ty.clone())?;
@@ -1507,8 +1526,8 @@ impl Parser {
         let save = self.mark();
         let is_final = self.eat(TokenKind::Final);
         if let Ok(ty) = self.parse_type() {
-            if self.at(TokenKind::Identifier) && self.kind_at(1) == TokenKind::Colon {
-                let name = self.expect_ident()?;
+            if self.at_decl_name() && self.kind_at(1) == TokenKind::Colon {
+                let name = self.decl_name()?;
                 self.expect(TokenKind::Colon)?;
                 let iterable = self.expr()?;
                 self.expect(TokenKind::RParen)?;
@@ -1580,7 +1599,7 @@ impl Parser {
             while self.eat(TokenKind::Bar) {
                 types.push(self.parse_type()?);
             }
-            let name = self.expect_ident()?;
+            let name = self.decl_name()?;
             self.expect(TokenKind::RParen)?;
             let body = self.block()?;
             // La variable de un *multi-catch* es **implícitamente** `final` (JLS §14.20).
@@ -1716,6 +1735,13 @@ impl Parser {
     fn try_pattern(&mut self) -> Result<Option<Pattern>> {
         use TokenKind as T;
         let save = self.mark();
+        // Un patrón **sin nombre**: `_` solo, que el JEP 456 define como equivalente a `var _` y
+        // casa con cualquier valor del tipo del componente. Va antes de `parse_type` porque `_` no
+        // es un tipo.
+        if self.at(T::Underscore) {
+            self.bump();
+            return Ok(Some(Pattern::Type { ty: Type::Var, name: "_".to_string(), slot: None }));
+        }
         let Ok(ty) = self.parse_type() else {
             self.reset(save);
             return Ok(None);
@@ -1741,7 +1767,12 @@ impl Parser {
             }
             return Ok(Some(Pattern::Record { ty, components }));
         }
-        // `Type name` — el `when` de una guarda no es el nombre del patrón.
+        // `Type name` — el `when` de una guarda no es el nombre del patrón. El nombre puede ser
+        // `_` (JEP 456): `case Integer _`, `R(int _, int b)`.
+        if self.at(T::Underscore) {
+            self.bump();
+            return Ok(Some(Pattern::Type { ty, name: "_".to_string(), slot: None }));
+        }
         if self.at(T::Identifier) && self.peek().text != "when" {
             let name = self.bump().text;
             return Ok(Some(Pattern::Type { ty, name, slot: None }));
@@ -1950,12 +1981,12 @@ impl Parser {
     fn lambda_param(&mut self) -> Result<Param> {
         use TokenKind as T;
         let is_final = self.eat(T::Final);
-        if self.at(T::Identifier) && matches!(self.kind_at(1), T::Comma | T::RParen) {
-            let name = self.bump().text;
+        if self.at_decl_name() && matches!(self.kind_at(1), T::Comma | T::RParen) {
+            let name = self.decl_name()?;
             return Ok(Param { annotations: Vec::new(), ty: Type::Var, name, varargs: false, is_final, type_annos: Vec::new() });
         }
         let ty = self.parse_type()?;
-        let name = self.expect_ident()?;
+        let name = self.decl_name()?;
         Ok(Param { annotations: Vec::new(), ty, name, varargs: false, is_final, type_annos: Vec::new() })
     }
 
@@ -2451,6 +2482,14 @@ impl Parser {
                 self.expect(T::Dot)?;
                 self.expect(T::Class)?;
                 ExprKind::ClassLit(ty)
+            }
+            // `_` en posición de expresión es **leer** una variable sin nombre, que es justo lo que el
+            // JEP 456 prohibe. El mensaje genérico ("se esperaba una expresión") deja al lector
+            // buscando un error de sintaxis donde hay una regla del lenguaje.
+            TokenKind::Underscore => {
+                return Err(self.error(
+                    "una variable sin nombre (`_`) no se puede leer (JEP 456): dale un nombre",
+                ))
             }
             other => return Err(self.error(format!("se esperaba una expresión, se encontró {other:?}"))),
         };

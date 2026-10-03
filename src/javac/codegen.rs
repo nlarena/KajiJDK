@@ -11034,6 +11034,75 @@ mod tests {
         );
     }
 
+    // ---- JEP 456: variables sin nombre ----
+
+    /// Las siete posiciones donde `_` declara algo, en una sola compilacion. Lo que NO se ve
+    /// compilando --que dos `_` del mismo alcance no se pisen, y que un `_` solo no declare un slot
+    /// de referencia donde va un `int`-- lo custodia `java/UndTest.java` por los tres caminos.
+    #[test]
+    fn an_unnamed_variable_is_accepted_wherever_it_declares() {
+        let classes = compile_all(
+            "import java.util.List; \
+             import java.util.function.BiFunction; \
+             record Par(int a, int b) {} \
+             class U { \
+                 static int locales() { int _ = 1; var _ = 2; return 0; } \
+                 static int cada(List<String> l) { int n = 0; for (String _ : l) { n = n + 1; } return n; } \
+                 static int atrapa() { \
+                     try { throw new IllegalStateException(); } catch (IllegalStateException _) { return 1; } \
+                 } \
+                 static int lambda() { \
+                     BiFunction<Integer, Integer, Integer> g = (a, _) -> a; return g.apply(1, 2); \
+                 } \
+                 static int tipo(Object o) { return switch (o) { case Integer _ -> 1; default -> 0; }; } \
+                 static int comp_switch(Object o) { \
+                     return switch (o) { case Par(int _, int b) -> b; default -> -1; }; \
+                 } \
+                 static int comp_iof(Object o) { \
+                     if (o instanceof Par(_, int b)) return b; return -1; \
+                 } \
+             }",
+        );
+        assert!(
+            classes.iter().any(|(n, _)| n.ends_with("U")),
+            "la clase U debe emitirse: {:?}",
+            classes.iter().map(|(n, _)| n).collect::<Vec<_>>(),
+        );
+    }
+
+    /// Dos `_` en el **mismo** alcance no son una redeclaracion (JEP 456 lo permite explicitamente,
+    /// porque no se pueden referenciar). La atribucion chequea redeclaracion por nombre, asi que
+    /// hubo que exceptuar `_` -- y el control de que la excepcion no sea un agujero esta abajo.
+    #[test]
+    fn two_unnamed_variables_in_one_scope_are_not_a_redeclaration() {
+        let e = crate::javac::check("class U { int f() { int _ = 1; int _ = 2; return 0; } }")
+            .expect("debe parsear");
+        assert!(e.is_empty(), "dos `_` no deben chocar: {:?}", e);
+
+        // El control: con un nombre de verdad **si** es una redeclaracion, asi que la excepcion
+        // alcanza solo a `_` y no desactivo el chequeo entero (finding #473).
+        let e = crate::javac::check("class U { int f() { int n = 1; int n = 2; return 0; } }")
+            .expect("debe parsear");
+        assert!(
+            e.iter().any(|x| x.message.contains("ya est\u{e1} definida")),
+            "un nombre repetido sigue siendo un error: {:?}",
+            e.iter().map(|x| &x.message).collect::<Vec<_>>(),
+        );
+    }
+
+    /// Y **leer** una variable sin nombre se rechaza, con el diagnostico que nombra la regla en vez
+    /// de hablar de sintaxis.
+    #[test]
+    fn reading_an_unnamed_variable_names_the_rule() {
+        let e = crate::javac::compile("class U { int f() { int _ = 5; return _; } }")
+            .expect_err("leer `_` no se puede");
+        assert!(
+            e.message.contains("no se puede leer") && e.message.contains("456"),
+            "el mensaje debe nombrar la regla: {}",
+            e.message,
+        );
+    }
+
     // ---- APT fase 4: el mecanismo del Filer ----
 
     /// De punta a punta: un programa corre en la VM, usa el `Filer` para fabricar `Foo`, escribe su
