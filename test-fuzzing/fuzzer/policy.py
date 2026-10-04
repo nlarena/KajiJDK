@@ -106,7 +106,13 @@ NONDETERMINISTIC_MEMBERS = [
 ]
 
 # `hashCode` and `toString` are excluded above as MEMBERS, which is too blunt on its own: for a
-# value class like BigInteger both are specified and comparable. These classes get them back.
+# value class like BigInteger both are specified and comparable. These classes get them back --
+# but ONLY those, listed here. The first version exempted a value class from the whole
+# nondeterministic list, which handed `now` back to `java.time`: the baseline ended up with 24
+# divergences from `LocalTime.now`, `Instant.now` and friends, 2.3% of the total, every one of
+# them the clock rather than the library. A hand-maintained list has interactions like this, and
+# that is the argument for deciding nondeterminism by running the reference twice instead.
+EXEMPT_FOR_VALUE_CLASSES = ["hashCode", "toString", "clone", "equals", "compareTo"]
 VALUE_CLASSES = [
     "java.lang.String", "java.lang.Integer", "java.lang.Long", "java.lang.Short",
     "java.lang.Byte", "java.lang.Character", "java.lang.Boolean", "java.lang.Double",
@@ -167,8 +173,10 @@ class Policy(object):
             return "excluded-by-request"
         if not self.allow_unsafe and member in UNSAFE_MEMBERS:
             return "unsafe"
-        if member in NONDETERMINISTIC_MEMBERS and class_name not in self.value_classes:
-            return "nondeterministic"
+        if member in NONDETERMINISTIC_MEMBERS:
+            if not (class_name in self.value_classes
+                    and member in EXEMPT_FOR_VALUE_CLASSES):
+                return "nondeterministic"
         if not self.allow_hostile and member in HOSTILE_MEMBERS:
             return "hostile"
         return None

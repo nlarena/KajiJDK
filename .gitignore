@@ -76,6 +76,10 @@
 # `test-fuzzing/fuzzer/surface.py` leyendo con javap los dos lados. Es derivado y grande: se
 # regenera en un par de minutos y cambia entero cada vez que se recompila la biblioteca.
 /test-fuzzing/fuzzer/surface.json
+/test-fuzzing/fuzzer/referable-*.json
+/test-fuzzing/fuzzer/lambdas-*.json
+/test-fuzzing/fuzzer/bandit-*.json
+/test-fuzzing/fuzzer/cursor*.json
 
 # Cache de bytecode de Python. Derivado, y cambia con la version del interprete.
 __pycache__/

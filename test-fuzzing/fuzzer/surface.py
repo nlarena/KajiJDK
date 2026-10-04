@@ -43,7 +43,8 @@ DECL = re.compile(r"^ {2}(?! )(?!#)(.*);\s*$")
 DESC = re.compile(r"^\s+descriptor:\s*(\S+)\s*$")
 FLAGS = re.compile(r"^\s+flags:\s*\(0x[0-9a-fA-F]+\)\s*(.*)$")
 HEAD = re.compile(r"^(?:public |final |abstract |static |strictfp |sealed |non-sealed )*"
-                  r"(class|interface|enum|record|@interface)\s+([\w.$]+)")
+                  r"(class|interface|enum|record|@interface)\s+([\w.$]+)(.*)$")
+GENERIC = re.compile(r"<[^<>]*>")
 MODS = {"public", "protected", "private", "static", "final", "abstract", "native",
         "synchronized", "transient", "volatile", "strictfp", "default"}
 
@@ -72,16 +73,30 @@ def split_classes(text):
 
 def parse_class(lines):
     """One javap report -> {name, kind, abstract, members: {(name, descriptor): mods}}."""
-    name, kind, is_abstract = None, None, False
+    name, kind, is_abstract, supers = None, None, False, []
     for line in lines:
         m = HEAD.match(line)
         if m:
             kind, name = m.group(1), m.group(2)
             is_abstract = line.startswith("abstract ") or " abstract " in (" " + line)
+            # Who this type can stand in for. Without it a value is only ever accepted by a
+            # parameter of its exact type, so `ChronoUnit.DAYS` cannot be passed where a
+            # `TemporalUnit` is wanted and every constant and producer is worth far less than
+            # it should be. javap puts `extends`/`implements` on the same header line; the
+            # generic arguments are stripped because the descriptors we generate against are
+            # erased anyway.
+            tail = m.group(3) or ""
+            while GENERIC.search(tail):
+                tail = GENERIC.sub("", tail)
+            for part in re.split(r"\bextends\b|\bimplements\b", tail)[1:]:
+                for t in part.split(","):
+                    t = t.strip().rstrip("{").strip()
+                    if re.match(r"^[\w.$]+$", t) and t != name:
+                        supers.append(t)
             break
     if name is None:
         return None
-    members = {}
+    members, fields = {}, {}
     pending = last = None
     for line in lines:
         if " = " in line:                      # constant-pool entry, not a member
@@ -101,6 +116,17 @@ def parse_class(lines):
                     member = member.rsplit(".", 1)[-1]
                 last = (member, m.group(1))
                 members[last] = {t for t in tokens if t in MODS}
+            elif tokens:
+                # A FIELD. These were dropped by the first version, which only kept members
+                # with parentheses, and that quietly cost the generator every named constant in
+                # the library: `ChronoUnit.DAYS`, `RoundingMode.HALF_UP`, `StandardCharsets.UTF_8`,
+                # `Locale.US`, `BigInteger.TEN`. An enum constant is just a `public static final`
+                # field of the enum type, so enums were missing for the same reason. Only
+                # `static final` ones are kept: a mutable public static would let one generated
+                # case change what the next one sees.
+                mods = {t for t in tokens if t in MODS}
+                if "public" in mods and "static" in mods and "final" in mods:
+                    fields[(tokens[-1], m.group(1))] = mods
             pending = None
             continue
         m = FLAGS.match(line)
@@ -108,7 +134,8 @@ def parse_class(lines):
             if "ACC_BRIDGE" in m.group(1) or "ACC_SYNTHETIC" in m.group(1):
                 members.pop(last, None)
             last = None
-    return {"name": name, "kind": kind, "abstract": is_abstract, "members": members}
+    return {"name": name, "kind": kind, "abstract": is_abstract, "members": members,
+            "fields": fields, "supers": supers}
 
 
 def candidates(packages, include_nested):
@@ -164,11 +191,27 @@ def build(cands, ours, theirs):
         pub_a = {k for k, v in a["members"].items() if "public" in v}
         pub_b = {k for k, v in b["members"].items() if "public" in v}
         common = pub_a & pub_b
+        # Constants have to agree on both sides too: one that only we declare is not something
+        # a differential campaign can use, and one only the reference declares is a gap to
+        # report rather than an argument to generate.
+        shared_fields = sorted(set(a.get("fields", {})) & set(b.get("fields", {})))
         ops = []
         for member, desc in sorted(common):
+            mods = a["members"][(member, desc)]
             ops.append({"name": member, "desc": desc,
-                        "static": "static" in a["members"][(member, desc)],
+                        "static": "static" in mods,
+                        "abstract": "abstract" in mods,
                         "ctor": member == "<init>"})
+        # The single abstract method, when there is exactly one: what a lambda would implement.
+        # This has to be computed over ALL members, before the policy removes any, and it has to
+        # read the `abstract` modifier rather than counting methods. Counting over the filtered
+        # list made `java.util.Set` look functional with `spliterator()` as its only method,
+        # because the policy had already dropped `iterator`, `stream` and `forEach`.
+        OBJECT_METHODS = {("equals", "(Ljava/lang/Object;)Z"),
+                          ("hashCode", "()I"), ("toString", "()Ljava/lang/String;")}
+        abstracts = [o for o in ops
+                     if o["abstract"] and not o["static"] and not o["ctor"]
+                     and (o["name"], o["desc"]) not in OBJECT_METHODS]
         classes[name] = {
             "kind": a["kind"], "abstract": a["abstract"],
             "public_ours": len(pub_a), "public_reference": len(pub_b), "common": len(common),
@@ -176,6 +219,13 @@ def build(cands, ours, theirs):
             "only_reference": sorted(n + d for n, d in (pub_b - pub_a)),
             "declares_toString": ("toString", "()Ljava/lang/String;") in common,
             "ops": ops,
+            "constants": [{"name": n, "desc": d} for n, d in shared_fields],
+            "supers": a.get("supers", []),
+            "sam": ({"name": abstracts[0]["name"], "desc": abstracts[0]["desc"]}
+                    if len(abstracts) == 1 and a["kind"] == "interface" else None),
+            "abstract_methods": len(abstracts),
+            "only_ours_constants": sorted(
+                n for n, _ in (set(a.get("fields", {})) - set(b.get("fields", {})))),
         }
         if pub_a - pub_b:
             tally["only_ours"].append(name)
@@ -205,6 +255,12 @@ def summarise(classes, tally, report=print):
     report("")
     report("classes KajiLibrary has that the reference does not: %d"
            % len(tally["missing_reference"]))
+    report("shared public static final constants: %d"
+           % sum(len(c["constants"]) for c in classes.values()))
+    report("supertype edges recorded: %d"
+           % sum(len(c.get("supers", [])) for c in classes.values()))
+    report("functional interfaces (exactly one abstract method): %d"
+           % sum(1 for c in classes.values() if c.get("sam")))
 
 
 def main():
