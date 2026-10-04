@@ -10,11 +10,23 @@ Dos decisiones que valen la explicacion:
 esta al lado. La mitad del valor de esta herramienta es que un test que dejo de compilar aparece como
 lo que es --roto-- y no como un resultado raro en tiempo de ejecucion.
 
+**OJO con `--javac`: compilar deja los `.class` en `java/`, que estan VERSIONADOS.** Correr la suite con
+un javac que no es el congelado los sobreescribe con la salida de otro compilador, y eso rompe el
+invariante del arbol (un `.class` distinto tiene que significar "cambio la fuente"). Paso el 2026-10-03
+midiendo un arreglo: 71 archivos. Se restauran con `git checkout -- java/`, porque estan commiteados; y
+despues de medir con `--javac` conviene mirar `git status java/`.
+
 **Una prueba que tira es una prueba rota.** La VM sale con un codigo != 0 cuando una excepcion
 escapa del hilo principal, y hasta que esta herramienta lo miro una prueba que tiraba se reportaba
 como buena: no devolvia valor, no imprimia su `TOTAL`, y eso se leia como "esta prueba no tiene
 veredicto". `VhTest` --y con ella todo el camino de `VarHandle`-- y `PrefsTreeTest` estuvieron
 caidas asi, con la suite en verde, que es peor que no tenerla.
+
+**Pero "no se puede juzgar" no es "esta rota", y se cuentan aparte.** Una prueba cuyo `main` imprime
+valores sueltos --sin `TOTAL` y sin devolver un entero-- corrio bien y esta herramienta no sabe si
+paso: es un **hueco de la compuerta**, no un fallo del arbol. Meterlas en "rotas" pintaba de rojo
+trabajo ajeno que esta sano; dejarlas en verde era el punto ciego de antes. Van en su propia cuenta,
+`sin veredicto`, visible y sin mentir para ninguno de los dos lados.
 
 **El punto de entrada se deduce, no se supone.** Las pruebas de esta casa usan tres formas: `run()`
 devolviendo un entero (la mayoria), `main` imprimiendo su propio resumen, y unas pocas con varios
@@ -122,7 +134,7 @@ def main():
         fuentes = [f for f in fuentes
                    if any(x.lower() in os.path.basename(f).lower() for x in args.filtros)]
 
-    rotas, corridas = [], 0
+    rotas, sin_veredicto, corridas = [], [], 0
     for f in fuentes:
         nombre = os.path.basename(f)[:-5]
         fuente = open(f, encoding="utf-8", errors="replace").read()
@@ -150,15 +162,23 @@ def main():
             etiqueta = nombre if m in ("run", "main") else "%s.%s" % (nombre, m)
             if estado == "ok":
                 print("%-22s %s" % (etiqueta, valor))
+            elif estado == "SIN VEREDICTO":
+                sin_veredicto.append(etiqueta)
+                print("%-22s %s" % (etiqueta, estado))
             else:
                 rotas.append((etiqueta, estado, ""))
                 # Los estados que ya traen un detalle --el panic, la excepcion-- se imprimen tal
                 # cual: en mayusculas el nombre de la clase que tiro se vuelve ilegible.
                 print("%-22s %s" % (etiqueta, estado if ":" in estado else estado.upper()))
 
-    print("\n%d invocaciones, %d rotas" % (corridas, len(rotas)))
+    cola = ", %d sin veredicto" % len(sin_veredicto) if sin_veredicto else ""
+    print("\n%d invocaciones, %d rotas%s" % (corridas, len(rotas), cola))
     for n, e, d in rotas:
         print("  %-22s %s %s" % (n, e, d))
+    if sin_veredicto:
+        print("  (sin veredicto: la prueba corrio y no dijo si paso --- ni `TOTAL` ni entero)")
+        for n in sin_veredicto:
+            print("    %s" % n)
     return 1 if rotas else 0
 
 

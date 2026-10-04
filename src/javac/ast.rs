@@ -77,7 +77,9 @@ pub enum TypeKind {
     Interface,
     Enum,
     Record,
-    /// Un tipo anotación (`@interface`). Reservado — el parser aún no lo produce.
+    /// Un tipo anotación (`@interface`). **Es una interfaz** (§9.6), así que todo lo que valga para
+    /// `Interface` por ser interfaz tiene que nombrarlo también: el `public static final` implícito de
+    /// sus campos (§9.3) se le había olvidado, y eso era el finding #560.
     Annotation,
 }
 

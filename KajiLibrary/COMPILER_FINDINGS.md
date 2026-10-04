@@ -19,21 +19,19 @@ file reached 17 thousand lines. Nothing is in both.
 
 ## Status (2026-10-03)
 
-**281 findings, #1-#562. Open: #307, #559, #560, #561, #562, plus #288 with no working reproducer.**
+**281 findings, #1-#562. Open: #307, #562, plus #288 with no working reproducer.**
 
 | # | where | what | how it is checked |
 |---|---|---|---|
 | **#307** | javac | inference does not look at the lambda body (JLS §18.2.1) | `Optional.of("perro").map(x -> x.toUpperCase()).orElseThrow().length()` does not compile: *no se encuentra el metodo: length / ubicacion: clase Object* |
-| **#560** | javac | `AnnotationDefault` is not emitted when the default is a **reference to a constant** | `String value() default BYTES;` emits a `value()` with descriptor and flags and nothing else; with `default "BYTES"` --- the same compile-time constant --- the attribute is there |
-| **#561** | javac | `e instanceof T v` evaluates the operand **twice** | `Dup` prints 2 where the JDK prints 1: `bind_pattern` re-runs the operand to do the cast |
 | **#562** | javac | a pattern variable's scope is **the `if`**, not where the condition holds | `if (!(o instanceof String s)) return -1; return s.length();` --- which the real `javac` accepts --- fails with *no se encuentra el simbolo: s* |
-| **#559** | javac | a handler's frame carries the type of a **dead** local | `SmProbe` runs and answers 2 on our VM; HotSpot refuses the class with `VerifyError: Stack map does not match the one at exception handler 55` |
 | **#288** | VM/GC | a stale reference reaching the GC in green mode | no reproducer fires today (see the `os-parallel` note); stays open until somebody looks at it with ThreadSanitizer |
 
-All four were **reproduced on 2026-10-03** with the frozen javac --- #560 against the JDK's own
-`javap`, #559 against HotSpot. The six the entries still called open and that were not --- #113, #127,
-#474, #500, #502, #509 --- were measured the same day and are closed, and **#505 was closed** that day
-too: it is what uncovered #560.
+Both were **reproduced on 2026-10-03**. That day also closed six that the entries still called open and
+were not (#113, #127, #474, #500, #502, #509), plus four that really were: **#505**, which is what
+uncovered #560; **#559**, with HotSpot as the oracle --- `KajiLibrary/java/IoTest` went from
+`VerifyError ... exception handler 1041` to answering `-1` there, the same as on our own VM; and
+**#560** and **#561**, both measured against the JDK's own output.
 
 > **Do not trust the title.** Three of those six carried their own *Cerrado el...* note **inside**
 > the `Open` section, and **#113 had no marker at all**, so no marker-based scan can see it. And the
@@ -359,8 +357,10 @@ that were reproduced that day --- about the rest, all that is known is what the 
 | #556 | ✅ | una clase local adentro de un metodo de una anonima no resuelve su propia llamada | Tandas 2026-09-18 a 2026-10-03 (#539-#559) |
 | #557 | ✅ | una creacion calificada de una interna de segundo nivel no resuelve | Tandas 2026-09-18 a 2026-10-03 (#539-#559) |
 | #558 | ✅ | `collect(Collector<? super T, A, R>)` no infiere su `R` del argumento en linea | Tandas 2026-09-18 a 2026-10-03 (#539-#559) |
-| #559 | ⬜ | el frame de un *handler* arrastra el tipo de un local MUERTO, y una JVM real rechaza la clase | Tandas 2026-09-18 a 2026-10-03 (#539-#559) ·medido 2026-10-03 |
-| #560 | ⬜ | el `AnnotationDefault` no se emite cuando el default es una REFERENCIA A UNA CONSTANTE | Tanda 2026-10-03 (b): el #505 cerrado, y e… ·medido 2026-10-03 |
+| #559 | ✅ | el frame de un *handler* arrastra el tipo de un local MUERTO, y una JVM real rechaza la clase | Tandas 2026-09-18 a 2026-10-03 (#539-#559) ·medido 2026-10-03 |
+| #560 | ✅ | el `AnnotationDefault` no se emite cuando el default es una REFERENCIA A UNA CONSTANTE | Tanda 2026-10-03 (b): el #505 cerrado, y e… ·medido 2026-10-03 |
+| #561 | ✅ | `e instanceof T v` evalua el operando DOS veces | Tanda 2026-10-03 (b): el #505 cerrado, y e… |
+| #562 | ⬜ | el alcance de una variable de patron es EL `if`, no donde la condicion vale | Tanda 2026-10-03 (b): el #505 cerrado, y e… |
 
 ## Index by section
 
@@ -501,7 +501,7 @@ each entry is four `u2` and only the first was used.
 |---|---|
 | the API census | it counts **what** is there, not **how**: it reported `java.util` COMPLETE with `TreeSet(Comparator<E>)` where the JDK declares `Comparator<? super E>`. Three blind spots in one day |
 | `tools/emitdiff` | it disassembles with `javap -p -c`, which **does not print stack maps**: the one divergence that invalidates a class is out of its reach by construction (#559) |
-| `tools/suite.py` | a fixture that **threw** was reported as `(sin valor)` and stayed out of the broken count. Fixed 2026-10-03; fixing it exposed a second dead fixture |
+| `tools/suite.py` | a fixture that **threw** was reported as `(sin valor)` and stayed out of the broken count. Fixed 2026-10-03; fixing it exposed a second dead fixture. It now also counts separately the ones it simply **cannot judge** --- a `main` printing bare values --- because calling those broken paints healthy work red, and calling them green was the blind spot |
 
 **A shape gate cannot see a body.** The old #101 entry measured the damage with the gate --- which
 only sees signatures --- and classified it as a cosmetic, allowlistable divergence. The real damage

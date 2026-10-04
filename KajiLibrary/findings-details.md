@@ -16916,7 +16916,63 @@ A favor: **corta la compilacion**, no emite nada dudoso.
 
 Salio midiendo el #553, escribiendo el caso de dos niveles de internas.
 
-### #559 ⬜ -- el frame de un *handler* arrastra el tipo de un local MUERTO, y una JVM real rechaza la clase
+### #559 ⬜→✅ -- el frame de un *handler* arrastra el tipo de un local MUERTO, y una JVM real rechaza la clase
+
+> **Cerrado el 2026-10-03.** `codegen.rs::close_scope` ahora **da de baja el tipo** de cada local que
+> el scope declaro, poniendolo en `Top`. La causa estaba bien localizada en el reporte; lo que no
+> estaba es cual de las tres formas de arreglarlo sirve.
+>
+> **Las dos formas obvias rompen, y las dos se probaron.** Truncar `locals_t` a `next_free` al cerrar
+> el scope --o recortar la copia con que se captura el frame del handler-- mata slots **vivos**,
+> porque el mapa de slots es **disperso**: el try-with-resources desugarado aparca su excepcion en el
+> slot 5 con los slots 3 y 4 muertos (`[int, M$R, Throwable, top, top, Throwable]`), asi que
+> cualquier corte por longitud se lo lleva. El sintoma fue
+> `aload: local 5 holds Top, not a reference` en `try_with_resources_passes_the_strict_verifier`, y
+> despues `VerifyError: Bad local variable type` en la HotSpot sobre los cuatro casos de ese test.
+> **Lo que muere al cerrar un scope son sus propios locales, no todo lo que este por encima del
+> cursor.**
+>
+> **Medido**, con la HotSpot como oraculo:
+>
+> | | antes | ahora |
+> |---|---|---|
+> | el reproductor de veinte lineas (`SmProbe`) en la HotSpot | `VerifyError ... exception handler 55` | **2** |
+> | **`KajiLibrary/java/IoTest`** en la HotSpot (900 lineas, 25 `catch`) | `VerifyError ... exception handler 1041` | **-1** |
+> | ese mismo `.class` nuevo en nuestra VM | -- | **-1** |
+> | el frame del handler | `[B, int, IllegalStateException]` | **`[B, int]`**, igual al del javac real |
+> | los cuatro try-with-resources en la HotSpot | verificaban | **siguen verificando** |
+>
+> El `IoTest` es lo que la ficha pedia: era el ejemplo de clase inusable fuera de nuestra VM, y ahora
+> carga y contesta lo mismo en las dos.
+>
+> **Compuertas** (con `--javac target/release/javac.exe`, que es donde vive el arreglo): recompilacion
+> **4822/4822, cero errores**; los 48 diferenciales de texto dan lo de siempre (2 con diferencias,
+> `Dtd1` y `Html4`); la suite da **227 invocaciones, 0 rotas** --las 5 `sin veredicto` son fixtures
+> nuevos de la sesion paralela, escritos en otro estilo, y `StatTest` tarda 41 s contra un limite de
+> 60--; y `javac::codegen` **280 passed, 0 failed**.
+>
+> **La regresion mira los BYTES del frame**, no que pase nuestro verificador, porque nuestro
+> verificador aceptaba la clase mala --y eso es lo que dejo vivir el bug--:
+> `codegen::tests::a_handler_frame_does_not_declare_a_dead_local`. Validada con un control negativo:
+> con los dos javac que difieren **solo** en el arreglo, el frame sale
+> `[int, int, RuntimeException]` sin el y `[int, int]` con el.
+>
+> **El radio, exacto: 135 clases.** De los **239** fuentes de la biblioteca con dos o mas `catch`
+> salen 599 clases, y **135 cambian** (cero errores de compilacion de los dos lados). Se midio
+> compilando esos 239 con los dos binarios que difieren solo en el arreglo; contra el congelado no
+> servia, porque ese es anterior a dos commits de javac de la otra sesion y la diferencia habria
+> mezclado tres cosas.
+>
+> **Todavia no cambia ningun `.class` del arbol**: el arreglo vive en `target/release/javac.exe` y la
+> biblioteca se compila con el congelado. Las 135 entran con el proximo refresco de `bin/` --- la
+> deuda de recompilacion que esta ficha pedia juntar sigue en pie, con el numero ya puesto.
+>
+> **Lo que queda abierto de la mitad que importa**, y es de la ficha original: nuestro verificador
+> **sigue** aceptando la clase mala (la in-state inferida de un handler es el join sobre todo el rango
+> protegido, y `compatible` admite asignabilidad en las dos direcciones, donde una JVM real pide que
+> el frame declarado sea supertipo de **cada** estado entrante), y `tools/emitdiff` **sigue** sin ver
+> stack maps porque desensambla con `javap -p -c`. Arreglado el bug, los dos agujeros que lo dejaron
+> pasar estan igual.
 
 **Severidad: alta.** No es una divergencia de estilo: el `.class` **no se puede cargar** en una JVM
 real. Es lo que hace que `KajiLibrary/java/IoTest.class` sea inusable fuera de nuestra VM.
@@ -16990,7 +17046,58 @@ recompilacion que el refresco del 2026-09-21 dejo abierta.
 
 ## Tanda 2026-10-03 (b): el #505 cerrado, y el #560 que destapo
 
-### #560 ⬜ -- el `AnnotationDefault` no se emite cuando el default es una REFERENCIA A UNA CONSTANTE
+### #560 ⬜→✅ -- el `AnnotationDefault` no se emite cuando el default es una REFERENCIA A UNA CONSTANTE
+
+> **Cerrado el 2026-10-03.** La causa **no estaba en el emisor de anotaciones**, y era mas ancho que lo
+> que decia la ficha.
+>
+> **La causa.** `collect_static_final_fields` le daba el `public static final` implicito (§9.3) a
+> `TypeKind::Interface` y **no** a `TypeKind::Annotation`, asi que las constantes de un `@interface`
+> nunca entraban al mapa de constantes y no habia con que plegar. Un `@interface` **es** una interfaz
+> (§9.6): todo lo que valga para una por ser interfaz tiene que nombrarlo tambien. El comentario de
+> `ast.rs` que decia que `TypeKind::Annotation` estaba *"reservado, el parser aun no lo produce"* era
+> **falso** --el parser lo produce, y `codegen` compara contra el para poner `ACC_ANNOTATION`--;
+> corregido de paso.
+>
+> **Dos cosas despistaron, y las dos valen como metodo:**
+>
+>  1. **el `ConstantValue` del campo si se emitia**, asi que el campo "parecia" constante. Ese se pliega
+>     del init literal directo, sin pasar por el mapa: no prueba nada sobre el mapa.
+>  2. **el primer arreglo consulto el plegador por `e.binding`** (`const_eval_str`/`const_eval_num`) y no
+>     emitio nada: `ClassDecl::annotation_defaults` lo tocan el parser y el emisor y **nadie mas** --la
+>     atribucion no lo visita-- asi que la expresion llega sin `binding` y sin `ty`. El nombre se
+>     resuelve a mano contra la tabla de simbolos.
+>
+> **Y fallaba tambien en un USO, que no estaba en la ficha**: `encode_value` devolvia `None`, con lo cual
+> `encode_annotation` se cortaba y **la anotacion entera desaparecia en silencio**. Peor todavia con el
+> arreglo a medias: un entero constante salia con el tag `e`, el de una constante de **enum**
+> --`entero=LA560;.N` donde el real pone `I`--, que es un `element_value` mal formado. Para evitarlo, el
+> tipo **declarado** del elemento se resuelve tambien en el uso (por el `@interface` del nombre de la
+> anotacion), y el arm de la constante de enum ya no se queda con un nombre que el mapa de constantes
+> conoce.
+>
+> | | antes | ahora | JDK 25 |
+> |---|---|---|---|
+> | `default "kay"` (literal) | `s` | `s` | `s` |
+> | `default K` / `N` / `L` (constantes) | **nada** | `s` / `I` / `J` | `s` / `I` / `J` |
+> | `@A(porConst = A.K, entero = A.N)` | atributo ausente | `porConstante="kay" entero=7` | idem |
+> | `@Retention(RetentionPolicy.RUNTIME)` | `e` | `e` | `e` |
+>
+> **Donde no alcanza, se omite.** El tag de un `element_value` tiene que ser el del tipo del elemento
+> (JVMS 4.7.16.1) y un entero constante podria ser `I`, `B`, `S`, `C` o `Z`. Sin el tipo declarado se
+> devuelve `None` --el atributo **falta**, que es un subconjunto legal-- en vez de arriesgar un tag
+> equivocado, que seria la clase de error que compila y revienta despues.
+>
+> **Medido.** Repro `KajiLibrary/repros/finding_560/Finding560.java`: **3** con el javac congelado, **-1**
+> con el arreglado, **-1** en el JDK 25. Regresion:
+> `codegen::tests::an_annotation_default_naming_a_constant_is_emitted` (el uso va en el repro y no en el
+> test: sin classpath el arnes no resuelve `@Retention`, asi que no hay anotacion *visible* que mirar).
+>
+> **El rodeo de `jdk.jfr` sigue en pie hasta el refresco de `bin/`.** `DataAmount`, `Timespan` y
+> `Timestamp` tienen el literal en vez de la constante porque el javac **congelado** no tiene este
+> arreglo; revertirlo ahora volveria a dejar a `EventType` sin el valor. Se revierte junto con el
+> refresco.
+
 
 **Severidad: media, y silenciosa.** Compila sin decir nada y el `.class` sale sin el atributo, asi que
 la anotacion queda **incompleta** y el error aparece lejos, al reflexionarla.
@@ -17033,7 +17140,31 @@ los otros 32 `default` con un nombre son constantes de **enum**, que si se emite
 **Repro:** `@interface A { String K = "k"; String value() default K; }` y mirar si el `value()` sale con
 `AnnotationDefault`. Cuando se cierre, los tres rodeos vuelven a la constante.
 
-### #561 ⬜ -- `e instanceof T v` evalua el operando DOS veces
+### #561 ⬜→✅ -- `e instanceof T v` evalua el operando DOS veces
+
+> **Cerrado el 2026-10-03**, con lo que la ficha prescribia: un temporal **solo** cuando el operando no
+> es reevaluable. `reevaluable` dice si que si para un local/parametro y para `this` --los dos bajan a
+> un `aload`, idempotente-- y no para todo lo demas.
+>
+> | | `Dup.llamadas` |
+> |---|---|
+> | javac congelado | **2** |
+> | javac arreglado | **1** |
+> | JDK 25 | **1** |
+>
+> **Lo que la ficha advertia, comprobado:** el caso comun **no mueve un byte**. El `conLocal` de la
+> prueba sale `aload_0; instanceof; ifeq; aload_0; checkcast; astore_1` identico antes y despues, e
+> identico al del javac real. Y la forma con llamada pasa a ser la del real:
+> `invokestatic; astore; aload; instanceof; ifeq; aload; checkcast; astore`. De las **6738** clases de la
+> biblioteca, **ninguna** cambia: todos los `instanceof T v` del arbol tienen operando reevaluable.
+>
+> Un acceso a campo se deja afuera de `reevaluable` **a proposito**, aunque el javac real lo reevalue en
+> algunos casos: el valor de un campo puede cambiar entre las dos lecturas, asi que copiarlo es lo
+> correcto y lo unico que cuesta es un slot.
+>
+> El temporal se toma del cursor `next_free` y se libera al terminar la sentencia, asi que la numeracion
+> de slots puede diferir de la del real en ese caso --que antes no existia, porque antes estaba mal--.
+
 
 **Severidad: alta**, porque la respuesta sale mal **en silencio**: no hay error ni clase invalida,
 solo un efecto que ocurre de mas.
@@ -17097,3 +17228,41 @@ asi que la variable esta en alcance. Modelarlo pide separar las dos cosas que ho
 
 **Alcanza a la forma simple y a la deconstruccion por igual**, asi que no es del Hito B8: se verifico
 que falla identico con el javac congelado, anterior a ese trabajo.
+
+> **Delimitado el 2026-10-04: es mas angosto de lo que parece.** De las siete formas del alcance, falla
+> **una sola** --- "despues del `if`" ---, y es la del idiom de guarda:
+>
+> | forma | nuestro | JDK 25 |
+> |---|---|---|
+> | `if (!(o instanceof String s)) { return -1; } return s.length();` | **no compila** | ok |
+> | la misma sin bloque (`) return -1;`) | **no compila** | ok |
+> | dentro del `then` | compila | ok |
+> | a la derecha de `&&` | compila | ok |
+> | a la derecha de un `\|\|` con la izquierda negada | compila | ok |
+> | el `else` de una condicion negada | compila | ok |
+> | `while (!(o instanceof String s)) { return -1; } return s.length();` | compila | ok |
+>
+> Que el `while` ande es la pista: `attrib_stmt` abre el ambito **solo** en `StmtKind::If` (`env.push()`
+> alrededor de la condicion, el `then` y el `els`), y `StmtKind::While` no lo abre. O sea que el ambito
+> de mas no es una regla general del atributado sino una linea de un arm.
+>
+> **El plan, con las dos mitades que la ficha pedia separar:**
+>
+> 1. **La visibilidad.** Calcular el conjunto de variables de patron que quedan ligadas cuando la
+>    condicion es **falsa** (el "false set" de §6.3.1): para `!(X instanceof T s)` es `{s}`, para
+>    `X instanceof T s` es vacio, y se recorre `!`/`&&`/`\|\|` con las reglas de la spec. Si el `then`
+>    **no puede completar normalmente**, esas variables siguen visibles despues del `if`.
+> 2. **La vida del slot.** Hoy el `env.push()`/`pop()` sirve para que el slot se libere y el proximo `if`
+>    lo reuse --asi numera javac, y esta comentado--. Cuando una variable se queda visible, su slot
+>    **no** se puede liberar. Las dos cosas se deciden con el mismo dato, asi que salen juntas.
+>
+> **El predicado de "no completa normalmente" hay que escribirlo local y conservador**, no reusar
+> `flow.rs`: `flow` corre **despues** de `attribute` (ver `javac.rs`), asi que durante el atributado no
+> esta. Alcanza la forma sintactica --- un `return`/`throw`/`break`/`continue`, o un bloque cuya ultima
+> sentencia lo sea --- y conservador para el lado seguro: si no se puede afirmar que no completa, se deja
+> el comportamiento de hoy. Eso cubre el idiom de guarda, que es el caso que importa, sin arriesgar
+> aceptar un programa que el real rechaza.
+>
+> **No se toco todavia** porque `src/javac/attribute.rs` tiene trabajo sin commitear de la otra sesion
+> (una funcion nueva para `T[]::new`, ajena a esto): editarlo arrastraria su trabajo a medias a un commit
+> ajeno, y escribir un archivo que otro esta editando puede pisarselo.

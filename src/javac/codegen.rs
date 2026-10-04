@@ -480,7 +480,8 @@ fn gen_class(
                 if let Some((_, value)) =
                     class.annotation_defaults.iter().find(|(n, _)| *n == m.name)
                 {
-                    mi.annotation_default = encode_value(&mut cf.pool, table, scope, value);
+                    mi.annotation_default =
+                        encode_value(&mut cf.pool, table, scope, value, Some(&m.return_type));
                 }
                 cf.methods.push(mi);
             }
@@ -2795,12 +2796,18 @@ fn encode_annotation(
     a: &Annotation,
 ) -> Option<Vec<u8>> {
     let type_index = pool.utf8(&annotation_descriptor(table, scope, &a.name));
+    // El `@interface`, para poder leer el tipo **declarado** de cada elemento: el tag de un
+    // `element_value` tiene que ser el del tipo del elemento (JVMS 4.7.16.1), y con un valor constante
+    // entero el valor no alcanza para decidirlo. Sin esto, `@A(ALGUNA_CONSTANTE_INT)` salia con el tag
+    // de una constante de **enum** --- `entero=LA560;.N` donde el javac real pone `I#7` (#560).
+    let iface = resolve_type_id(table, scope, a.name.rsplit('.').next().unwrap_or(&a.name));
     let mut pairs = Vec::new();
     for arg in &a.args {
         // La forma de **valor único** (`@Ann(x)`) nombra el elemento implícito `value`.
         let elem = arg.name.clone().unwrap_or_else(|| "value".to_string());
         let name_index = pool.utf8(&elem);
-        let value = encode_value(pool, table, scope, &arg.value)?;
+        let declared = iface.and_then(|cid| element_type(table, cid, &elem));
+        let value = encode_value(pool, table, scope, &arg.value, declared.as_ref())?;
         pairs.extend_from_slice(&name_index.to_be_bytes());
         pairs.extend_from_slice(&value);
     }
@@ -2824,11 +2831,15 @@ fn annotation_descriptor(table: &SymbolTable, scope: ScopeId, name: &str) -> Str
 /// Un `element_value` (§4.7.16.1) con su `tag`: `s`/`I`/`Z`/…, `c` (literal de clase), `e` (constante
 /// de enum), `@` (anotación anidada) o `[` (arreglo). `None` si no se sabe codificar (el llamador
 /// descarta la anotación entera). Un entero sin el tipo del elemento a mano se etiqueta como `I`.
+/// `declared` es el tipo del **elemento** cuando se lo conoce --lo sabe el emisor de un `default`, no
+/// el de un uso--. Solo se usa para elegir el tag de un entero constante, que es el unico caso donde el
+/// valor no alcanza para decidirlo (ver [`encode_const_ref`]).
 fn encode_value(
     pool: &mut ConstantPool,
     table: &SymbolTable,
     scope: ScopeId,
     v: &AnnotationValue,
+    declared: Option<&Type>,
 ) -> Option<Vec<u8>> {
     let mut out = Vec::new();
     match v {
@@ -2836,7 +2847,8 @@ fn encode_value(
             out.push(b'[');
             out.extend_from_slice(&(items.len() as u16).to_be_bytes());
             for it in items {
-                out.extend_from_slice(&encode_value(pool, table, scope, it)?);
+                // Un elemento de arreglo: el tipo declarado es el componente, que aca no se tiene.
+                out.extend_from_slice(&encode_value(pool, table, scope, it, None)?);
             }
         }
         AnnotationValue::Nested(a) => {
@@ -2876,18 +2888,156 @@ fn encode_value(
                 out.push(b'c');
                 out.extend_from_slice(&pool.utf8(&type_desc(table, scope, ty)).to_be_bytes());
             }
-            // `Tipo.CONST` (constante de enum): descriptor del tipo + nombre. Best-effort: solo la
-            // forma cualificada por un nombre simple.
-            ExprKind::Field { expr, name } => {
-                let ExprKind::Name(tn) = &expr.kind else { return None };
-                out.push(b'e');
-                out.extend_from_slice(&pool.utf8(&annotation_descriptor(table, scope, tn)).to_be_bytes());
-                out.extend_from_slice(&pool.utf8(name).to_be_bytes());
+            // Un nombre --suelto (`BYTES`) o cualificado (`Tipo.CONST`)-- puede ser dos cosas
+            // distintas, y se distinguen **plegando**:
+            //
+            //  * una **constante de compilacion** (`String BYTES = "BYTES";` y `default BYTES`) se
+            //    emite por su **valor**, que es lo que hace el javac real. Sin esto el
+            //    `AnnotationDefault` no salia, y en un **uso** `encode_value` devolvia `None`, con lo
+            //    cual `encode_annotation` se cortaba y la anotacion entera desaparecia **en silencio**
+            //    (finding #560);
+            //  * una constante de **enum** no se pliega --no esta en `const_fields`-- y va con el tag
+            //    `e`: descriptor del tipo + nombre. Best-effort: solo la forma cualificada por un
+            //    nombre simple.
+            ExprKind::Name(_) | ExprKind::Field { .. } => {
+                if let Some(v) = encode_const_ref(pool, table, scope, e, declared) {
+                    out.extend_from_slice(&v);
+                } else {
+                    // No se pliega: puede ser una constante de **enum**, que es lo que el tag `e`
+                    // nombra. Pero si el nombre resuelve a un campo que **si** esta en el mapa de
+                    // constantes, entonces es un primitivo o `String` cuyo tag no se pudo decidir, y
+                    // emitir `e` ahi deja la anotacion mal formada: mejor que falte.
+                    if const_ref_sym(table, scope, e)
+                        .is_some_and(|sym| table.const_fields().contains_key(&sym))
+                    {
+                        return None;
+                    }
+                    let ExprKind::Field { expr, name } = &e.kind else { return None };
+                    let ExprKind::Name(tn) = &expr.kind else { return None };
+                    out.push(b'e');
+                    out.extend_from_slice(
+                        &pool.utf8(&annotation_descriptor(table, scope, tn)).to_be_bytes(),
+                    );
+                    out.extend_from_slice(&pool.utf8(name).to_be_bytes());
+                }
             }
             _ => return None,
         },
     }
     Some(out)
+}
+
+/// El `element_value` de un nombre que es una **constante de compilacion**: `default BYTES`, con
+/// `String BYTES = "BYTES";` declarado en el mismo `@interface`, o la forma cualificada `Tipo.CONST`.
+///
+/// **Resuelve el nombre a mano, y no por `e.binding`, porque no hay.** `ClassDecl::annotation_defaults`
+/// lo tocan el parser y este emisor y nadie mas: la **atribucion no lo visita**, asi que la expresion
+/// del `default` llega sin `binding` y sin `ty`. El primer intento de arreglar el #560 consultaba
+/// `const_eval_str`/`const_eval_num`, que resuelven por `binding`, y por eso no emitia nada.
+///
+/// **El tag se elige por el valor cuando alcanza, y por el tipo declarado cuando no.** Un
+/// `element_value` tiene que llevar el tag del tipo del elemento (JVMS 4.7.16.1), y un entero podria
+/// ser `I`, `B`, `S`, `C` o `Z` segun como este declarado. Sin ese dato se devuelve `None`, con lo cual
+/// el atributo **falta** --subconjunto legal-- en vez de salir con un tag equivocado, que es la clase
+/// de error que compila y revienta despues. `String`, `long`, `float` y `double` no tienen la
+/// ambiguedad: ningun otro tipo de elemento acepta una constante que pliegue a eso.
+fn encode_const_ref(
+    pool: &mut ConstantPool,
+    table: &SymbolTable,
+    scope: ScopeId,
+    e: &Expr,
+    declared: Option<&Type>,
+) -> Option<Vec<u8>> {
+    let sym = const_ref_sym(table, scope, e)?;
+    let mut out = Vec::new();
+    match table.const_fields().get(&sym)? {
+        ConstVal::Str(s) => {
+            out.push(b's');
+            out.extend_from_slice(&pool.utf8(s).to_be_bytes());
+        }
+        ConstVal::Long(n) => {
+            out.push(b'J');
+            out.extend_from_slice(&pool.long(*n).to_be_bytes());
+        }
+        ConstVal::Float(f) => {
+            out.push(b'F');
+            out.extend_from_slice(&pool.float(*f).to_be_bytes());
+        }
+        ConstVal::Double(d) => {
+            out.push(b'D');
+            out.extend_from_slice(&pool.double(*d).to_be_bytes());
+        }
+        ConstVal::Int(n) => {
+            let tag = match declared {
+                Some(Type::Prim(PrimType::Int)) => b'I',
+                Some(Type::Prim(PrimType::Byte)) => b'B',
+                Some(Type::Prim(PrimType::Short)) => b'S',
+                Some(Type::Prim(PrimType::Char)) => b'C',
+                Some(Type::Prim(PrimType::Boolean)) => b'Z',
+                _ => return None,
+            };
+            out.push(tag);
+            out.extend_from_slice(&pool.integer(*n).to_be_bytes());
+        }
+    }
+    Some(out)
+}
+
+/// El `SymbolId` del campo que una expresion-nombre nombra: suelto se busca en `scope`, cualificado
+/// (`Tipo.CONST`) en los miembros del tipo que lo califica.
+fn const_ref_sym(table: &SymbolTable, scope: ScopeId, e: &Expr) -> Option<SymbolId> {
+    match &e.kind {
+        ExprKind::Name(n) => field_in_scope(table, scope, n),
+        ExprKind::Field { expr, name } => {
+            let ExprKind::Name(tn) = &expr.kind else { return None };
+            let cid = resolve_type_id(table, scope, tn.rsplit('.').next().unwrap_or(tn))?;
+            field_in_scope(table, member_scope(table, cid), name)
+        }
+        _ => None,
+    }
+}
+
+/// El tipo de retorno del elemento `name` de la `@interface` `cid` --- o sea el tipo **declarado** del
+/// elemento, que es el que manda el tag de su `element_value`.
+fn element_type(table: &SymbolTable, cid: SymbolId, name: &str) -> Option<Type> {
+    table
+        .scope(member_scope(table, cid))
+        .get(name)
+        .iter()
+        .copied()
+        .find_map(|id| match &table.symbol(id).kind {
+            SymbolKind::Method { return_type, .. } => Some(return_type.clone()),
+            _ => None,
+        })
+}
+
+/// El `SymbolId` del **campo** `name` visible en `scope` (salteando un metodo o tipo homonimo).
+fn field_in_scope(table: &SymbolTable, scope: ScopeId, name: &str) -> Option<SymbolId> {
+    table
+        .scope(scope)
+        .get(name)
+        .iter()
+        .copied()
+        .find(|&id| matches!(table.symbol(id).kind, SymbolKind::Field { .. }))
+}
+
+/// ¿Se puede **volver a evaluar** esta expresión sin que nada ocurra de más?
+///
+/// Solo un local/parámetro y `this`: los dos bajan a un `aload`, que es idempotente y es lo que el
+/// javac real emite dos veces. Cualquier otra forma --una llamada, un `new`, un acceso a campo, un
+/// `++`-- puede tener efectos o cambiar de valor, y va a un temporal. Es la distinción que el javac
+/// real hace y que acá faltaba: el finding #561 era `Dup.f() instanceof String s` llamando a `f()`
+/// **dos veces**, sin error ni clase inválida, solo un efecto repetido.
+///
+/// Un acceso a campo se deja afuera a propósito aunque javac lo reevalúe en algunos casos: el valor de
+/// un campo puede cambiar entre las dos lecturas (otro hilo, un efecto del propio test), así que
+/// copiarlo es lo correcto y lo único que cuesta es un slot.
+fn reevaluable(e: &Expr) -> bool {
+    match &e.kind {
+        ExprKind::This => true,
+        ExprKind::Name(_) => matches!(e.binding, Some(Binding::Local { .. })),
+        _ => false,
+    }
 }
 
 fn type_width(ty: &Type) -> u16 {
@@ -3690,7 +3840,15 @@ fn collect_static_final_fields<'a>(
         // En una **interfaz** todo campo es implícitamente `public static final` (§9.3), y el fuente
         // no los escribe. Sin esto, `interface K { int A = 1; }` no entraba al mapa de constantes y
         // `case K.A:` no plegaba. Ver #477.
-        let implicit = matches!(class.kind, super::ast::TypeKind::Interface);
+        //
+        // **Un `@interface` cuenta como interfaz acá** (§9.6: un tipo anotación *es* una interfaz), y
+        // le faltaba: sus constantes no entraban al mapa, así que un `default BYTES` no se podía
+        // plegar y el `AnnotationDefault` no se emitía --- finding #560. El `ConstantValue` del campo
+        // salía igual y eso despistaba: ese se pliega del init literal directo, sin pasar por el mapa.
+        let implicit = matches!(
+            class.kind,
+            super::ast::TypeKind::Interface | super::ast::TypeKind::Annotation
+        );
         for member in &class.members {
             match member {
                 Member::Field(f)
@@ -3962,6 +4120,35 @@ impl<'a> Emitter<'a> {
         }
         let pc = self.bytes.len() as u16;
         if let Some(scope) = self.open_locals.pop() {
+            // **El tipo de cada local muere con él** (finding #559). Restaurar `next_free` libera el
+            // slot para el próximo local, pero `locals_t` --de donde sale el tipo de cada slot-- se
+            // quedaba con el del muerto. A un frame normal no le molesta, porque una declaración nueva
+            // pisa el slot antes de que se emita uno; al de un *handler* sí, porque se captura al
+            // **entrar** al `try` (`entry_locals`), que es justo cuando el muerto todavía figura. Con
+            // dos `catch` seguidos reusando el slot con tipos incompatibles, una JVM real rechaza la
+            // clase entera: `VerifyError: Stack map does not match the one at exception handler`.
+            //
+            // Se bajan **sólo los slots que este scope declaró**, a `Top`. Las dos formas más simples
+            // están probadas y las dos rompen: truncar `locals_t` a `next_free` --o recortar la copia
+            // del handler-- mata slots vivos, porque el mapa es **disperso**: el try-with-resources
+            // desugarado aparca su excepción en el slot 5 con los 3 y 4 muertos, y el `aload` de ese 5
+            // deja de verificar. Lo que muere al cerrar un scope son sus propios locales, no todo lo
+            // que esté por encima del cursor.
+            for &(slot, ..) in &scope {
+                let i = slot as usize;
+                let wide = matches!(
+                    self.locals_t.get(i),
+                    Some(VType::Long) | Some(VType::Double)
+                );
+                if let Some(t) = self.locals_t.get_mut(i) {
+                    *t = VType::Top;
+                }
+                if wide {
+                    if let Some(t) = self.locals_t.get_mut(i + 1) {
+                        *t = VType::Top;
+                    }
+                }
+            }
             for (slot, name, desc, start, type_annos) in scope {
                 if pc > start {
                     self.local_vars.push((start, pc - start, name, desc, slot));
@@ -5994,7 +6181,27 @@ impl<'a> Emitter<'a> {
                     _ => "java/lang/Object".to_string(),
                 };
                 let cidx = self.pool.class(&internal);
-                self.expr(operand);
+                // **El operando se usa dos veces** --una para el test y otra para ligar la variable--
+                // así que si no es reevaluable va a un temporal (finding #561). El javac real hace
+                // exactamente esta distinción, y por eso no se usa un temporal siempre: con un local
+                // emite `aload_0` dos veces, y copiarlo es lo que mantiene la emisión byte a byte.
+                let temp = if reevaluable(operand) {
+                    None
+                } else {
+                    let t = self.next_free;
+                    self.next_free += 1;
+                    self.max_locals = self.max_locals.max(self.next_free);
+                    self.expr(operand);
+                    let vt = self
+                        .stack
+                        .last()
+                        .cloned()
+                        .unwrap_or(VType::Object("java/lang/Object".to_string()));
+                    self.set_local(t, vt);
+                    self.store(4, t);
+                    Some(t)
+                };
+                self.load_operand(operand, temp);
                 self.op(INSTANCEOF);
                 self.u16(cidx);
                 self.pop(1);
@@ -6004,13 +6211,17 @@ impl<'a> Emitter<'a> {
                     // Salta a `target` cuando es verdadero, ligando **antes** de saltar; si es falso, cae.
                     let fall = self.new_label();
                     self.jump(IFEQ, fall);
-                    self.bind_pattern(operand, &internal, *slot);
+                    self.bind_pattern(operand, temp, &internal, *slot);
                     self.jump(GOTO, target);
                     self.bind(fall);
                 } else {
                     // Salta a `target` (el `else`) cuando es falso; en la caída (verdadero) liga el pattern.
                     self.jump(IFEQ, target);
-                    self.bind_pattern(operand, &internal, *slot);
+                    self.bind_pattern(operand, temp, &internal, *slot);
+                }
+                // El temporal muere con la sentencia: se libera el cursor, igual que un local de bloque.
+                if temp.is_some() {
+                    self.next_free -= 1;
                 }
             }
             // Cualquier otro booleano: se calcula y se compara contra cero.
@@ -6023,12 +6234,15 @@ impl<'a> Emitter<'a> {
     }
 
     /// Liga la variable de un *type pattern* (`instanceof T t`) en la rama en que el test dio verdadero:
-    /// recarga el operando, lo `checkcast`ea a `T` y lo guarda en el slot de `t` — la secuencia
-    /// `aload …; checkcast T; astore t` que emite javac. El operando se **reevalúa** (para un local/param
-    /// es un `aload` idempotente, como en el corpus); un operando con efectos se re-ejecutaría, esquina
-    /// que javac cubre con un temporal y que acá no se da.
-    fn bind_pattern(&mut self, operand: &Expr, internal: &str, slot: u16) {
-        self.expr(operand);
+    /// carga el operando, lo `checkcast`ea a `T` y lo guarda en el slot de `t` — la secuencia
+    /// `aload …; checkcast T; astore t` que emite javac.
+    ///
+    /// `temp` es el slot donde el emisor de la condición materializó el operando, o `None` si lo dejó
+    /// para reevaluar. **Reevaluar sin más era el finding #561**: para un local/parámetro es un `aload`
+    /// idempotente --y es lo que emite el javac real-- pero para una llamada el efecto ocurría dos
+    /// veces, en silencio y sin que nada lo marcara. Ver [`reevaluable`].
+    fn bind_pattern(&mut self, operand: &Expr, temp: Option<u16>, internal: &str, slot: u16) {
+        self.load_operand(operand, temp);
         let cidx = self.pool.class(internal);
         self.op(CHECKCAST);
         self.u16(cidx);
@@ -6036,6 +6250,23 @@ impl<'a> Emitter<'a> {
         self.push(VType::Object(internal.to_string()));
         self.set_local(slot, VType::Object(internal.to_string()));
         self.store(4, slot);
+    }
+
+    /// Deja el operando de un *type pattern* en la pila: del temporal si se materializó, reevaluándolo
+    /// si no.
+    fn load_operand(&mut self, operand: &Expr, temp: Option<u16>) {
+        match temp {
+            Some(t) => {
+                let vt = self
+                    .locals_t
+                    .get(self.rmap(t) as usize)
+                    .cloned()
+                    .unwrap_or(VType::Object("java/lang/Object".to_string()));
+                self.load(4, t);
+                self.push(vt);
+            }
+            None => self.expr(operand),
+        }
     }
 
     /// Materializa una condición como el **valor** `0`/`1` (para `boolean b = x > 0;`).
@@ -8241,6 +8472,99 @@ mod tests {
     }
 
     // ---- try-with-resources (§14.20.3) ----
+
+    /// #560 --- un `default` (y un valor de uso) que **nombra una constante** se emite por su valor.
+    ///
+    /// Fallaba de dos maneras y la segunda era peor: en un `default` el `AnnotationDefault`
+    /// simplemente **no salia**, y en un **uso** `encode_value` devolvia `None`, con lo cual
+    /// `encode_annotation` se cortaba y la anotacion entera desaparecia en silencio.
+    ///
+    /// La causa de fondo no estaba en el emisor de anotaciones: `collect_static_final_fields` le daba
+    /// el `public static final` implicito (§9.3) a `TypeKind::Interface` y **no** a
+    /// `TypeKind::Annotation`, asi que las constantes de un `@interface` no entraban al mapa de
+    /// constantes y no habia con que plegar. Lo que despistaba es que el `ConstantValue` del campo
+    /// salia igual: ese se pliega del init literal directo, sin pasar por el mapa.
+    ///
+    /// Se comprueba el **tag** de cada `element_value`, que es donde estaba el defecto: tiene que ser
+    /// el del tipo del elemento (JVMS 4.7.16.1). Un entero constante en un uso llegaba a salir con el
+    /// tag `e`, el de una constante de enum --- `entero=LA560;.N` donde el real pone `I`.
+    #[test]
+    fn an_annotation_default_naming_a_constant_is_emitted() {
+        let src = "public @interface A {             String K = \"kay\"; int N = 7; long L = 8L;             String lit() default \"kay\";             String porConst() default K;             int entero() default N;             long largo() default L; }";
+        let c = compiled_class(src, "A");
+        let tag = |elem: &str| -> Option<u8> {
+            let m = c.methods.iter().find(|m| c.utf8(m.name_index) == Some(elem))?;
+            let a = m
+                .attributes
+                .iter()
+                .find(|a| c.utf8(a.name_index) == Some("AnnotationDefault"))?;
+            a.info.first().copied()
+        };
+        assert_eq!(tag("lit"), Some(b's'), "el literal, que ya andaba");
+        assert_eq!(tag("porConst"), Some(b's'), "una constante `String`");
+        assert_eq!(tag("entero"), Some(b'I'), "una `int`: el tag sale del tipo del elemento");
+        assert_eq!(tag("largo"), Some(b'J'), "y una `long`");
+
+        // **El uso va en el repro**, `KajiLibrary/repros/finding_560/`, y no aca: con el entero
+        // constante salia con el tag `e` --el de una constante de enum-- donde el real pone `I`, y
+        // antes de eso la anotacion entera se caia. Este arnes no puede verlo, porque sin classpath no
+        // resuelve `@Retention` y entonces no hay anotacion **visible** que mirar.
+    }
+
+    /// #559 --- el frame de un *handler* no declara el tipo de un local **muerto**.
+    ///
+    /// Dos `catch` seguidos reusan el slot 2 con tipos incompatibles. El frame del segundo handler se
+    /// captura al **entrar** a su `try`, cuando la variable del primer `catch` ya murió: si su tipo
+    /// sigue en `locals_t`, el frame declara `IllegalStateException` donde la inferencia tiene nada, y
+    /// **una JVM real rechaza la clase entera** (`VerifyError: Stack map does not match the one at
+    /// exception handler`).
+    ///
+    /// Se verifica la **forma del frame** y no que pase nuestro verificador, porque nuestro
+    /// verificador aceptaba la clase mala: la in-state inferida de un handler es el join sobre todo el
+    /// rango protegido, y `compatible` admite asignabilidad en cualquiera de las dos direcciones. Eso
+    /// es lo que dejó vivir al bug, y es por qué esta prueba mira los bytes.
+    #[test]
+    fn a_handler_frame_does_not_declare_a_dead_local() {
+        use crate::jvm::parser::stack_map_table::{self, FrameDelta};
+        // `a`, `b` y `c` comparten el slot 2. Los tipos son los que el arnes de `verify_all` sabe
+        // resolver; la forma es la del reproductor de la ficha, que usa `IllegalStateException` /
+        // `StringBuilder` / `NumberFormatException`.
+        let src = "public class M {             public static int f(int n) {                 int i = 0;                 try { if (n == 0) { throw new RuntimeException(); } return 1; }                 catch (RuntimeException a) { i++; }                 try { Object b = new Object(); if (b != null) { throw new ArithmeticException(); }                       return 2; }                 catch (ArithmeticException c) { i++; }                 return i; } }";
+        verify_all(src, "M");
+        let c = compiled_class(src, "M");
+        let m = c.methods.iter().find(|m| c.utf8(m.name_index) == Some("f")).expect("f");
+        let code = c.member_code(m).expect("con Code");
+        let attr = code
+            .attributes
+            .iter()
+            .find(|a| c.utf8(a.name_index) == Some("StackMapTable"))
+            .expect("un metodo con dos handlers lleva StackMapTable");
+        let table = stack_map_table::parse(&attr.info).expect("la tabla decodifica");
+
+        // El frame del segundo handler es el unico `full_frame` cuya pila nombra la excepcion de ese
+        // `catch`. Sus locales tienen que ser exactamente dos --los dos `int`-- y no tres: el javac
+        // real da de baja el slot y emite un frame mas corto.
+        let mut visto = false;
+        for f in &table.frames {
+            if let FrameDelta::Full { locals, stack, .. } = f.delta() {
+                let nombra_nfe = stack
+                    .iter()
+                    .any(|t| t.display(&c).contains("ArithmeticException"));
+                if !nombra_nfe {
+                    continue;
+                }
+                visto = true;
+                assert_eq!(
+                    locals.len(),
+                    2,
+                    "el frame del handler declara {} locales: {:?}",
+                    locals.len(),
+                    locals.iter().map(|t| t.display(&c)).collect::<Vec<_>>()
+                );
+            }
+        }
+        assert!(visto, "no se encontro el frame del segundo handler");
+    }
 
     #[test]
     fn try_with_resources_passes_the_strict_verifier() {
@@ -11101,6 +11425,48 @@ mod tests {
             "el mensaje debe nombrar la regla: {}",
             e.message,
         );
+    }
+
+    // ---- cast de interseccion (§15.16) ----
+
+    /// Un `checkcast` **por cota**: tres cotas, tres chequeos. El ORDEN --las cotas posteriores en
+    /// orden de fuente y la primera al final-- se comprobo contra el javac real comparando el cuerpo
+    /// del metodo instruccion por instruccion, y lo custodia `java/InterTest.java`; aca se custodia
+    /// lo que se puede ver en los bytes, que es que no se pierda ninguno.
+    #[test]
+    fn an_intersection_cast_emits_one_checkcast_per_bound() {
+        let (code, _) = code_of(
+            "interface P { int p(); } interface Q { int q(); } interface R { int r(); }              class U { static int f(Object o) { P x = (P & Q & R) o; return x.p(); } }",
+            "U",
+            "f",
+        );
+        let checkcasts = code.iter().filter(|&&b| b == 0xc0).count();
+        assert_eq!(checkcasts, 3, "un checkcast por cota; salieron {checkcasts}: {code:02x?}");
+    }
+
+    /// El idiom `(Runnable & Serializable) () -> {}` necesita `altMetafactory`, que esta fuera de
+    /// alcance, y se dice asi -- no con un error de sintaxis, que es lo que salia antes porque un
+    /// lambda no lo parsea `unary`.
+    #[test]
+    fn an_intersection_cast_on_a_lambda_says_what_is_missing() {
+        let e = crate::javac::compile(
+            "import java.io.Serializable; \
+             class U { static Runnable f() { return (Runnable & Serializable) () -> {}; } }",
+        )
+        .expect_err("altMetafactory esta fuera de alcance");
+        assert!(
+            e.message.contains("altMetafactory"),
+            "el mensaje debe nombrar lo que falta: {}",
+            e.message,
+        );
+    }
+
+    /// Y el control de que no se rompio la ambiguedad clasica: `(a & b) - c` **no** es un cast.
+    #[test]
+    fn a_bitwise_and_in_parens_is_not_an_intersection_cast() {
+        let classes =
+            compile_all("class U { static int f(int a, int b, int c) { return (a & b) - c; } }");
+        assert!(classes.iter().any(|(n, _)| n.ends_with("U")), "debe compilar");
     }
 
     // ---- APT fase 4: el mecanismo del Filer ----
