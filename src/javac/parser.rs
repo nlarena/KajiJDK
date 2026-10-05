@@ -2178,6 +2178,18 @@ impl Parser {
             self.reset(save);
             return Ok(None);
         };
+        // **Cast de intersección** (§15.16): `(A & B & C) e`. Se juntan las cotas de más acá y el
+        // armado queda más abajo, cuando ya se sabe que esto es un cast y no `(a & b) - c`.
+        let mut extra_bounds: Vec<Type> = Vec::new();
+        while self.at(TokenKind::Amp) {
+            self.bump();
+            let Ok(t) = self.parse_type() else {
+                self.pending_type_annos.truncate(annos_mark);
+                self.reset(save);
+                return Ok(None);
+            };
+            extra_bounds.push(t);
+        }
         if !self.at(TokenKind::RParen) {
             self.pending_type_annos.truncate(annos_mark);
             self.reset(save);
@@ -2194,7 +2206,44 @@ impl Parser {
         // Las anotaciones del tipo destino (`(@A T) e`, target 0x47) — se sacan **antes** de parsear el
         // operando, que puede tener sus propias (otro cast/`new` anidado).
         let type_annos = self.pending_type_annos.split_off(annos_mark);
-        let expr = self.unary()?;
+        // Con cotas de intersección el operando se intenta aparte: el idiom
+        // `(Runnable & Serializable) () -> {}` no lo parsea `unary` —un lambda no es un unario— y el
+        // error que sale de ahí habla de sintaxis. Lo que pasa de verdad es que esa forma compila con
+        // `LambdaMetafactory.altMetafactory`, que está **fuera de alcance** (necesita serialización;
+        // ver `invokedynamic-ruta.md`), y conviene decir eso.
+        let expr = if extra_bounds.is_empty() {
+            self.unary()?
+        } else {
+            match self.unary() {
+                Ok(e) if !matches!(e.kind, ExprKind::Lambda { .. } | ExprKind::MethodRef { .. }) => e,
+                _ => {
+                    return Err(self.error(
+                        "un cast de intersección sobre un lambda o una referencia a método                          (necesita `LambdaMetafactory.altMetafactory`, fuera de alcance)",
+                    ))
+                }
+            }
+        };
+        // Un cast de intersección se arma como una **cadena de casts comunes**, y así ninguna pasada
+        // de más abajo necesita saber que existe: el tipo estático del conjunto es su **primera**
+        // cota (§4.9), que queda siendo la del cast de afuera.
+        //
+        // El orden sale medido contra el `javac` real: para `(P & Q & R) o` emite
+        // `checkcast Q; checkcast R; checkcast P` —las cotas posteriores en orden de fuente, y la
+        // primera al final—, que es exactamente `(P)((R)((Q) o))`.
+        if !extra_bounds.is_empty() {
+            // Un lambda o una referencia a método con `& Serializable` es el idiom que compila con
+            // `LambdaMetafactory.altMetafactory`, que está **fuera de alcance** (necesita
+            // serialización; ver `invokedynamic-ruta.md`). Se dice así en vez de armar una cadena
+            // que casteara el lambda a un tipo que no es funcional.
+            let mut inner = expr;
+            for t in extra_bounds {
+                inner = Expr::new(cast_pos, ExprKind::Cast { ty: t, expr: Box::new(inner) });
+            }
+            return Ok(Some(
+                Expr::new(cast_pos, ExprKind::Cast { ty, expr: Box::new(inner) })
+                    .with_type_annos(type_annos),
+            ));
+        }
         Ok(Some(
             Expr::new(cast_pos, ExprKind::Cast { ty, expr: Box::new(expr) }).with_type_annos(type_annos),
         ))

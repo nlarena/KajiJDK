@@ -501,6 +501,109 @@ cero diferencias** (release contra release). Ni el `javac` real ni nosotros pone
   desugar—. Corta en el emisor con su diagnóstico. En un `switch` **sí** funciona, porque ahí la
   variable se declara con su inicializador y la re-atribución la infiere
 
+### Hito B10 · Cast de intersección 🟣 — ✅ hecho (2026-10-03)
+
+> `(A & B) e` (§15.16). La **cota** de intersección de un parámetro de tipo (`<T extends A & B>`) ya
+> andaba; lo que faltaba era el cast.
+
+**Se baja a una cadena de casts comunes**, así que ninguna pasada de más abajo necesita saber que
+existe: el tipo estático del conjunto es su **primera** cota (§4.9), que queda siendo la del cast de
+afuera. El orden salió **medido** contra el `javac` real, no deducido: para `(P & Q & R) o` emite
+`checkcast Q; checkcast R; checkcast P` —las cotas posteriores en orden de fuente, y la primera al
+final—, o sea exactamente `(P)((R)((Q) o))`.
+
+**Y el cuerpo del método sale idéntico al del real**, instrucción por instrucción, con dos y con tres
+cotas. Es el primero de estos hitos donde la emisión coincide **exacto** y no sólo en comportamiento.
+
+**Dos cosas quedaron fuera, las dos con diagnóstico y no en silencio:**
+
+- `(Runnable & Serializable) () -> {}` —el idiom serializable— compila con
+  `LambdaMetafactory.altMetafactory`, que está **fuera de alcance** (ver `invokedynamic-ruta.md`). El
+  mensaje lo nombra; antes salía un error de sintaxis, porque un lambda no lo parsea `unary`.
+- **Llamar a un miembro de una cota que no es la primera** (`((A & B) o).b()`) no resuelve. El tipo
+  estático de la cadena es `A`, y resolver `b` pediría mantener el tipo intersección en la
+  atribución. `RType::Intersection` **existe** en el sistema de tipos, pero `symbol::erased_id` lo
+  colapsa a su primer miembro, así que la resolución de miembros tampoco lo mira hoy —vale para las
+  intersecciones que salen de un `lub`, no sólo para este cast—.
+
+**La ambigüedad clásica sigue intacta**: `(a & b) - c` **no** es un cast, y lo custodia su propio
+test. La guarda que lo decide es la misma de siempre —qué token sigue al `)`—, que ya existía.
+
+**Verificación.** [`java/InterTest.java`](../java/InterTest.java), 5 valores, los tres caminos
+coinciden; `falla` es la que importa, porque comprueba que el cast lanza `ClassCastException` cuando
+el objeto implementa **la primera** cota pero no las demás. Suite: 809 pasan, 1 falla —y esa una es
+ajena a esto, ver abajo—.
+
+### Hito B11 · `T[]::new` 🟣 — ✅ hecho (2026-10-03)
+
+> La referencia a **constructor de arreglo**. Las otras formas de referencia a método
+> (`String::length`, `System::currentTimeMillis`, `Object::new`, `String::startsWith`) ya andaban
+> todas; faltaba ésta.
+
+**Por qué no entraba por donde entran las demás.** `lower_method_ref` busca un método o constructor
+**real** al que apuntar con un `MethodHandle`, y una referencia a constructor de arreglo no tiene
+ninguno. El `javac` real tampoco lo tiene: sintetiza un `lambda$f$0(int)[I` con un `newarray` adentro
+y lo apunta con `REF_invokeStatic`. O sea que `T[]::new` **es** el lambda `$n -> new T[$n]`
+(§15.13.3), y eso es lo que se escribe —de ahí lo baja la maquinaria de lambdas, que ya sintetiza el
+método y arma el `invokedynamic`—. Con más de una dimensión se crea **sólo la primera**:
+`int[][]::new` es `$n -> new int[$n][]`.
+
+**La reescritura va en la atribución, no en el desugar**, y eso lo decidió una medición. Primero la
+puse en el desugar, donde se baja todo el resto: funcionaba con un objetivo escrito
+(`IntFunction<int[]> g = int[]::new`) y **no** donde el objetivo se infiere
+(`c.toArray(String[]::new)`), porque el bajado de lambdas corre *durante* el desugar y necesita los
+nodos ya decorados —tipos, bindings, slots—, que una lambda sintetizada ahí no tiene. El control que
+lo mostró: el lambda **escrito a mano** en esa misma posición ya compilaba. Reescribiendo antes de
+atribuir, la atribución la decora como a cualquier otra.
+
+**Un detalle que vale como señal.** `java/util/Collection.java` **documenta** el idiom en un
+comentario —*"It exists so `c.toArray(String[]::new)` can be written"*— y era la única mención de
+`[]::new` en toda la biblioteca: estaba escrito como intención y no se podía escribir. Ahora compila
+y corre.
+
+**Verificación.** Cuatro formas —primitivo, referencia, dos dimensiones, y el valor por defecto de
+los elementos— dan `47 201 5007 0` en los tres caminos, más el idiom de `Collection` corriendo de
+punta a punta.
+
+### Hito B12 · `new C<>() { }` — el diamante de una anónima 🟣 — ✅ hecho (2026-10-04)
+
+> §15.9.3: con cuerpo de clase anónima el diamante es legal desde Java 9, y sus argumentos se
+> infieren del **tipo objetivo**.
+
+**Lo difícil no era inferir sino dónde mirar, y me equivoqué dos veces antes de acertar.** El
+hoisting de la anónima corre en `enter`, antes de la atribución, y deja `$N extends C<>` con la lista
+de argumentos vacía. El diagnóstico inicial —que hacía falta diferir ese hoisting o hacer el
+supertipo *late-bound*— resultó falso, y lo desarmaron tres mediciones:
+
+- **El supertipo resuelto no es lo que mira el chequeo.** Se probó ponerlo **crudo** y después con
+  sus argumentos resueltos: `List<String> l = new ArrayList<>() { }` siguió fallando igual en los dos.
+- **Lo que mira es el `extends` sintáctico**, y lo delató el control: `new ArrayList<String>() { }`
+  con el mismo objetivo **sí** anda, y la única diferencia es que los argumentos están escritos.
+- **La sonda original estaba contaminada**: tenía diamante *más* un inicializador de instancia.
+  Separados, el inicializador no tenía nada que ver.
+
+**El arreglo.** `make_anon` —que ya fijaba el grafo del supertipo explícitamente— reescribe el
+`extends` con los argumentos del diamante antes de registrar la anónima. Y los argumentos se
+**copian del objetivo** en vez de convertirse desde el `RType` inferido: un `Type` necesita un
+**nombre** que resuelva en el alcance de la anónima, y el del objetivo ya lo tiene porque está
+escrito en la misma unidad. `infer_diamond` —la misma que usa el diamante sin cuerpo— se usa sólo
+para saber **qué** argumento va en cada posición, que es justo lo que no se puede hacer a ojo cuando
+el objetivo es `List<String>` y la base es `ArrayList<E>`.
+
+**El atajo que no se tomó**: tipar la expresión como el supertipo inferido en vez de como `$N`.
+Habría sido mucho más corto y cubriría todas las posiciones, pero rompe
+`new C<T>() { int extra() { … } }.extra()`, que **ya andaba** —se midió antes de descartarlo—.
+
+**Verificación.** [`java/AnonDiaTest.java`](../java/AnonDiaTest.java), 5 valores, los tres caminos
+coinciden: objetivo de otra base, inicializador de instancia que llena la lista dentro de la anónima,
+objetivo de la misma base, dos parámetros de tipo con `HashMap<>`, y el miembro del cuerpo llamado
+sobre la expresión. Suite: 1541 pasan, 29 fallan —las 29 preexistentes, ninguna de `javac::`—.
+
+- [ ] **Lo que queda:** el objetivo tiene que estar disponible en `enter`, o sea cuando el `new` es el
+  **inicializador de un local**. En posición de argumento o de `return` corta con el mismo error que
+  antes. Cubrirlas pide lo que este hito descartó por innecesario y vuelve a ser necesario ahí:
+  diferir el hoisting a después de la atribución, o un supertipo *late-bound*
+
 ---
 
 ## FASE C — Las bibliotecas (escritas en Java, compiladas por tu `javac`)

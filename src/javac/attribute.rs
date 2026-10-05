@@ -288,6 +288,27 @@ impl Env<'_> {
             self.next_slot = scope.entry_slot; // los slots del bloque quedan libres
         }
     }
+    /// Cierra el ámbito **conservando** los nombres de `keep`: su entrada se muda al ámbito de afuera
+    /// con el **mismo slot**, y `next_slot` no baja por debajo de ellos.
+    ///
+    /// Es lo que separa las dos cosas que el ámbito del `if` tenía juntas (finding #562): la **vida del
+    /// slot** --- que se libera para que el próximo `if` lo reuse, como numera javac --- y la
+    /// **visibilidad del nombre**, que la JLS extiende más allá del `if` cuando la condición queda
+    /// definitivamente decidida (§6.3.1). Un nombre que sigue visible no puede ceder su slot, así que
+    /// las dos salen del mismo dato.
+    fn pop_keeping(&mut self, keep: &[String]) {
+        let Some(scope) = self.locals.pop() else { return };
+        let mut piso = scope.entry_slot;
+        for name in keep {
+            if let Some((ty, slot)) = scope.vars.get(name).cloned() {
+                piso = piso.max(slot + slot_width(&ty));
+                if let Some(afuera) = self.locals.last_mut() {
+                    afuera.vars.insert(name.clone(), (ty, slot));
+                }
+            }
+        }
+        self.next_slot = piso;
+    }
     /// Declara un local y le asigna su **slot** (2 para `long`/`double`, JVMS §2.6.1).
     fn define(&mut self, name: &str, ty: RType) -> u16 {
         let slot = self.next_slot;
@@ -572,7 +593,21 @@ fn attrib_stmt(env: &mut Env, stmt: &mut Stmt) {
             if let Some(e) = els {
                 attrib_stmt(env, e);
             }
-            env.pop();
+            // **El idiom de guarda** (finding #562): en `if (!(o instanceof T t)) return …;` la variable
+            // sigue en alcance **después** del `if`, porque ahí la condición ya quedó definitivamente
+            // decidida (§6.3.1) — y es una de las formas más usadas del pattern matching. Sobreviven las
+            // que la condición liga cuando es **falsa**, y sólo si el `then` no puede completar
+            // normalmente; su slot se conserva con ellas.
+            //
+            // **Con `else` no sobrevive ninguna, y es correcto:** para que algo estuviera en alcance
+            // después, las dos ramas tendrían que no completar normalmente — y entonces no hay "después"
+            // al que llegar. Dentro de cada rama el nombre ya se ve, por este mismo ámbito.
+            let keep = if els.is_none() && !completa_normalmente(then) {
+                pattern_vars_si_falsa(cond)
+            } else {
+                Vec::new()
+            };
+            env.pop_keeping(&keep);
             None
         }
         StmtKind::While { cond, body } => {
@@ -1011,8 +1046,60 @@ fn is_poly_arg(kind: &ExprKind) -> bool {
 ///
 /// El target **no** se propaga hacia adentro salvo por el ternario, cuyas dos ramas están en el
 /// mismo contexto que el todo (§15.25).
+/// `T[]::new` → `$n -> new T[$n]`. Con más de una dimensión crea **sólo la primera**
+/// (`int[][]::new` es `$n -> new int[$n][]`, §15.13.3), que es lo que dice la spec y lo que emite el
+/// real. No toca nada si no es una referencia a constructor de arreglo.
+///
+/// El nombre del parámetro es fijo: vive en el alcance de su propia lambda, así que no choca con
+/// nada, y `$` no es un identificador que un programa pueda escribir.
+fn array_ctor_ref_to_lambda(expr: &mut Expr) {
+    let ExprKind::MethodRef { qualifier, name, .. } = &expr.kind else { return };
+    if name != "new" {
+        return;
+    }
+    let MethodRefQualifier::Type(ty) = qualifier.as_ref() else { return };
+    if !matches!(ty, Type::Array(_)) {
+        return;
+    }
+    let mut elem = ty.clone();
+    let mut depth = 0usize;
+    while let Type::Array(inner) = elem {
+        elem = *inner;
+        depth += 1;
+    }
+    let param = "$n".to_string();
+    let mut dims: Vec<Option<Expr>> = vec![Some(Expr::new(expr.pos, ExprKind::Name(param.clone())))];
+    dims.extend(std::iter::repeat_n(None, depth - 1));
+    let cuerpo = Expr::new(expr.pos, ExprKind::NewArray { elem, dims, init: None });
+    expr.kind = ExprKind::Lambda {
+        params: vec![super::ast::Param {
+            annotations: Vec::new(),
+            ty: Type::Var,
+            name: param,
+            varargs: false,
+            is_final: false,
+            type_annos: Vec::new(),
+        }],
+        body: Box::new(super::ast::LambdaBody::Expr(Box::new(cuerpo))),
+    };
+}
+
 fn attrib_expr_to(env: &mut Env, expr: &mut Expr, target: Option<&RType>) -> RType {
     let pos = expr.pos;
+    // `T[]::new` se reescribe al **lambda equivalente** `$n -> new T[$n]` (§15.13.3) y sigue por el
+    // camino de la lambda, que ya anda de punta a punta.
+    //
+    // **Por qué acá y no en el desugar**, que es donde se baja todo lo demás: el bajado de lambdas
+    // corre *durante* el desugar y necesita los nodos ya decorados —tipos, bindings, slots—. Una
+    // lambda sintetizada ahí no los tiene, y en la posición donde el objetivo se **infiere**
+    // (`c.toArray(String[]::new)`) ni siquiera tenía tipo: fallaba con *"no soporta una expresión
+    // lambda"*. Reescribiendo antes de atribuir, la atribución la decora como a cualquier lambda
+    // escrita a mano —que en esa misma posición ya funcionaba, y fue el control que lo mostró—.
+    //
+    // No tiene `MethodHandle` propio al que apuntar, y por eso nunca podía entrar por
+    // `lower_method_ref`: el `javac` real tampoco lo referencia, sintetiza un `lambda$f$0(int)[I`
+    // con un `newarray` adentro y lo apunta con `REF_invokeStatic`.
+    array_ctor_ref_to_lambda(expr);
     // `super(...)` / `this(...)`: la **invocación explícita de constructor** (§8.8.7.1). El parser
     // la codifica como una llamada cuyo nombre es la keyword — no puede chocar con un método real,
     // porque `super` y `this` no son identificadores válidos. Se resuelve antes del match general
@@ -3235,6 +3322,60 @@ pub(crate) fn enclosing_class(table: &SymbolTable, cid: SymbolId) -> Option<Symb
 /// implementa, y por eso `class Impl implements Node { ... return ELEMENT_NODE; }` compila. Antes
 /// esto seguía sólo la cadena de superclases, así que ninguna constante de interfaz resolvía y el
 /// síntoma era un "no se encuentra el símbolo" sobre un nombre que estaba a la vista —y que el
+/// Las variables de patrón que la condición deja **ligadas cuando vale falso** (§6.3.1).
+///
+/// Es la mitad del "false set" de la spec que hace falta para el idiom de guarda. Las reglas:
+/// `e instanceof T v` liga `v` sólo cuando es **verdadera** (así que su false-set es vacío); un `!`
+/// intercambia los dos conjuntos; un `&&` sólo acumula del lado verdadero y un `||` sólo del falso ---
+/// en el otro sentido no se sabe qué lado decidió, y suponerlo aceptaría programas que el javac real
+/// rechaza.
+///
+/// La **deconstrucción** queda afuera a propósito: el desugar la baja a sentencias antes del atributado
+/// (hoistea el operando y declara las variables de componente afuera), así que por este camino no llega.
+/// Si alguna vez llegara, devolver vacío es lo conservador: deja el comportamiento de hoy.
+fn pattern_vars_si_falsa(cond: &Expr) -> Vec<String> {
+    ligadas_cuando(cond, false)
+}
+
+/// El conjunto de §6.3.1 para el valor `valor` de la condición.
+fn ligadas_cuando(e: &Expr, valor: bool) -> Vec<String> {
+    match &e.kind {
+        // `e instanceof T v` liga `v` cuando el test da verdadero, y nada cuando da falso.
+        ExprKind::InstanceOf { binding, .. } => match (valor, binding) {
+            (true, Some(n)) => vec![n.clone()],
+            _ => Vec::new(),
+        },
+        ExprKind::Unary { op: UnOp::Not, expr, .. } => ligadas_cuando(expr, !valor),
+        ExprKind::Binary { op: BinOp::And, lhs, rhs } if valor => {
+            let mut v = ligadas_cuando(lhs, true);
+            v.extend(ligadas_cuando(rhs, true));
+            v
+        }
+        ExprKind::Binary { op: BinOp::Or, lhs, rhs } if !valor => {
+            let mut v = ligadas_cuando(lhs, false);
+            v.extend(ligadas_cuando(rhs, false));
+            v
+        }
+        _ => Vec::new(),
+    }
+}
+
+/// ¿Puede el control **completar normalmente** esta sentencia (§14.22)?
+///
+/// Conservador y sintáctico: contesta `false` sólo cuando se puede afirmar. No se reusa `flow.rs`, que
+/// es quien sabe esto de verdad, porque **corre después del atributado** (ver `javac.rs`) y acá todavía
+/// no está. Equivocarse hacia `true` sólo deja el comportamiento anterior --- rechazar un programa que
+/// el real acepta ---; equivocarse hacia `false` aceptaría uno que el real rechaza, que es el error que
+/// cuesta, así que todo lo que no se reconoce cae en `true`.
+fn completa_normalmente(s: &Stmt) -> bool {
+    match &s.kind {
+        StmtKind::Return(_) | StmtKind::Throw(_) | StmtKind::Break(_) | StmtKind::Continue(_) => false,
+        // Un bloque no completa si su última sentencia no completa. Un bloque **vacío** sí completa.
+        StmtKind::Block(b) => b.0.last().is_none_or(completa_normalmente),
+        _ => true,
+    }
+}
+
 /// *did-you-mean* de al lado sí sabía enumerar, porque ese sí recorría las interfaces—. Ver #475.
 ///
 /// El orden es el del JLS y no es cosmético: primero lo declarado en la clase, después la cadena de

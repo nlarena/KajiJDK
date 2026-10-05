@@ -3064,6 +3064,9 @@ const ALOAD_0: u8 = 0x2a;
 const POP: u8 = 0x57;
 const POP2: u8 = 0x58;
 const IINC: u8 = 0x84; // incrementa un local `int` **sin tocar la pila**
+/// El prefijo `wide` (§6.5): el que sigue lleva su índice de local en **dos** bytes en vez de uno. Hace
+/// falta desde el slot 256, y no tenerlo era una miscompilación silenciosa --- ver [`Emit::load`].
+const WIDE: u8 = 0xc4;
 const DUP: u8 = 0x59;
 const DUP_X1: u8 = 0x5a;
 const DUP_X2: u8 = 0x5b;
@@ -7193,13 +7196,27 @@ impl<'a> Emitter<'a> {
         self.push(VType::Float);
     }
 
+    /// Carga el local `slot` de categoría `cat`.
+    ///
+    /// **Desde el slot 256 va con el prefijo `wide`** (§6.5), y no tenerlo era una miscompilación
+    /// silenciosa: `self.op(slot as u8)` truncaba el índice, así que el slot 256 se leía y escribía como
+    /// el **0**, el 257 como el 1, y así. Un método con más de 256 locales pisaba sus propios parámetros
+    /// y contestaba mal --- `WdWide.deep` daba 5953 donde el javac real da 5955 --- y encima el `.class`
+    /// no cargaba en una JVM real: el `StackMapTable` declaraba un `int` en el 256 que ninguna
+    /// instrucción escribía nunca (`VerifyError: Instruction type does not match stack map`). El `iinc`
+    /// no estaba afectado porque sus dos sitios ya se guardaban con `slot <= 255` y caían a la forma
+    /// general, que pasa por acá.
     fn load(&mut self, cat: u8, slot: u16) {
         let slot = self.rmap(slot);
         if slot <= 3 {
             self.op(ILOAD_0 + cat * 4 + slot as u8);
-        } else {
+        } else if slot <= u8::MAX as u16 {
             self.op(ILOAD + cat);
             self.op(slot as u8);
+        } else {
+            self.op(WIDE);
+            self.op(ILOAD + cat);
+            self.u16(slot);
         }
         let w = stack_width(cat);
         // El tipo exacto lo sabe el slot; la categoría es el respaldo si nunca se anotó.
@@ -7213,13 +7230,19 @@ impl<'a> Emitter<'a> {
         self.use_slot(slot, w);
     }
 
+    /// Guarda en el local `slot`. Misma regla del prefijo `wide` que [`Emit::load`], y por el mismo
+    /// motivo.
     fn store(&mut self, cat: u8, slot: u16) {
         let slot = self.rmap(slot);
         if slot <= 3 {
             self.op(ISTORE_0 + cat * 4 + slot as u8);
-        } else {
+        } else if slot <= u8::MAX as u16 {
             self.op(ISTORE + cat);
             self.op(slot as u8);
+        } else {
+            self.op(WIDE);
+            self.op(ISTORE + cat);
+            self.u16(slot);
         }
         let w = stack_width(cat);
         self.pop(1);
@@ -8472,6 +8495,42 @@ mod tests {
     }
 
     // ---- try-with-resources (§14.20.3) ----
+
+    /// #562 --- la variable de un patrón sobrevive al `if` de una **guarda invertida**.
+    ///
+    /// `if (!(o instanceof String s)) return -1; return s.length();` es el *idiom de guarda*, y es una
+    /// de las formas más usadas del pattern matching. Lo rechazábamos: `attrib_stmt` abre un ámbito
+    /// alrededor del `if` para liberar el slot al salir --- como numera javac --- y eso se llevaba
+    /// también la **visibilidad del nombre**, que la JLS extiende más allá del `if` cuando la condición
+    /// quedó definitivamente decidida (§6.3.1).
+    ///
+    /// Se comprueba **las dos mitades a la vez**, porque arreglar una rompiendo la otra es el riesgo:
+    /// que la guarda compile, y que dos `if` disjuntos sigan **reusando el slot** (un solo `astore_1`
+    /// repetido, no 1 y 2). Las dos coinciden con el javac real.
+    #[test]
+    fn a_pattern_variable_survives_a_guard_if() {
+        // La guarda, con bloque y sin bloque.
+        let guarda = "public class M {             static int f(Object o) { if (!(o instanceof String s)) { return -1; } return s.length(); }             static int g(Object o) { if (!(o instanceof String s)) return -1; return s.length(); } }";
+        verify_all(guarda, "M");
+
+        // Y el ámbito sigue haciendo su trabajo: dos `if` disjuntos comparten el slot.
+        let dos = "public class M { static int f(Object o) {             if (o instanceof String s) { return s.length(); }             if (o instanceof String t) { return t.length() + 1; }             return -1; } }";
+        verify_all(dos, "M");
+        let c = compiled_class(dos, "M");
+        let m = c.methods.iter().find(|m| c.utf8(m.name_index) == Some("f")).expect("f");
+        let code = c.member_code(m).expect("con Code").code;
+        // `astore_1` es 0x4c. Los dos patterns tienen que usar **el mismo** slot.
+        assert_eq!(
+            code.iter().filter(|&&b| b == 0x4c).count(),
+            2,
+            "los dos `instanceof` tienen que guardar en el slot 1, no en 1 y 2"
+        );
+
+        // Con `else` no sobrevive nada, y es correcto: para que algo estuviera en alcance después, las
+        // dos ramas tendrían que no completar normalmente, y entonces no hay "después".
+        let con_else = "public class M { static int f(Object o) {             if (!(o instanceof String s)) { return -1; } else { return s.length(); } } }";
+        verify_all(con_else, "M");
+    }
 
     /// #560 --- un `default` (y un valor de uso) que **nombra una constante** se emite por su valor.
     ///
@@ -11467,6 +11526,88 @@ mod tests {
         let classes =
             compile_all("class U { static int f(int a, int b, int c) { return (a & b) - c; } }");
         assert!(classes.iter().any(|(n, _)| n.ends_with("U")), "debe compilar");
+    }
+
+    // ---- B11: `T[]::new` ----
+
+    /// La referencia a constructor de arreglo compila, y en **las dos posiciones** que importan: con
+    /// el objetivo escrito y con el objetivo inferido desde el parametro. La segunda es la que
+    /// decidio que la reescritura vaya en la atribucion y no en el desugar: ahi funcionaba la
+    /// primera y no la segunda.
+    #[test]
+    fn an_array_constructor_ref_compiles_with_the_target_written_or_inferred() {
+        let classes = compile_all(
+            "import java.util.function.IntFunction; \
+             class U { \
+                 static int[] escrito(int n) { IntFunction<int[]> g = int[]::new; return g.apply(n); } \
+                 static <T> T[] inferido(java.util.List<T> l, IntFunction<T[]> g) { return g.apply(0); } \
+                 static String[] desde_parametro(java.util.List<String> l) { \
+                     return U.inferido(l, String[]::new); \
+                 } \
+                 static int[][] dos_dim(int n) { IntFunction<int[][]> g = int[][]::new; return g.apply(n); } \
+             }",
+        );
+        assert!(
+            classes.iter().any(|(n, _)| n.ends_with("U")),
+            "la clase U debe emitirse: {:?}",
+            classes.iter().map(|(n, _)| n).collect::<Vec<_>>(),
+        );
+    }
+
+    /// Y el bajado es el del lambda: la clase lleva un **metodo sintetico** `lambda$…` con el
+    /// `newarray` adentro, que es lo que el `invokedynamic` apunta. Sin la reescritura no hay ninguno
+    /// --la referencia no se baja-- y el emisor corta.
+    #[test]
+    fn an_array_constructor_ref_lowers_to_a_synthetic_lambda() {
+        let (code, _) = code_of(
+            "import java.util.function.IntFunction; \
+             class U { static int[] f(int n) { IntFunction<int[]> g = int[]::new; return g.apply(n); } }",
+            "U",
+            "f",
+        );
+        // `invokedynamic` es 0xba: es como se crea la instancia de la interfaz funcional.
+        assert!(
+            code.contains(&0xba),
+            "el cuerpo debe traer un invokedynamic: {code:02x?}"
+        );
+    }
+
+    // ---- B12: el diamante de una anonima ----
+
+    /// `new C<>() { }` con un objetivo de **otra base** (§15.9.3). Es el caso que fallaba: con la
+    /// misma base (`ArrayList<String> l = new ArrayList<>() { }`) ya andaba, y por eso el control de
+    /// abajo mide las dos.
+    #[test]
+    fn an_anonymous_diamond_infers_its_arguments_from_the_target() {
+        let classes = compile_all(
+            "import java.util.ArrayList; import java.util.List; import java.util.Map; \
+             import java.util.HashMap; \
+             class U { \
+                 static List<String> otra_base() { List<String> l = new ArrayList<>() { }; return l; } \
+                 static ArrayList<String> misma_base() { ArrayList<String> l = new ArrayList<>() { }; return l; } \
+                 static Iterable<String> interfaz() { Iterable<String> i = new ArrayList<>() { }; return i; } \
+                 static Map<String, Integer> dos_params() { Map<String, Integer> m = new HashMap<>() { }; return m; } \
+             }",
+        );
+        assert!(
+            classes.iter().any(|(n, _)| n.ends_with("U")),
+            "la clase U debe emitirse: {:?}",
+            classes.iter().map(|(n, _)| n).collect::<Vec<_>>(),
+        );
+    }
+
+    /// **El control de lo que no se rompio.** Llamar a un miembro declarado en el CUERPO de una
+    /// anonima andaba antes de B12, y es lo que descarto el atajo de tipar la expresion como el
+    /// supertipo inferido --que habria sido mas corto y habria cubierto mas posiciones--.
+    #[test]
+    fn a_member_declared_in_the_anonymous_body_is_still_callable() {
+        let r = run_int(
+            "class U { static int f() { return new Object() { int extra() { return 7; } }.extra(); } }",
+            "U",
+            "f",
+            vec![],
+        );
+        assert_eq!(r, 7, "el miembro del cuerpo debe seguir llamandose");
     }
 
     // ---- APT fase 4: el mecanismo del Filer ----

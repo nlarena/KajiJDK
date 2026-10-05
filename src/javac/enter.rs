@@ -2230,7 +2230,7 @@ fn member_enter_type(table: &mut SymbolTable, errors: &mut Vec<Error>, class: &C
 pub fn hoist_anonymous(unit: &mut CompilationUnit, table: &mut SymbolTable, errors: &mut Vec<Error>) {
     let base = unit.package.as_deref().unwrap_or("").to_string();
     {
-        let mut h = Hoister { table: &mut *table, errors, campo_estatico: false };
+        let mut h = Hoister { table: &mut *table, errors, campo_estatico: false, objetivo: None };
         for class in &mut unit.types {
             h.class(class, &base);
         }
@@ -2245,6 +2245,10 @@ pub fn hoist_anonymous(unit: &mut CompilationUnit, table: &mut SymbolTable, erro
 struct Hoister<'a> {
     table: &'a mut SymbolTable,
     errors: &'a mut Vec<Error>,
+    /// El tipo **declarado** del local que se está inicializando, si el `new` que se recorre es su
+    /// inicializador. Es el *target* del §15.9.3 para el diamante de una anónima, y acá —antes de la
+    /// atribución— es la única forma de tenerlo: viene del AST, no de la inferencia.
+    objetivo: Option<Type>,
     /// La anónima que se está bajando sale del inicializador de un campo **estático**, o sea que no
     /// tiene instancia envolvente y hay que marcarla `static` (finding #499). Solo lo enciende ese
     /// camino: por un cuerpo de método sigue valiendo `false`, como siempre.
@@ -2342,8 +2346,15 @@ impl Hoister<'_> {
         decls: &mut Vec<Stmt>,
     ) {
         match &mut stmt.kind {
-            StmtKind::LocalVar { init: Some(e), .. }
-            | StmtKind::Return(Some(e))
+            // El local se separa del resto **solo** para dejar su tipo declarado como objetivo del
+            // diamante de una anónima que lo inicialice. Se restaura al salir: una anónima anidada
+            // más adentro no hereda este objetivo.
+            StmtKind::LocalVar { ty, init: Some(e), .. } => {
+                let previo = std::mem::replace(&mut self.objetivo, Some(ty.clone()));
+                self.expr(e, owner, scope, binary, fqn, counter, decls);
+                self.objetivo = previo;
+            }
+            StmtKind::Return(Some(e))
             | StmtKind::Expr(e)
             | StmtKind::Throw(e)
             | StmtKind::Yield(e) => self.expr(e, owner, scope, binary, fqn, counter, decls),
@@ -2723,6 +2734,17 @@ fn sustituir_args_escritos(
             }
         }
 
+        // **El diamante de una anónima** (§15.9.3): sus argumentos se infieren del objetivo. Sin
+        // esto el supertipo queda con la lista vacía y `List<String> l = new ArrayList<>() { }` no
+        // tipa —medido también con el supertipo **crudo**, que tampoco alcanza: la cadena de
+        // supertipos tiene que llevar los argumentos para llegar a `List<String>`—.
+        //
+        // Se usa la **misma** `infer_diamond` que el diamante sin cuerpo, que ya resuelve el caso
+        // difícil: mapear `List<String>` a los parámetros de `ArrayList<E>`. Si no hay objetivo o la
+        // inferencia no da nada, se deja lo de antes y el error sale como hasta ahora —peor, pero no
+        // distinto—.
+        let inferido = self.extends_del_diamante(ty, ty_sym, scope);
+        let ty = &inferido.unwrap_or_else(|| ty.clone());
         let (extends, implements, super_rt, iface_rts) = if is_iface {
             (None, vec![ty.clone()], object, ty_sym.map(RType::Class).into_iter().collect())
         } else {
@@ -2806,6 +2828,55 @@ fn sustituir_args_escritos(
     }
 
     /// El símbolo al que resuelve un `Type` (clase del fuente o externo), o `None`.
+    /// El `extends` de una anónima cuyo `new` trae **diamante**, con los argumentos que el objetivo
+    /// implica (§15.9.3). `None` si no aplica: no es un diamante, no hay objetivo, el tipo no
+    /// resuelve, la inferencia no instanció todo, o algún argumento inferido no aparece escrito en el
+    /// objetivo.
+    ///
+    /// Los argumentos se **copian del objetivo** en vez de convertirse desde el `RType` inferido, y no
+    /// es una comodidad: un `Type` necesita un **nombre** que resuelva en el alcance de la anónima, y
+    /// el del objetivo ya lo tiene porque está escrito en la misma unidad. `infer_diamond` se usa
+    /// sólo para saber **qué** argumento va en cada posición —mapear `List<String>` a `ArrayList<E>`
+    /// es justo lo que no se puede hacer a ojo—.
+    fn extends_del_diamante(
+        &self,
+        ty: &Type,
+        ty_sym: Option<SymbolId>,
+        scope: ScopeId,
+    ) -> Option<Type> {
+        let Type::Parameterized { base: base_name, args } = ty else { return None };
+        if !args.is_empty() {
+            return None; // argumentos escritos: no hay nada que inferir
+        }
+        let base = ty_sym?;
+        let objetivo = self.objetivo.as_ref()?;
+        let Type::Parameterized { args: obj_args, .. } = objetivo else { return None };
+        if obj_args.is_empty() {
+            return None;
+        }
+        let target = resolve_rtype(self.table, scope, objetivo);
+        let vars = super::types::type_params_of(self.table, base);
+        if vars.is_empty() {
+            return None;
+        }
+        let subst = super::infer::infer_diamond(self.table, base, None, &[], Some(&target));
+        if subst.is_empty() {
+            return None;
+        }
+        // Cada argumento del objetivo, resuelto, para poder buscar por igualdad cuál corresponde.
+        let obj_resueltos: Vec<RTypeArg> =
+            obj_args.iter().map(|a| resolve_rtype_arg(self.table, scope, a)).collect();
+        let mut nuevos = Vec::with_capacity(vars.len());
+        for v in &vars {
+            let inferido = subst.get(v)?;
+            let i = obj_resueltos
+                .iter()
+                .position(|r| matches!(r, RTypeArg::Type(t) if t == inferido))?;
+            nuevos.push(obj_args[i].clone());
+        }
+        Some(Type::Parameterized { base: base_name.clone(), args: nuevos })
+    }
+
     fn type_symbol(&self, ty: &Type, scope: ScopeId) -> Option<SymbolId> {
         let name = match ty {
             Type::Class(n) | Type::Parameterized { base: n, .. } => n.as_str(),
