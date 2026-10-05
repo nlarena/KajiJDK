@@ -6426,6 +6426,55 @@ El `U` sale `Object`: falta la restricción que aporta el **cuerpo** de la lambd
 repro (`finding_307.java`, que no compila a propósito), y la prueba de la tanda escribe esos dos
 casos con una variable de tipo explícito, con el motivo en un comentario al lado.
 
+> **Medido el 2026-10-04: el reproductor sigue vivo, y el mecanismo NO es el que dice el párrafo de
+> arriba.** Nueve formas, y el discriminador es nítido --- **falla cuando no hay tipo objetivo**:
+>
+> | forma | nuestro |
+> |---|---|
+> | `Optional.of("p").map(x -> x.toUpperCase()).orElseThrow().length()` | **no compila** |
+> | lo mismo con cuerpo de bloque (`x -> { return …; }`) | **no compila** |
+> | lo mismo con una referencia a método (`String::toUpperCase`) | **no compila** |
+> | `map(x -> x.length())` encadenado con `.intValue()` | **no compila** |
+> | `flatMap(x -> Optional.of(x.toUpperCase()))` encadenado | **no compila** |
+> | a una `var` intermedia (`var o = …map(…); o.orElseThrow().length()`) | **no compila** |
+> | `map(x -> x.length())` devuelto como `int` | **no compila** (*tipo de retorno incompatible*) |
+> | con argumento de tipo explícito (`.<String>map(…)`) | compila |
+> | en contexto de **asignación** (`Optional<String> o = …map(…);`) | compila |
+>
+> **El mecanismo.** No es que la inferencia mire el cuerpo y le falte una restricción: **la lambda le
+> llega con `ty = Unresolved`**, medido instrumentando el bucle de `infer_call_nested`. Y llega así a
+> propósito: `reattribute_poly_args(…, diferir = true)` **difiere** toda lambda cuyo tipo de parámetro
+> nombra un parámetro de tipo *del propio método*, para no tipar su cuerpo contra un tipo a medio
+> inferir (es lo que arregló el #286). Entonces:
+>
+> 1. la inferencia corre con ese argumento en `Unresolved`, que no reduce nada;
+> 2. en `map`, la `U` aparece **sólo** en el retorno de la lambda, así que queda sin ninguna restricción
+>    y `resolve` la cierra en su cota: `Object`;
+> 3. `reattribute_deferred` después tipa el cuerpo **bien** --- `x` es `String` y `x.toUpperCase()` es
+>    `String` --- pero ya es tarde: el tipo de la llamada quedó fijado en `Optional<Object>`.
+>
+> Con tipo objetivo no pasa porque el `target` sí aporta la igualdad (`fresh_U = String`), y por eso las
+> dos últimas formas de la tabla compilan. El comentario de `infer.rs` que habla del "tipo
+> autorreferencial" (`Sup<U>` contra `Sup<fresh_U>`) es de **otro** caso --- una lambda que sí se
+> re-atribuyó --- y no de este.
+>
+> **El plan: una segunda ronda de inferencia (§18.5.2).** Después de que `reattribute_deferred` tipó los
+> cuerpos, juntar los pares `(tipo del cuerpo, retorno de la función freshado)` y volver a correr
+> `infer_call_nested` con esos pares como reducciones extra, y recién entonces sustituir el tipo de la
+> llamada. **El mecanismo ya existe**: el #558 agregó exactamente eso para las llamadas anidadas
+> (`nested_reduce`, los pares `(argumento, parámetro freshado)` que se reducen después de armar el
+> `BoundSet`); esto es la misma forma con otra fuente de pares.
+>
+> Dos cosas a cuidar cuando se haga: no regresar las dos formas que **ya** andan (las guía el `target`,
+> y una segunda ronda no debería cambiarlas), y que `flatMap` cierra bien --- su parámetro anida un
+> comodín dentro de otro (`Function<? super T, ? extends Optional<? extends U>>`), así que el par a
+> reducir es `Optional<String>` contra `Optional<? extends β>`.
+>
+> **No se tocó** porque los pares hay que armarlos donde está el AST de la lambda
+> (`attribute.rs`, el sitio que llama a la inferencia) y `infer_call_nested` necesita el parámetro
+> nuevo: `infer.rs` está libre, `src/javac/attribute.rs` tiene trabajo sin commitear de la otra sesión.
+> Es el **mismo bloqueo que el #562**.
+
 ### La equivocación que vale la pena contar
 
 `Random.from` **no funcionaba** cuando la escribí. El constructor público `Random(long)` llama a
@@ -17201,7 +17250,41 @@ reevaluable**: un local o `this` se reevaluan, cualquier otra cosa va a un tempo
 bajado **no** tiene el bug: hoistea el operando a un local sintetico antes del test, y por eso
 `java/IofTest.java` incluye `unaVez()`, que da 1.
 
-### #562 ⬜ -- el alcance de una variable de patron es EL `if`, no donde la condicion vale
+### #562 ⬜→✅ -- el alcance de una variable de patron es EL `if`, no donde la condicion vale
+
+> **Cerrado el 2026-10-04.** Se separaron las dos cosas que el ambito del `if` tenia juntas, que es lo
+> que esta ficha pedia:
+>
+> - **`Env::pop_keeping(keep)`** cierra el ambito pero muda los nombres de `keep` al de afuera **con su
+>   mismo slot**, y no baja `next_slot` por debajo de ellos. Un nombre que sigue visible no puede ceder
+>   su slot, asi que las dos mitades salen del mismo dato.
+> - **`pattern_vars_si_falsa(cond)`** es el *false set* de §6.3.1: `e instanceof T v` liga `v` solo cuando
+>   es verdadera, un `!` intercambia los conjuntos, un `&&` solo acumula del lado verdadero y un `||` del
+>   falso. En el otro sentido no se sabe que lado decidio, y suponerlo aceptaria programas que el real
+>   rechaza.
+> - **`completa_normalmente(stmt)`** es sintactico y conservador. **No se reusa `flow.rs`**, que es quien
+>   sabe esto de verdad, porque corre **despues** del atributado (`javac.rs`). Equivocarse hacia "si
+>   completa" solo deja el comportamiento anterior; hacia "no completa" aceptaria algo que el real
+>   rechaza, asi que todo lo no reconocido cae del lado seguro.
+>
+> **Con `else` no sobrevive ninguna, y es correcto**: para que algo estuviera en alcance despues, las dos
+> ramas tendrian que no completar normalmente --- y entonces no hay "despues" al que llegar.
+>
+> **Medido.** Las **siete** formas del alcance compilan (antes fallaban dos) y corriendolas juntas dan
+> **26**, el mismo valor que el JDK 25. Y lo que el ambito protegia sigue en pie: dos `if` disjuntos
+> comparten el slot (`astore_1` las dos veces), identico al javac real. Compuertas con este javac:
+> recompilacion **4822/4822**, suite **227 invocaciones, 0 rotas**, los 48 diferenciales de texto en su
+> linea base, `javac::` **813 passed, 0 failed**.
+>
+> Regresion: `codegen::tests::a_pattern_variable_survives_a_guard_if`, que comprueba **las dos mitades**
+> --- que la guarda compile y que el slot se siga reusando ---, porque arreglar una rompiendo la otra era
+> el riesgo. Validada con control negativo: con `attribute.rs` revertido, falla.
+>
+> **Donde quedo commiteado, que conviene saberlo para la arqueologia:** el cambio de `attribute.rs` entro
+> en **`466da583`** ("javac: T[]::new y el diamante de una anonima"), un commit de la otra sesion que lo
+> arrastro sin nombrarlo --- las dos sesiones tenian trabajo en el mismo archivo--. El test y este cierre
+> van aparte.
+
 
 **Severidad: media.** No emite nada mal: **rechaza** un programa que el `javac` real acepta.
 
@@ -17266,3 +17349,76 @@ que falla identico con el javac congelado, anterior a ese trabajo.
 > **No se toco todavia** porque `src/javac/attribute.rs` tiene trabajo sin commitear de la otra sesion
 > (una funcion nueva para `T[]::new`, ajena a esto): editarlo arrastraria su trabajo a medias a un commit
 > ajeno, y escribir un archivo que otro esta editando puede pisarselo.
+
+## Tanda 2026-10-04: los dos que arrastraba `bin/FROZEN.md` desde siempre
+
+`JcIc` y `WdWide` figuraban desde el refresco del 2026-08-30 como "las dos pruebas comparables que no
+coinciden, de siempre", sin ficha y sin causa. Son **dos bugs distintos del compilador**, los dos
+silenciosos y los dos con la clase rechazada por una JVM real. Ninguna compuerta los miraba: no son
+`*Test.java`, asi que la suite no los corre; se comparan a mano en cada recongelado.
+
+### #563 ⬜→✅ -- un local arriba del slot 255 pierde el prefijo `wide`
+
+> **Cerrado el 2026-10-04.** `load`/`store` hacian `self.op(slot as u8)`: el indice se **truncaba**, asi
+> que el slot 256 se leia y escribia como el **0**, el 257 como el 1, el 258 como el 2. Un metodo con mas
+> de 256 locales pisaba sus propios parametros.
+
+**Severidad: alta, y de las dos peores formas a la vez.** Contesta mal **en silencio** --sin error ni
+aviso-- y encima el `.class` **no carga** en una JVM real: el `StackMapTable` declara un `int` en el slot
+256 que ninguna instruccion escribe nunca.
+
+```
+nuestro:  istore        0        iload         0
+el JDK:   istore_w    256        iload_w     256
+```
+
+**Como se localizo:** diffeando los dos cuerpos de `WdWide.deep` (262 locales `int`) instruccion por
+instruccion. La primera divergencia es exactamente el par de arriba, en el acceso al slot 256.
+
+| `WdWide` | antes | ahora | JDK 25 |
+|---|---|---|---|
+| `deep(0)` … `deep(199)` en nuestra VM | 5953, 5767, 5581, 5395, -12647, -31061 | **5955, 5769, 5583, 5397, -12645, -31059** | identicos |
+| nuestro `.class` en la HotSpot | `VerifyError: Instruction type does not match stack map` (`locals[256]`) | **-3390500** | -3390500 |
+
+El **`iinc` no estaba afectado**: sus dos sitios ya se guardan con `slot <= 255` y caen a la forma
+general (leer-modificar-escribir), que pasa por `load`/`store`. Por eso alcanzo arreglar esos dos.
+
+**Radio: cero.** De las 6738 clases de la biblioteca, **ninguna** cambia: ningun metodo del arbol pasa de
+256 slots. Compuertas: recompilacion **4822/4822**, suite **228 invocaciones, 0 rotas**, texto en su linea
+base, `javac::` **817 passed, 0 failed**.
+
+Regresion: `codegen::tests::a_local_above_slot_255_uses_the_wide_prefix`. **Pide las dos formas**
+--`wide istore` y `wide iload`-- y no "alguna": el primer control negativo **paso cuando tenia que
+fallar**, porque desactivar solo el arreglo de `load` dejaba los `wide` de `store` y la asercion se
+conformaba. Un test que no distingue las dos mitades deja media regresion entrar. Con la version de
+ahora, desactivar cada mitad por separado lo hace fallar.
+
+### #564 ⬜ -- `invokespecial` sobre un metodo `private` de un *nestmate*
+
+**Severidad: alta.** La clase **no se puede cargar** en una JVM real, y acá contesta mal en silencio.
+
+```
+nuestro:  invokespecial JcIc$JcNest.hollow:(I)I
+el JDK:   invokevirtual JcIc$JcNest.hollow:(I)I
+```
+
+La HotSpot rechaza la clase entera: `VerifyError: Bad invokespecial instruction: current class isn't
+assignable to reference class`, en `JcIc.oneHollow` y en `JcIc.hiddenLoop`. Desde los *nestmates*
+(Java 11, JEP 181) un `private` de otro miembro del nido va por **`invokevirtual`** --- el chequeo de
+acceso del nido ocurre al resolver ---; `invokespecial` exige que la clase actual sea asignable a la del
+`methodref`, y `JcIc` no lo es respecto de `JcIc$JcNest`.
+
+**Nuestra VM lo tolera** y da **622298** donde el JDK da **624722**. La atribucion esta hecha con el cruce
+decisivo, no por inspeccion: el `.class` del **JDK** corrido por **nuestra VM** da 624722, asi que la VM
+esta bien y el que emite mal es nuestro javac.
+
+**Donde:** `codegen.rs` decide el opcode por el **modificador** nada mas (`is_private`), sin mirar si la
+clase que declara el metodo es la actual, una superclase o un *nestmate*.
+
+**Ojo: son los dos lados, como el #505.** El comentario que esta al lado de ese `is_private` dice que
+`invokevirtual` hace que **nuestra** VM tire `NoSuchMethodError`, porque los `private` no entran en la
+vtable. Asi que el arreglo pide tambien que la resolucion de la VM encuentre un `private` de un nestmate
+por ese camino. Emitir solo la mitad del compilador cambiaria una clase que no carga afuera por una que
+no corre adentro.
+
+**Repro:** `java/JcIc.java` (`run()` da 622298 y tiene que dar 624722), y la clase pasada a `java` real.

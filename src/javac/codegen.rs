@@ -8496,6 +8496,39 @@ mod tests {
 
     // ---- try-with-resources (§14.20.3) ----
 
+    /// #563 --- un local **arriba del slot 255** se emite con el prefijo `wide`.
+    ///
+    /// `self.op(slot as u8)` truncaba el índice: el slot 256 se leía y escribía como el **0**, el 257
+    /// como el 1. Un método con más de 256 locales pisaba sus propios parámetros y contestaba mal, **en
+    /// silencio**; y el `.class` tampoco cargaba en una JVM real, porque el `StackMapTable` declaraba un
+    /// `int` en el 256 que ninguna instrucción escribía nunca.
+    ///
+    /// Acá se comprueba la **forma** --- que el prefijo esté ---; el extremo a extremo es
+    /// `java/WdWide.java`, cuyo `deep` tiene 262 locales: daba `5953` donde el javac real da `5955`, y
+    /// ahora da `5955` en nuestra VM **y** su `.class` corre en la HotSpot, que antes lo rechazaba.
+    #[test]
+    fn a_local_above_slot_255_uses_the_wide_prefix() {
+        let mut src = String::from("public class M { static int f(int seed) { ");
+        for i in 0..260 {
+            src.push_str(&format!("int v{i} = seed + {i}; "));
+        }
+        src.push_str("return v259 + v0; } }");
+        let c = compiled_class(&src, "M");
+        let code = c.method_code_by_name("f", "(I)I").expect("f con Code");
+        assert!(
+            code.max_locals > 255,
+            "el método tiene que pasar de 256 slots para que el caso exista: {}",
+            code.max_locals
+        );
+        // Se piden **las dos** formas, no "alguna": `wide istore` y `wide iload`. Con una sola, el
+        // control negativo pasaba --- desactivar el arreglo de `load` dejaba los `wide` de `store` y la
+        // aserción se conformaba ---. Un test que no distingue las dos mitades deja media regresión
+        // entrar.
+        let par = |a: u8, b: u8| code.code.windows(2).any(|w| w == [a, b]);
+        assert!(par(0xc4, 0x36), "falta `wide istore` para un slot arriba del 255");
+        assert!(par(0xc4, 0x15), "falta `wide iload` para un slot arriba del 255");
+    }
+
     /// #562 --- la variable de un patrón sobrevive al `if` de una **guarda invertida**.
     ///
     /// `if (!(o instanceof String s)) return -1; return s.length();` es el *idiom de guarda*, y es una

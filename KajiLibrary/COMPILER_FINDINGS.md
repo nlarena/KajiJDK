@@ -17,14 +17,14 @@ file reached 17 thousand lines. Nothing is in both.
 
 ---
 
-## Status (2026-10-03)
+## Status (2026-10-04)
 
-**281 findings, #1-#562. Open: #307, #562, plus #288 with no working reproducer.**
+**283 findings, #1-#564. Open: #307, #564, plus #288 with no working reproducer.**
 
 | # | where | what | how it is checked |
 |---|---|---|---|
 | **#307** | javac | inference does not look at the lambda body (JLS §18.2.1) | `Optional.of("perro").map(x -> x.toUpperCase()).orElseThrow().length()` does not compile: *no se encuentra el metodo: length / ubicacion: clase Object* |
-| **#562** | javac | a pattern variable's scope is **the `if`**, not where the condition holds | `if (!(o instanceof String s)) return -1; return s.length();` --- which the real `javac` accepts --- fails with *no se encuentra el simbolo: s* |
+| **#564** | javac | `invokespecial` on a **nestmate's** `private` method | HotSpot refuses the class: `VerifyError: Bad invokespecial instruction`; our VM tolerates it and `JcIc` answers 622298 where the JDK answers 624722 |
 | **#288** | VM/GC | a stale reference reaching the GC in green mode | no reproducer fires today (see the `os-parallel` note); stays open until somebody looks at it with ThreadSanitizer |
 
 Both were **reproduced on 2026-10-03**. That day also closed six that the entries still called open and
@@ -360,7 +360,9 @@ that were reproduced that day --- about the rest, all that is known is what the 
 | #559 | ✅ | el frame de un *handler* arrastra el tipo de un local MUERTO, y una JVM real rechaza la clase | Tandas 2026-09-18 a 2026-10-03 (#539-#559) ·medido 2026-10-03 |
 | #560 | ✅ | el `AnnotationDefault` no se emite cuando el default es una REFERENCIA A UNA CONSTANTE | Tanda 2026-10-03 (b): el #505 cerrado, y e… ·medido 2026-10-03 |
 | #561 | ✅ | `e instanceof T v` evalua el operando DOS veces | Tanda 2026-10-03 (b): el #505 cerrado, y e… |
-| #562 | ⬜ | el alcance de una variable de patron es EL `if`, no donde la condicion vale | Tanda 2026-10-03 (b): el #505 cerrado, y e… |
+| #562 | ✅ | el alcance de una variable de patron es EL `if`, no donde la condicion vale | Tanda 2026-10-03 (b): el #505 cerrado, y e… |
+| #563 | ✅ | un local arriba del slot 255 pierde el prefijo `wide` | Tanda 2026-10-04: los dos que arrastraba… ·medido 2026-10-04 |
+| #564 | ⬜ | `invokespecial` sobre un metodo `private` de un *nestmate* | Tanda 2026-10-04: los dos que arrastraba… ·medido 2026-10-04 |
 
 ## Index by section
 
@@ -451,6 +453,7 @@ in: the method notes (*lo que esta tanda deja*) belong to the batch, not to the 
 - Los que quedan abiertos, agrupados por causa (2026-09-09) *(historico)* --- los once estan cerrados
 - Tandas 2026-09-18 a 2026-10-03 (#539-#559)
 - Tanda 2026-10-03 (b): el #505 cerrado, y el #560 que destapo
+- Tanda 2026-10-04: los dos que arrastraba `bin/FROZEN.md` desde siempre
 
 ## The method rules the record leaves behind
 
