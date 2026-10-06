@@ -1071,6 +1071,11 @@ INTEGER = re.compile(r"(?<![\w.])(-?\d{2,})(?![\w.])")
 
 def simpler(e):
     out = []
+    if "->" in e:
+        # A lambda is shrunk as a whole or not at all. Taking a character out of `(p0, p1) ->`
+        # produces something that does not compile, and one bad candidate in a round makes
+        # javac reject the batch and the reduction stop.
+        return out
     for m in TEXT_CALL.finditer(e):
         cs = [c.strip() for c in m.group(1).split(",") if c.strip()]
         for fewer in (cs[:len(cs) // 2], cs[len(cs) // 2:], cs[:-1], cs[1:]):
@@ -1084,13 +1089,60 @@ def simpler(e):
     return out
 
 
+VAR_REF = re.compile(r"\bv(\d+)\b")
+
+
+def drop_at(vars_, i):
+    """`vars_` without declaration `i`, with every later reference renumbered.
+
+    Variables are named by POSITION, so removing one from the middle shifts all the others
+    down and leaves their expressions pointing at the wrong place. The first version did the
+    removal with a slice and nothing else, which has two failure modes and the quiet one is
+    the dangerous one: a reference that falls outside the list makes javac reject the batch and
+    the reduction gives up, but a reference that still lands inside now names a DIFFERENT value
+    and compiles. The reduced case then diverges for another reason and we believe it.
+    """
+    out = []
+    for j, (t, e) in enumerate(vars_):
+        if j == i:
+            continue
+        out.append((t, VAR_REF.sub(
+            lambda m: "v" + str(int(m.group(1)) - 1) if int(m.group(1)) > i else m.group(0), e)))
+    return out
+
+
+def dangling(vars_):
+    """Whether any expression names a variable that does not exist before it."""
+    for j, (_, e) in enumerate(vars_):
+        for m in VAR_REF.finditer(e):
+            if int(m.group(1)) >= j:
+                return True
+    return False
+
+
 def shrink(vars_, r, pool):
     out = []
     for i in range(len(vars_)):
+        # Both guards are needed, and finding that out took a unit test. Renumbering alone is
+        # not enough: a later statement that referenced the DROPPED variable keeps its name and
+        # silently points at whatever slid into that slot -- `v0 + v2` became `v0 + v1`, which
+        # compiles as string concatenation and means something else entirely. So a statement is
+        # only droppable when nothing after it names it, AND the survivors get renumbered.
         used = re.compile(r"\bv" + str(i) + r"\b")
-        if not any(used.search(e) for _, e in vars_[i + 1:]):
-            out.append(vars_[:i] + vars_[i + 1:])
+        if any(used.search(e) for _, e in vars_[i + 1:]):
+            continue
+        cand = drop_at(vars_, i)
+        if cand and not dangling(cand):
+            out.append(cand)
     for i, (t, e) in enumerate(vars_):
+        # A named constant is the simplest value a library type can have, and for most of the
+        # library it is the ONLY simplification available: `literal()` answers None for
+        # everything that is not a primitive, a String or an array of those, so without this a
+        # case built out of constructors and producers could only ever be shortened, never
+        # simplified. Tried before the literals because it applies far more often.
+        for c in pool.constants_for(t)[:4]:
+            if len(c) < len(e):
+                out.append(vars_[:i] + [(t, c)] + vars_[i + 1:])
         for _ in range(3):
             lit = literal(t, r, pool.cfg)
             if lit is not None and len(lit) < len(e):
@@ -1098,7 +1150,7 @@ def shrink(vars_, r, pool):
         for e2 in simpler(e):
             if e2 != e:
                 out.append(vars_[:i] + [(t, e2)] + vars_[i + 1:])
-    return out
+    return [c for c in out if not dangling(c)]
 
 
 def case_text(vars_):
@@ -1121,6 +1173,8 @@ def reduce_case(vars_, kind, pool, r, tag, limit, rounds=20):
         ok = [i for i in info["live"] if i in ref and classify(ref[i], ours.get(i)) == kind]
         if not ok:
             break
+        assert not dangling(cands[min(ok, key=lambda k: size(cands[k]))]), \
+            "a reduced case names a variable that does not exist"
         i = min(ok, key=lambda k: size(cands[k]))
         steps.append({"java": case_text(cands[i]), "ref": ref[i], "ours": ours.get(i)})
         cur = cands[i]
@@ -1554,6 +1608,9 @@ class Bandit(object):
         self.novel = 0
         self.cursor = {}       # per arm, how far into its operations we have gone
         self._groups = None
+        self.fprints = {}      # divergence fingerprints seen, for the fingerprint reward
+        self.found = 0         # how many of them were new
+        self.cold_credit = 0.25
 
     def key(self, o):
         """What counts as one arm.
@@ -1589,6 +1646,9 @@ class Bandit(object):
         self.pulls = d.get("pulls", 0)
         self.novel = d.get("novel", 0)
         self.cursor = d.get("cursor", {})
+        self.fprints = {tuple(k.split("\u0001")): v
+                        for k, v in d.get("fprints", {}).items()}
+        self.found = d.get("found", 0)
         return True
 
     def save(self, path):
@@ -1597,7 +1657,9 @@ class Bandit(object):
             "seen": {k: sorted(v) for k, v in self.seen.items()},
             "quiet": self.quiet, "retired": sorted(self.retired),
             "global_sig": self.global_sig, "pulls": self.pulls, "novel": self.novel,
-            "cursor": self.cursor}) + NEWLINE)
+            "cursor": self.cursor, "found": self.found,
+            "fprints": {"\u0001".join(str(x) for x in k): v
+                        for k, v in self.fprints.items()}}) + NEWLINE)
 
     def rareness(self, arm):
         # With global novelty the correction already lives in the reward, so applying it again
@@ -1664,7 +1726,7 @@ class Bandit(object):
                 break
         return out[:n]
 
-    def update(self, o, enc, r):
+    def update(self, o, enc, r, kind=None, ours=None, blamed=None):
         """Credit the arm for what this pull produced.
 
         **Novelty is global, not per arm.** Rewarding "an outcome new to THIS class" let one
@@ -1687,6 +1749,38 @@ class Bandit(object):
         self.pulls += 1
         if self.reward_mode == "class":
             paid = sig not in self.seen.get(k, set()) or before == 0
+        elif self.reward_mode == "fingerprint":
+            # **Pay for what we actually count.** The other two modes reward a new outcome
+            # shape, while every comparison in this project is scored in distinct divergence
+            # fingerprints. Rewarding one thing and measuring another is why the learning
+            # looked useless: an arm could collect credit for producing a new kind of
+            # *agreement*. Here a case pays in full only when it produces a divergence
+            # fingerprint nobody has produced before.
+            #
+            # That reward is sparse -- about one case in six diverges, and a repeat fingerprint
+            # pays nothing -- so a new outcome shape still pays a little, to keep some signal
+            # flowing while the posterior is cold. Without that trickle the arms would all look
+            # identical until the first divergence landed.
+            paid = False
+            if kind is not None:
+                fprint = (kind, blamed or k, sig, signature(ours))
+                seen_before = self.fprints.get(fprint, 0)
+                self.fprints[fprint] = seen_before + 1
+                if seen_before == 0:
+                    paid = True
+                    self.found += 1
+            if not paid and before == 0:
+                paid = r.random() < self.cold_credit
+        elif self.reward_mode == "unseen":
+            # **Pay only the first visit.** Four measured configurations said the same thing:
+            # any reward computed from what an arm produced sends the budget back to classes
+            # whose few defects are already spent, and loses to simply advancing. This mode
+            # inverts it -- an arm pays on its first pull and never again, so its posterior
+            # sinks below the untouched ones and the frontier moves. It keeps the half that
+            # did measure well (concentration, by `top_arms`) and spends it on classes nobody
+            # has visited, which is the one combination the four runs suggested and none of
+            # them tested.
+            paid = len(self.seen.get(k, ())) <= 1 and self.a.get(k, 0) == 0
         else:
             paid = before == 0 or r.random() < 1.0 / (1.0 + before)
         if paid:
@@ -1763,6 +1857,46 @@ def siblings(o, pool, by_name, kin, limit=12):
             break
     return out[:limit]
 
+
+def cause_key(x):
+    """What makes two divergences the same defect, for the purpose of filing one report.
+
+    Not the operation and not the class. Three minimal cases from one batch -- in
+    `ByteBuffer.getFloat`, `FloatBuffer.wrap` and `SegmentAllocator.allocateFrom` -- all showed
+    `IllegalArgumentException` where the reference throws `IndexOutOfBoundsException`, which is
+    almost certainly one wrong decision about range validation replicated across `java.nio`.
+    Grouping by operation would have filed three reports and spent three reductions; grouping
+    by the pair of exception classes files one.
+
+    The statement index is deliberately dropped: whether the case died on its first or second
+    declaration is a property of the generated case, not of the defect.
+    """
+    a, b = thrown(x["ref"]), thrown(x["ours"])
+    if a and b:
+        return ("exc", a[1], b[1])
+    if a or b:
+        side = a or b
+        return ("exc-vs-value", x["kind"], side[1])
+    return ("value", x["kind"], signature(x["ref"]), signature(x["ours"]))
+
+
+def pick_representatives(divs, limit):
+    """One case per cause, biggest causes first, shortest case within each.
+
+    Biggest first because a pair seen thirty times is more likely to be a systematic defect
+    than a one-off, and shortest first because the reducer has less to undo.
+    """
+    groups = {}
+    for x in divs:
+        if x.get("blamed"):
+            groups.setdefault(cause_key(x), []).append(x)
+    ordered = sorted(groups.items(), key=lambda kv: (-len(kv[1]), str(kv[0])))
+    out = []
+    for key, members in ordered[:limit]:
+        rep = min(members, key=lambda y: (y["java"].count(";"), len(y["java"])))
+        out.append((key, len(members), rep))
+    return out, len(groups)
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--jdk", required=True)
@@ -1771,7 +1905,8 @@ def main():
     ap.add_argument("--batches", type=int, default=5)
     ap.add_argument("--per-batch", type=int, default=400)
     ap.add_argument("--length", type=int, default=3, help="declarations per case")
-    ap.add_argument("--reduce", type=int, default=0, help="how many divergences to minimise")
+    ap.add_argument("--reduce", type=int, default=8,
+                    help="how many distinct causes to minimise (0 turns reduction off)")
     ap.add_argument("--limit", type=int, default=30, help="seconds per batch per side")
     ap.add_argument("--min-split", type=int, default=4)
     ap.add_argument("--max-splits", type=int, default=6)
@@ -1796,7 +1931,8 @@ def main():
                     help="where the arm counters live between campaigns")
     ap.add_argument("--bandit-arm", choices=["operation", "class", "package"],
                     default="class", help="granularity of one arm")
-    ap.add_argument("--bandit-reward", choices=["global", "class"], default="global",
+    ap.add_argument("--bandit-reward",
+                    choices=["global", "class", "fingerprint", "unseen"], default="global",
                     help="whether a new outcome counts library-wide or only for its class")
     ap.add_argument("--bandit-top", type=int, default=25,
                     help="how many arms share one batch; fewer means deeper per arm")
@@ -1897,7 +2033,7 @@ def main():
     stats = {"cases": 0, "agree": 0, "diverge": 0, "repeats": 0, "rewarded": 0,
              "unreachable": 0, "no_reference": 0, "unattributed": 0,
              "ended_with_value": 0, "threw_at_first": 0, "threw_later": 0, "unstable": 0,
-             "amp_cases": 0, "amp_diverge": 0, "amp_queue": 0,
+             "amp_cases": 0, "amp_diverge": 0, "amp_queue": 0, "causes": 0,
              "by_kind": {}, "by_operation": {}, "ref_s": 0.0, "ours_s": 0.0}
     batches, divs, reduced = [], [], []
     seen = set()
@@ -2037,9 +2173,12 @@ def main():
                 stats["threw_at_first"] += 1
             else:
                 stats["threw_later"] += 1
-            if bandit is not None and not bandit.blind:
-                bandit.update(targets[k], ref[k], r)
             kind = classify(ref[k], ours.get(k))
+            where, culprit = (None, None)
+            if kind is not None:
+                where, culprit = blame(ref[k], ours.get(k), case_ops.get(k, []))
+            if bandit is not None and not bandit.blind:
+                bandit.update(targets[k], ref[k], r, kind, ours.get(k), culprit)
             if kind is None:
                 stats["agree"] += 1
                 continue
@@ -2051,7 +2190,6 @@ def main():
             # cursor over the operation pool. One divergence set the cursor to a statement
             # index -- 0 or 1 -- so the campaign walked the first few operations of the library
             # over and over and reported a cursor that never moved.
-            where, culprit = blame(ref[k], ours.get(k), case_ops.get(k, []))
             if culprit:
                 bump(stats["by_operation"], culprit)
             else:
@@ -2090,25 +2228,28 @@ def main():
         if bandit is not None and state:
             bandit.save(state)
             stats["bandit"] = {"pulls": bandit.pulls, "novel": bandit.novel,
+                               "fingerprints_found": bandit.found,
                                "retired": len(bandit.retired),
                                "signatures": len(bandit.global_sig)}
         save("running")
         io.open(a.cursor, "w", encoding="utf-8", newline="").write(
             json.dumps({"at": at % len(ordered), "total": len(ordered)}) + "\n")
 
-    picked = set()
-    for i, d in enumerate(divs):
-        key = (d["kind"], d["blamed"])
-        if key in picked or len(reduced) >= a.reduce:
-            continue
-        picked.add(key)
-        print("reducing [%s] %s" % (d["kind"], d["java"][:90]), flush=True)
+    reps, n_causes = pick_representatives(divs, a.reduce) if a.reduce else ([], 0)
+    stats["causes"] = n_causes
+    if divs:
+        print("")
+        print("%d divergences fall into %d distinct causes; reducing the %d biggest"
+              % (len(divs), n_causes, len(reps)), flush=True)
+    for key, members, d in reps:
+        print("reducing [%s] x%d %s" % (d["kind"], members, d["java"][:80]), flush=True)
         t = time.time()
-        mn, steps, rv, ov = reduce_case(d["vars"], d["kind"], pool, r,
-                                        "%dx%d" % (a.seed, len(reduced)), a.limit)
-        reduced.append({"divergence": i, "kind": d["kind"], "blamed": d["blamed"],
+        mn, rsteps, rv, ov = reduce_case(d["vars"], d["kind"], pool, r,
+                                         "%dx%d" % (a.seed, len(reduced)), a.limit)
+        reduced.append({"cause": list(key), "covers": members, "kind": d["kind"],
+                        "blamed": d["blamed"],
                         "original": d["java"], "minimal": case_text(mn),
-                        "minimal_ref": rv, "minimal_ours": ov, "steps": steps,
+                        "minimal_ref": rv, "minimal_ours": ov, "steps": rsteps,
                         "seconds": round(time.time() - t, 1)})
         save("reducing")
 
