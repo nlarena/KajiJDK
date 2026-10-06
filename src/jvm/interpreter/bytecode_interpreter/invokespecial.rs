@@ -70,6 +70,22 @@ impl Exec<'_> {
             // No advance: the caller's pc stays at the invoke; the callee's
             // `return` advances it (so unwinding lands on the right pc).
         }
+        // **El receptor en null** (JVMS §6.5: "if objectref is null, the invokespecial instruction
+        // throws a NullPointerException"). Nadie preguntaba, y era un **número mal en silencio**: un
+        // `private` que no toca `this` --- el caso donde ningún `getfield` posterior se da cuenta ---
+        // corría igual y devolvía su resultado. Medido con la HotSpot sobre **nuestro propio**
+        // `.class`: 44 acá contra 2468 allá. Finding #565, destapado arreglando el #564.
+        //
+        // Va después de sacar los operandos --- la pila queda como la dejó la instrucción, y el `pc`
+        // sigue apuntando al `invoke`, que es lo que el despacho del handler necesita --- y es el
+        // mismo orden que ya usaba la intercepción de `Object.clone` unas líneas arriba.
+        //
+        // Se aplica a los tres usos del opcode, no sólo al privado: para un `<init>` y para un
+        // `super.m()` el receptor **no puede** ser null (uno es el objeto recin creado, el otro es
+        // `this`), así que el chequeo no les cambia nada y la regla queda escrita una sola vez.
+        if matches!(locals.first(), Some(Value::Reference(0))) {
+            return self.throw_exception("java/lang/NullPointerException");
+        }
         // Un método **sin cuerpo** también llega por acá, y hasta ahora nadie preguntaba: un
         // método `private native` se invoca con `invokespecial`, no con `invokevirtual`, porque
         // un privado no se despacha dinámicamente (JVMS §6.5). Sin esta consulta se le empujaba
