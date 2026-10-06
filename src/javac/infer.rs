@@ -710,7 +710,7 @@ pub fn infer_call_checked(
     args: &[RType],
     target: Option<&RType>,
 ) -> (Subst, bool) {
-    let (subst, _, ok) = infer_call_nested(table, recv, m, args, &[], target);
+    let (subst, _, ok) = infer_call_nested(table, recv, m, args, &[], target, &[]);
     (subst, ok)
 }
 
@@ -774,6 +774,11 @@ pub struct NestedResult {
 /// junto, `pick(empty(), strs())` deduce `E = String` de que `strs()` es `Box<String>`.
 ///
 /// Devuelve la sustitución de `m`, la de **cada** anidada (para re-tipar su nodo), y si es satisfacible.
+/// `extra` son reducciones **adicionales**: pares de un tipo concreto con un tipo escrito en los
+/// parámetros de tipo **crudos** de `m`, que se freshean igual que los parámetros antes de reducirse. Es por donde entra la restricción
+/// que aporta el **cuerpo de una lambda** (§18.2.1): esa no existe en la primera ronda --- la lambda
+/// llega sin tipo, porque se difiere para no tiparla contra una inferencia a medias --- así que el
+/// llamador vuelve a inferir una vez que el cuerpo está tipado. Ver el finding #307.
 pub fn infer_call_nested(
     table: &SymbolTable,
     recv: &RType,
@@ -781,6 +786,7 @@ pub fn infer_call_nested(
     arg_types: &[RType],
     nested: &[NestedCall],
     target: Option<&RType>,
+    extra: &[(RType, RType)],
 ) -> (Subst, Vec<NestedResult>, bool) {
     let vars_orig = method_type_params(table, m);
     if vars_orig.is_empty() && nested.is_empty() {
@@ -864,6 +870,12 @@ pub fn infer_call_nested(
     // que el bucle de abajo reduce contra el parámetro de afuera (#558).
     for (a, p) in &nested_reduce {
         bounds.reduce(table, a, p);
+    }
+    // Las reducciones del llamador (hoy: el cuerpo de una lambda ya tipado). Van con los parámetros de
+    // tipo **crudos**, así que se freshean igual que los de un parámetro normal.
+    for (a, p) in extra {
+        let p = types::substitute(&types::substitute(p, &recv_subst), &fresh);
+        bounds.reduce(table, a, &p);
     }
     // Índice del último parámetro (el de `...` en un método de aridad variable) y su tipo de
     // **elemento** (`T[]` → `T`): un argumento del *spread* restringe la variable de tipo contra el
@@ -1322,7 +1334,7 @@ mod tests {
             args: Vec::new(),
         }];
         let (out, nres, ok) =
-            infer_call_nested(&t, &RType::Class(cid), pick, &arg_types, &nested, None);
+            infer_call_nested(&t, &RType::Class(cid), pick, &arg_types, &nested, None, &[]);
         assert!(ok, "satisfacible");
         let pick_t = method_type_params(&t, pick)[0];
         assert_eq!(name_of(&t, out.get(&pick_t).unwrap()), "String", "T de pick");

@@ -1572,7 +1572,7 @@ fn attrib_expr_to(env: &mut Env, expr: &mut Expr, target: Option<&RType>) -> RTy
                                     // `Box<Object>` aislada.
                                     let nested = nested_generic_calls(env.table, args);
                                     let (s, nres, ok) = infer::infer_call_nested(
-                                        env.table, &recv, m, &arg_types, &nested, target,
+                                        env.table, &recv, m, &arg_types, &nested, target, &[],
                                     );
                                     // §18.5.1: constraints **insatisfacibles** (igualdades incompatibles,
                                     // o argumento fuera de la cota declarada) ⇒ la inferencia **falla**.
@@ -1598,10 +1598,45 @@ fn attrib_expr_to(env: &mut Env, expr: &mut Expr, target: Option<&RType>) -> RTy
                                 } else {
                                     witness_subst(env, m, &type_args)
                                 };
+                                let mut subst = subst;
                                 if !diferidos.is_empty() {
                                     let vacia = types::Subst::new();
                                     let s = if inferencia_fiable { &subst } else { &vacia };
                                     reattribute_deferred(env, &recv, m, args, &diferidos, s);
+                                    // **Segunda ronda de inferencia** (§18.2.1 + §18.5.2), finding #307.
+                                    // Recién ahora el cuerpo de la lambda tiene tipo, y es de ahí que sale
+                                    // la restricción que falta: una variable que aparece **solo** en el
+                                    // retorno de la lambda --- la `U` de `Optional.map` --- no la toca
+                                    // ningún otro argumento, así que en la primera ronda quedaba sin
+                                    // ninguna y `resolve` la cerraba en su cota, `Object`. Con eso,
+                                    // `Optional.of("p").map(x -> x.toUpperCase())` daba `Optional<Object>`
+                                    // y encadenar `.length()` no compilaba.
+                                    //
+                                    // Solo se rehace si hay pares que aportar y si no hubo *type
+                                    // witness* (con witness los parámetros están fijados, no inferidos), y
+                                    // **solo se adopta el resultado si la inferencia cerró**: si no,
+                                    // queda la de la primera ronda, que es el comportamiento anterior.
+                                    let pares = lambda_body_pairs(env, &recv, m, args, &diferidos);
+                                    if !pares.is_empty() && type_args.is_empty() {
+                                        let nested = nested_generic_calls(env.table, args);
+                                        let (s2, nres2, ok2) = infer::infer_call_nested(
+                                            env.table, &recv, m, &arg_types, &nested, target, &pares,
+                                        );
+                                        if ok2 {
+                                            retype_nested_calls(env.table, args, &nres2);
+                                            subst = s2;
+                                            // Y **volver a atribuir** los diferidos con la solución
+                                            // nueva. Sin esto el arreglo servía sólo para el chequeo y
+                                            // no para `--emit`: `reattribute_deferred` ya había
+                                            // **horneado** `U = Object` dentro del tipo de la lambda, y
+                                            // la propagación de más abajo no tenía ninguna `U` que
+                                            // sustituir. El desugar bajaba entonces un
+                                            // `Function<String, Object>`, y la re-atribución de después
+                                            // del desugar volvía a inferir `Object` --- la misma forma
+                                            // del #502, el chequeo aceptando lo que `--emit` rechaza.
+                                            reattribute_deferred(env, &recv, m, args, &diferidos, &subst);
+                                        }
+                                    }
                                 }
                                 // Propagar la instanciación a los argumentos **poly**: su tipo se
                                 // fijó en la fase 2 con las variables de tipo del método aún sin
@@ -2794,6 +2829,180 @@ fn disambiguate_by_lambda(
     }
 }
 
+/// Los pares `(lo que produce el argumento funcional, retorno de su SAM)` de los argumentos
+/// **diferidos**, para la segunda ronda de inferencia del #307.
+///
+/// El segundo miembro va con los parámetros de tipo **crudos** del método: la inferencia los freshea
+/// igual que los de un parámetro normal. Para `Optional.<U>map(Function<? super T, ? extends U>)` con el
+/// receptor ya sustituido, el SAM de `Function` es `apply` y su retorno sustituido es `U`, así que el par
+/// es `(String, U)` y reduce a `U = String`.
+///
+/// El primer miembro lo arma `tipo_que_produce`: el tipo del cuerpo de la lambda, o el retorno del
+/// método que una referencia nombra. **Lo que no se puede afirmar no aporta par** --- un cuerpo-bloque
+/// con `return` de tipos distintos, una referencia cuya sobrecarga cambiaría la respuesta, un tipo que
+/// quedó sin resolver ---, y entonces la llamada se queda con la inferencia de la primera ronda --- el
+/// comportamiento anterior --- en vez de arriesgar una peor.
+fn lambda_body_pairs(
+    env: &Env,
+    recv: &RType,
+    m: SymbolId,
+    args: &[Expr],
+    diferidos: &[usize],
+) -> Vec<(RType, RType)> {
+    let params: Vec<RType> = match env.table.resolved(m) {
+        Some(Resolved::Method { params, .. }) => {
+            params.iter().map(|p| substitute_member(env.table, recv, m, p)).collect()
+        }
+        _ => return Vec::new(),
+    };
+    let mut out = Vec::new();
+    for &i in diferidos {
+        let (Some(a), Some(p)) = (args.get(i), params.get(i)) else { continue };
+        let Some(cuerpo) = tipo_que_produce(env, a) else { continue };
+        if matches!(cuerpo, RType::Unresolved | RType::Void) {
+            continue;
+        }
+        // El SAM del tipo funcional del parámetro, y su retorno visto **desde** ese tipo: los
+        // argumentos del parámetro (`? extends U`) sustituyen las variables de la interfaz (`R`).
+        let base = match p {
+            RType::Class(id) => *id,
+            RType::Parameterized { base, .. } => *base,
+            _ => continue,
+        };
+        let Some(sam) = functional_sam(env.table, base) else { continue };
+        let ret = types::substitute(&sam_ret(env.table, sam), &types::subst_for(env.table, p, base));
+        if matches!(ret, RType::Unresolved | RType::Void) {
+            continue;
+        }
+        out.push((cuerpo, ret));
+    }
+    out
+}
+
+/// Lo que **produce** un argumento funcional ya re-atribuido: el tipo del cuerpo de la lambda, o el
+/// retorno del método que la referencia nombra. `None` cuando no se puede afirmar.
+fn tipo_que_produce(env: &Env, a: &Expr) -> Option<RType> {
+    match &a.kind {
+        ExprKind::Lambda { body, .. } => match body.as_ref() {
+            LambdaBody::Expr(e) => e.ty.clone(),
+            // Un cuerpo-bloque aporta el tipo de sus `return`, y **sólo si todos coinciden**: con dos
+            // distintos el tipo del cuerpo es su *lub*, que es otra discusión, así que no se aporta par
+            // y la llamada se queda con la inferencia de la primera ronda.
+            LambdaBody::Block(b) => {
+                let mut tipos = Vec::new();
+                for st in &b.0 {
+                    return_types(st, &mut tipos);
+                }
+                match tipos.split_first() {
+                    Some((primero, resto)) if resto.iter().all(|t| t == primero) => {
+                        Some(primero.clone())
+                    }
+                    _ => None,
+                }
+            }
+        },
+        ExprKind::MethodRef { qualifier, name, .. } => method_ref_ret(env, qualifier, name),
+        _ => None,
+    }
+}
+
+/// El retorno del método que una **referencia a método** nombra, cuando se puede afirmar cuál es.
+///
+/// Es la restricción del #307 con otra fuente: `String::toUpperCase` contra
+/// `Function<? super T, ? extends U>` dice de `U` exactamente lo mismo que `x -> x.toUpperCase()`. Pero
+/// acá no hay cuerpo tipado de donde leerlo --- hay que **buscar** el método ---, y de qué sobrecarga
+/// se trata depende de una resolución que todavía no pasó. Así que en vez de adivinarla se exige que la
+/// respuesta no dependa de ella:
+///
+/// - el retorno tiene que ser el **mismo para todos** los candidatos del nombre --- `toUpperCase()` y
+///   `toUpperCase(Locale)` devuelven los dos `String`, así que da igual cuál gane ---;
+/// - ninguno puede ser **genérico**: el retorno de un método genérico menciona variables suyas, que
+///   acá no están instanciadas, y reducir contra ellas inventaría una restricción;
+/// - `new` queda afuera, que su "retorno" es el tipo calificador con las variables de la clase sin
+///   instanciar.
+///
+/// Cuando algo de eso no se cumple no se aporta par y la llamada se queda con la inferencia de la
+/// primera ronda, que es el comportamiento anterior.
+fn method_ref_ret(env: &Env, qualifier: &MethodRefQualifier, name: &str) -> Option<RType> {
+    if name == "new" {
+        return None;
+    }
+    let qual = match qualifier {
+        MethodRefQualifier::Expr(e) => e.ty.clone()?,
+        MethodRefQualifier::Type(t) => resolve_rtype(env.table, env.class_scope, t),
+    };
+    let c = types::erased_id(&qual)?;
+    let mut unico: Option<RType> = None;
+    for f in candidates(env.table, c, name) {
+        if !infer::method_type_params(env.table, f).is_empty() {
+            return None;
+        }
+        let ret = substitute_member(env.table, &qual, f, &sam_ret(env.table, f));
+        if matches!(ret, RType::Unresolved | RType::Void) {
+            return None;
+        }
+        match &unico {
+            Some(v) if *v != ret => return None,
+            Some(_) => {}
+            None => unico = Some(ret),
+        }
+    }
+    unico
+}
+
+/// Los tipos de los `return` **con valor** que hay dentro de una sentencia, recorriendo sólo
+/// sentencias.
+///
+/// No entra en expresiones, y eso es justo lo que hace falta: el cuerpo de una lambda anidada vive
+/// dentro de una expresión, así que sus `return` no se cuentan como si fueran de la de afuera. El
+/// `switch` se deja afuera por conservador --- un `yield` no es un `return` y un brazo flecha tampoco
+/// ---: sin tipos recolectados no se aporta par, que es el comportamiento anterior.
+fn return_types(s: &Stmt, out: &mut Vec<RType>) {
+    match &s.kind {
+        StmtKind::Return(Some(e)) => {
+            if let Some(t) = &e.ty {
+                out.push(t.clone());
+            }
+        }
+        StmtKind::Block(b) => {
+            for st in &b.0 {
+                return_types(st, out);
+            }
+        }
+        StmtKind::If { then, els, .. } => {
+            return_types(then, out);
+            if let Some(e) = els {
+                return_types(e, out);
+            }
+        }
+        StmtKind::While { body, .. }
+        | StmtKind::Do { body, .. }
+        | StmtKind::For { body, .. }
+        | StmtKind::ForEach { body, .. } => return_types(body, out),
+        StmtKind::Synchronized { body, .. } => {
+            for st in &body.0 {
+                return_types(st, out);
+            }
+        }
+        StmtKind::Try { body, catches, finally, .. } => {
+            for st in &body.0 {
+                return_types(st, out);
+            }
+            for c in catches {
+                for st in &c.body.0 {
+                    return_types(st, out);
+                }
+            }
+            if let Some(f) = finally {
+                for st in &f.0 {
+                    return_types(st, out);
+                }
+            }
+        }
+        _ => {}
+    }
+}
+
 /// El retorno resuelto de un método (`Unresolved` si no se puede).
 fn sam_ret(table: &SymbolTable, m: SymbolId) -> RType {
     match table.resolved(m) {
@@ -3645,6 +3854,52 @@ mod tests {
         .is_empty());
     }
 
+
+    /// #307 --- la inferencia tiene que recibir la restricción que aporta **lo que produce** el
+    /// argumento funcional (§18.2.1). La `U` de `<U> Opt<U> map(Fun<? super V, ? extends U>)` aparece
+    /// **sólo** en el retorno de la función, así que ningún otro argumento la toca: sin el cuerpo
+    /// quedaba sin ninguna restricción y se cerraba en su cota, `Object`. Encadenar algo después --- que
+    /// es lo único que lo destapa, porque sin eso `Opt<Object>` pasa igual --- no compilaba.
+    ///
+    /// Se piden **las dos fuentes** del par, que son dos caminos distintos: el cuerpo de la lambda, que
+    /// ya está tipado, y el retorno del método que una referencia nombra, que hay que ir a buscar.
+    #[test]
+    fn what_a_lambda_body_produces_constrains_the_inference() {
+        let base = "interface Fun<T, R> { R apply(T t); }
+             class Str { int size() { return 0; } Str up() { return this; } }
+             class Opt<V> { static <X> Opt<X> of(X x) { return null; }
+                            <U> Opt<U> map(Fun<? super V, ? extends U> f) { return null; }
+                            V get() { return null; } }
+             ";
+        // El caso de la ficha: el cuerpo dice `Str`, así que `U` es `Str` y `.size()` existe.
+        let errs = check(&format!(
+            "{base} class C {{ static int f() {{ return Opt.of(new Str()).map(x -> x.up()).get().size(); }} }}"
+        ));
+        assert!(errs.is_empty(), "lambda: {errs:?}");
+        // La misma restricción con una **referencia a método**: acá no hay cuerpo tipado y el tipo sale
+        // del retorno del método nombrado.
+        let errs = check(&format!(
+            "{base} class C {{ static int f() {{ return Opt.of(new Str()).map(Str::up).get().size(); }} }}"
+        ));
+        assert!(errs.is_empty(), "referencia a metodo: {errs:?}");
+        // Y un **cuerpo-bloque**, que llega por otro camino (el tipo de sus `return`).
+        let errs = check(&format!(
+            "{base} class C {{ static int f() {{ return Opt.of(new Str()).map(x -> {{ return x.up(); }}).get().size(); }} }}"
+        ));
+        assert!(errs.is_empty(), "cuerpo-bloque: {errs:?}");
+        // **Control**: la forma que ya andábamos --- la guía el tipo objetivo de la asignación --- sigue
+        // andando. La segunda ronda no debía tocarla, y es lo que la ficha avisaba de cuidar.
+        let errs = check(&format!(
+            "{base} class C {{ static void f() {{ Opt<Str> o = Opt.of(new Str()).map(x -> x.up()); }} }}"
+        ));
+        assert!(errs.is_empty(), "contexto de asignacion: {errs:?}");
+        // Y lo que **no** compila sigue sin compilar: el cuerpo da `Str`, así que `U` es `Str` y un
+        // miembro que `Str` no tiene es un error. Sin esto el test pasaría con `U = Object` también.
+        let errs = check(&format!(
+            "{base} class C {{ static int f() {{ return Opt.of(new Str()).map(x -> x.up()).get().nope(); }} }}"
+        ));
+        assert!(!errs.is_empty(), "un miembro inexistente tiene que doler");
+    }
 
     #[test]
     fn a_call_with_contradictory_type_inference_is_reported() {
