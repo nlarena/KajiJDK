@@ -17568,3 +17568,145 @@ ultimos como control de que no se movieron.
 difiere del que emite el javac de ahora --- pero la diferencia es el `StackMapTable` del #559, no este
 finding: `javap -p -c` da **identico** en los dos, que es justamente el punto ciego que la ficha del
 #559 nombro. Los dos corren -1 en las dos VM.
+
+## Tanda 2026-10-06: lo que destapo el refresco de `bin/`
+
+Refrescar el snapshot congelado obliga a **regenerar los `.class` versionados**, y eso cambio 1005 de
+ellos. Dos de los que se corrigieron estaban **tapando** un defecto del compilador: andaban por la
+razon equivocada, y con el `.class` correcto el defecto quedo a la vista. Ninguno de los dos es
+regresion --- los dos fallan igual con el javac anterior ---, y los dos son de la misma forma: **algo
+que esta en el `.class` y lo leemos mal**.
+
+El refresco tambien dejo una cuenta corregida que conviene saber: la cuarta compuerta (nuestro
+`.class` corrido por el `java` real) no tenia el veredicto "la JVM real **rechaza** la clase", solo
+comparaba enteros. Con el veredicto puesto, antes de regenerar habia **23 clases que una JVM real no
+carga** y despues quedan **8**. `tools/cruce.py` es la herramienta, y vive en el arbol porque la
+anterior se perdio en un scratchpad.
+
+### #566 ⬜→✅ -- el `throws` de una VARIABLE DE TIPO leido de un `.class`
+
+**Severidad: alta.** Rechaza un programa legal, y **rompe la compilacion de la biblioteca**: es lo que
+hace que recompile 4821/4822 con el javac congelado del 2026-10-06.
+
+```java
+// Op.java, compilado a `.class` aparte
+public interface Op<V, X extends Throwable> { V call() throws X; }
+
+// Usa.java, compilado CONTRA ese `.class`
+static <V, X extends Throwable> V run(Op<V, X> op) throws X { return op.call(); }
+// nuestro:    error: excepcion chequeada `Throwable` sin capturar ni declarar en `throws`
+// javac real: compila los dos pasos sin quejarse
+```
+
+**Los dos pasos son el punto.** Con `Op` en la **misma** unidad de compilacion anda, porque ahi el
+compilador tiene el AST. El bug esta al leer un metodo que viene de un `.class`.
+
+**La causa.** En el `.class` el `throws` de una variable de tipo se parte en dos (JVMS 4.7.5 y 4.7.9):
+
+```
+Exceptions: throws java.lang.Throwable     <- el BORRADO
+Signature:  ()TV;^TX;                      <- la variable
+```
+
+Leemos el `Exceptions`, asi que `throws X` se convierte en `throws Throwable`; y entonces un llamador
+que declara `throws X` no lo cubre. **Lo que emitimos esta bien**: nuestro `.class` para ese metodo
+tiene las dos cosas, identicas a las del javac del JDK 25 (verificado con `javap -v`). El que lee es
+el que falta.
+
+**Como estuvo tapado tanto tiempo, que es la parte interesante.** El arbol tenia versionado un
+`.class` **invalido**: el `Exceptions` de `ScopedValue$CallableOp.call` nombraba un `Class` llamado
+`X`, que no es una clase. Leyendo *eso*, el `throws` salia `X` y la cuenta cerraba. Al regenerar con el
+congelado nuevo ese `.class` se corrigio --- paso de 693 a 711 bytes --- y
+`jdk/internal/vm/ScopedValueContainer.java:97`, que hace exactamente esa llamada, dejo de compilar.
+
+**Que mas se lleva.** `tools/suite.py` pasa de 0 rotas a **2**: `OptRndTest` y `ScopedTest`, las dos
+con el mismo error. Antes pasaban por el mismo accidente.
+
+**Repro:** `KajiLibrary/repros/finding_566/` (`Op.java` + `Usa.java`, con los dos pasos escritos
+adentro). **No arreglado.**
+
+> **Cerrado el 2026-10-06, el mismo dia que se levanto.** El arreglo son dos mitades, y el parser de
+> firmas tenia escrito el bug como comentario: *"Los `^Throws` que puedan seguir no nos interesan
+> todavia"*.
+>
+> - **`classfile.rs`** --- `MethodSig` tiene ahora `throws`, y `parse_method_signature` lee los
+>   `ThrowsSignature*` (JVMS 4.7.9.1): cada uno es `^` y despues una clase (`^Ljava/io/IOException;`) o
+>   una **variable de tipo** (`^TX;`), que es la forma que importa. `sig_ref_type` ya sabia leer las
+>   dos; nadie se lo pedia.
+> - **`enter.rs`** --- el `throws` de un metodo del classpath sale de la firma generica cuando la trae,
+>   y del `Exceptions` cuando no. Es la misma forma que los parametros y el retorno ya tenian tres
+>   lineas mas arriba.
+>
+> **La condicion `if !sig.throws.is_empty()` no es prolijidad, es necesaria.** javac escribe los `^`
+> solo cuando **alguna** de las excepciones es generica; si ninguna lo es, la firma no los trae y el
+> `Exceptions` es la fuente completa. Preferir la firma incondicionalmente borraria el `throws` de
+> todos los metodos no genericos del classpath --- o sea reabriria el #104/#256, que es el error de
+> enfrente: `implements Callable<T>` con `call() throws Exception` dejaria de compilar.
+>
+> **Radio: cero bytes.** De las 4822 fuentes, **ninguna clase cambia** --- el arreglo toca *que
+> compila*, no *que se emite* ---, y aparecen **2 que antes no se podian emitir**:
+> `ScopedValueContainer` y su `BindingsSnapshot`. Medido contra la recompilacion del estado congelado,
+> las dos con el arbol ya regenerado.
+>
+> **Medido.** La biblioteca vuelve a **4822/4822**; la suite a **229 invocaciones, 0 rotas** (las dos
+> que el refresco habia roto, `OptRndTest` y `ScopedTest`, compilan y corren); los 48 diferenciales de
+> texto en su linea base; `javac::` **821 passed, 0 failed**.
+>
+> Regresion: `enter::tests::a_type_variable_in_throws_survives_reading_a_class_file`. Pide **las dos
+> mitades por separado** --- el parser sobre `()TV;^TX;`, y `enter` de punta a punta sobre el
+> `orElseThrow(Supplier<? extends X>) throws X` de `java.util.Optional` leido del classpath --- mas un
+> control de que una firma **sin** `^` sigue dando lista vacia, que es lo que mantiene vivo el
+> fallback. Validada con dos controles negativos independientes: neutralizando solo `enter` falla con
+> el borrado (`[Class(2408)]`), neutralizando solo el parser falla con `[]`.
+>
+> **Lo que queda pendiente, y no es del arreglo:** el snapshot de `bin/` del 2026-10-06 se congelo
+> **antes** de esto, asi que el javac congelado todavia tiene el defecto. Hasta que se refresque de
+> nuevo, cuatro `.class` versionados no se pueden regenerar --- los dos de `ScopedValueContainer`, y
+> los de `OptRndTest` y `ScopedTest` ---, y para esos cuatro el invariante sigue roto. El refresco
+> seria barato: como el radio es cero, no hay que volver a regenerar las 992 clases, solo esas cuatro.
+
+### #567 ⬜ -- una anonima sobre una interfaz leida de un `.class` sale con la interfaz como `super_class`
+
+**Severidad: alta.** La clase **no se puede cargar** en ninguna otra JVM, y aca contesta bien, que es la
+peor combinacion: el artefacto no sale de casa y nada lo avisa.
+
+```java
+// Fuera.java, compilado a `.class` aparte
+public class Fuera { public interface Pide { int cuanto(); } }
+
+// Usa2.java, compilado CONTRA ese `.class`
+Fuera.Pide p = new Fuera.Pide() { public int cuanto() { return 7; } };
+```
+
+```
+nuestro:  class Usa2$1 extends Fuera$Pide      super_class: Fuera$Pide        interfaces: 0
+el JDK:   class Usa2$1 implements Fuera$Pide   super_class: java/lang/Object  interfaces: 1
+```
+
+La HotSpot rechaza la clase al cargarla: `IncompatibleClassChangeError: class Usa2$1 has interface
+Fuera$Pide as super class`. **Nuestra VM la tolera** y contesta 7.
+
+**Los dos pasos otra vez.** Con la interfaz en la misma unidad de compilacion sale **bien**
+(`super_class: java/lang/Object`, `interfaces: 1`), asi que la forma general del desugar de anonimas
+esta sana; lo que falla es cuando el supertipo se lee de la classpath y no se sabe que es una interfaz.
+
+**Explica cinco de las ocho** clases que el cruce con la JVM real todavia rechaza: `IoTest` (anonima
+sobre `ObjectInputFilter$FilterInfo`), `WalkTest` (sobre `DirectoryStream$Filter`), `KajiBeansHumoX`,
+`SecTest` y `UtilAuditTest`. De `SecTest` vale la pena decir que **antes daba `VerifyError`** y ahora da
+`IncompatibleClassChangeError`: tenia dos defectos encima, se le arreglo el de arriba y aparecio este.
+
+**Repro:** `KajiLibrary/repros/finding_567/` (`Fuera.java` + `Usa2.java`). **No arreglado.**
+
+### Las tres que quedan rechazadas y no tienen ficha todavia
+
+Medidas el 2026-10-06 con `tools/cruce.py` sobre los `.class` ya regenerados. No se les abrio ficha
+porque no estan caracterizadas; queda el sintoma exacto para quien las agarre.
+
+| | la JVM real dice |
+|---|---|
+| `MathTest` | `VerifyError: Expecting a stack map frame`, en `deterministas()` @24, un `iinc`. Falta una entrada del `StackMapTable` en un destino de salto |
+| `MhLayoutTest` | `VerifyError`; **nuestra VM tambien falla**, con el `field_offset` de la familia `method_handle_*` que ya esta anotada |
+| `CfileSweep` | `VerifyError`; nuestra VM tampoco la corre --- se queda sin heap con `JVM_GC_MAX_HEAP` --- asi que no hay con que comparar |
+
+Y las dos divergencias **numericas** que el cruce ve, que no son rechazos: `AwtSystemColorTest` (-1
+contra 35) y `KajiBeansHumoR` (2 contra -1).

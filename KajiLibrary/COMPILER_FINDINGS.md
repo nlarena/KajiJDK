@@ -17,15 +17,32 @@ file reached 17 thousand lines. Nothing is in both.
 
 ---
 
-## Status (2026-10-06)
+## Status (2026-10-06, after the `bin/` refresh)
 
-**284 findings, #1-#565. Open: none but #288, which has no working reproducer.**
+**286 findings, #1-#567. Open: #567, plus #288, which has no working reproducer.**
 
 | # | where | what | how it is checked |
 |---|---|---|---|
+| **#567** | javac | an anonymous class over an **interface read from a `.class`** gets it as `super_class` | HotSpot refuses the class: `IncompatibleClassChangeError ... has interface ... as super class`; our VM tolerates it. Explains 5 of the 8 classes a real JVM still rejects |
 | **#288** | VM/GC | a stale reference reaching the GC in green mode | no reproducer fires today (see the `os-parallel` note); stays open until somebody looks at it with ThreadSanitizer |
 
-**#288** was last reproduced on 2026-10-03, and it is the only entry still open.
+**#566** and **#567** were both raised on 2026-10-06 by the `bin/` refresh, and neither was a
+regression: regenerating the versioned `.class` replaced two files that had been making the compiler
+*look* right, and the defects underneath came into view. **#566 was fixed the same day** --- zero
+emitted bytes change, and the library went back to 4822/4822. **#288** was last reproduced on
+2026-10-03.
+
+> **The frozen `bin/` still carries #566**, because it was frozen before the fix. Four versioned
+> `.class` cannot be regenerated until the next refresh --- `ScopedValueContainer` and its nested
+> class, `OptRndTest` and `ScopedTest` --- and for those four the invariant is still broken. The
+> refresh would be cheap: the fix changes no emitted bytes, so only those four need regenerating.
+
+> **A `.class` the tree carries is not evidence that the compiler is right.** #566 had been masked for
+> weeks by an **invalid** versioned `.class` --- an `Exceptions` attribute naming a type variable,
+> which is not a class --- and the compiler read that invalid file and agreed with itself. The same
+> refresh also showed that the cross-check against the real JVM had no verdict for "the real JVM
+> *refuses* our class", so **21 refusals were invisible**: 23 before regenerating, 8 after. See
+> `tools/cruce.py` and the 2026-10-06 entry of `bin/FROZEN.md`.
 
 Between 2026-10-03 and 2026-10-06, six entries that still said open were closed because they already
 were (#113, #127, #474, #500, #502, #509), and **nine** that really were open got fixed: **#505**,
@@ -374,6 +391,8 @@ that were reproduced that day --- about the rest, all that is known is what the 
 | #563 | ✅ | un local arriba del slot 255 pierde el prefijo `wide` | Tanda 2026-10-04: los dos que arrastraba… ·medido 2026-10-04 |
 | #564 | ✅ | `invokespecial` sobre un metodo `private` de un *nestmate* | Tanda 2026-10-04: los dos que arrastraba… ·cerrado 2026-10-06 |
 | #565 | ✅ | `invokespecial` no tiraba `NullPointerException` con el receptor en null | Tanda 2026-10-04: los dos que arrastraba… ·cerrado 2026-10-06 |
+| #566 | ✅ | el `throws` de una variable de tipo leido de un `.class` | Tanda 2026-10-06: lo que destapo el refresco… ·cerrado 2026-10-06 |
+| #567 | ⬜ | una anonima sobre una interfaz leida de un `.class` sale con la interfaz como `super_class` | Tanda 2026-10-06: lo que destapo el refresco… ·medido 2026-10-06 |
 
 ## Index by section
 
@@ -466,6 +485,7 @@ in: the method notes (*lo que esta tanda deja*) belong to the batch, not to the 
 - Tanda 2026-10-03 (b): el #505 cerrado, y el #560 que destapo
 - Tanda 2026-10-04: los dos que arrastraba `bin/FROZEN.md` desde siempre (y, al cierre del #564 el
   2026-10-06, el #565 que ese cierre destapo)
+- Tanda 2026-10-06: lo que destapo el refresco de `bin/` (#566, #567, y las tres sin ficha)
 
 ## The method rules the record leaves behind
 
