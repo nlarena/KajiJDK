@@ -181,11 +181,11 @@ Los `.rs` con los arreglos del compilador siguen siendo los mismos de la tanda a
 
 | | |
 |---|---|
-| Commit | `85263fc5`, **con una superposición** — ver la fila siguiente |
-| Construido desde | `git archive HEAD` a una copia limpia, con los **25 archivos de `src/` modificados** en el árbol de trabajo superpuestos encima (16 de `javac`, 4 de `burst`, 9 del intérprete). No hay archivos de `src/` sin seguir. Lo demás de la copia es exactamente `85263fc5`, así que **no es reproducible desde el historial solo**: hace falta el árbol |
+| Commit | `cde2a19f` — **y nada mas**, sin superposicion |
+| Construido desde | `git archive HEAD` a una copia limpia (15102 archivos, 129 `.rs` en `src/`). El arbol de trabajo no tenia **ningun** cambio en `src/`, `java/`, `KajiLibrary/`, `tools/` ni `Cargo.*`, asi que por primera vez en tres refrescos la procedencia **es reproducible desde el historial solo**: `git archive cde2a19f` y `cargo build --release` alcanzan |
 | Toolchain | `rustc 1.97.1 (8bab26f4f 2026-07-14)`, host `x86_64-pc-windows-msvc` |
 | Perfil | `cargo build --release` (50 s) |
-| Fecha | 2026-10-03 |
+| Fecha | 2026-10-06 |
 | Herramientas | **11** |
 | Peso | 16 MB — toolchain `msvc` |
 
@@ -293,17 +293,17 @@ las diez herramientas.
 
 | Binario | SHA-256 | Qué es |
 |---|---|---|
-| `javac.exe` | `95df…f136` | El compilador. `--emit X.java` → `X.class` |
-| `jvm.exe` | `1f04…9806` | El desensamblador estilo `javap` (Nivel 0) y CLI principal |
-| `run-headless.exe` | `06af…f2d3` | Corre `<File.class> <método>` con el intérprete (modo green) |
-| `jvm-step.exe` | `3fe9…6c89` | El visor paso a paso del intérprete |
-| `javac-step.exe` | `cfd1…9e6b` | El visor paso a paso del compilador |
-| `jdb.exe` | `aa39…92a1` | El depurador (Fase I, JPDA) |
-| `jvm-jdwp.exe` | `9ee8…e577` | Servidor JDWP (`dt_socket`) sobre nuestra VM |
-| `jdi-attach.exe` | `b9c9…f2c7` | Cliente JDI de attach |
-| `jimage.exe` | `e479…ee2d` | Lector/escritor del contenedor `jimage` |
-| `jlink.exe` | `f405…2bdc` | Enlazador de imágenes de runtime |
-| `javadoc.exe` | `37c7…50e6` | El generador de documentación |
+| `javac.exe` | `c80b…f5f0` | El compilador. `--emit X.java` → `X.class` |
+| `jvm.exe` | `5405…719a` | El desensamblador estilo `javap` (Nivel 0) y CLI principal |
+| `run-headless.exe` | `c4b1…cca0` | Corre `<File.class> <método>` con el intérprete (modo green) |
+| `jvm-step.exe` | `4eb3…09b3` | El visor paso a paso del intérprete |
+| `javac-step.exe` | `5513…0e9d` | El visor paso a paso del compilador |
+| `jdb.exe` | `fb58…4bed` | El depurador (Fase I, JPDA) |
+| `jvm-jdwp.exe` | `1f69…d6ff` | Servidor JDWP (`dt_socket`) sobre nuestra VM |
+| `jdi-attach.exe` | `e9fc…bd30` | Cliente JDI de attach |
+| `jimage.exe` | `f70b…d9b4` | Lector/escritor del contenedor `jimage` |
+| `jlink.exe` | `1823…df6a` | Enlazador de imágenes de runtime |
+| `javadoc.exe` | `c62a…9ffc` | El generador de documentación |
 
 Hashes completos: `sha256sum bin/*.exe` (o `Get-FileHash`).
 
@@ -842,3 +842,137 @@ emits `MyList.class`; `jvm java/Add.class` disassembles; `run-headless java/Add.
 
 The previous eleven were backed up outside the repo before being overwritten, since `bin/*` is in
 `.gitignore` and does not come back from git.
+
+| Binario | SHA-256 | |
+|---|---|---|
+| `javac.exe` | `95df…f136` | 4384768 bytes |
+| `jvm.exe` | `1f04…9806` | 462336 bytes |
+| `run-headless.exe` | `06af…f2d3` | 1715200 bytes |
+| `jvm-step.exe` | `3fe9…6c89` | 1802240 bytes |
+| `javac-step.exe` | `cfd1…9e6b` | 1546240 bytes |
+| `jdb.exe` | `aa39…92a1` | 1630208 bytes |
+| `jvm-jdwp.exe` | `9ee8…e577` | 1717760 bytes |
+| `jdi-attach.exe` | `b9c9…f2c7` | 218112 bytes |
+| `jimage.exe` | `e479…ee2d` | 218624 bytes |
+| `jlink.exe` | `f405…2bdc` | 347648 bytes |
+| `javadoc.exe` | `37c7…50e6` | 1838080 bytes |
+
+Superados el 2026-10-06; respaldados fuera del repo antes de pisarlos. La tabla de
+«Las herramientas» es la del snapshot vigente, no esta.
+
+### Refresco 2026-10-06, los siete findings de la semana y el arbol vuelto a sincronizar
+
+**Procedencia: un commit solo.** `cde2a19f`, `git archive HEAD` a una copia limpia. Los dos refrescos
+anteriores tuvieron que avisar que hacia falta el arbol de trabajo para reproducirlos; este no.
+
+**Por que se refresco.** Siete findings cerrados entre el 03 y el 06, y cinco de ellos cambian **que
+bytecode se emite**: **#559** (el frame de un handler declaraba un local muerto), **#560** (un
+`AnnotationDefault` que nombra una constante), **#561** (`e instanceof T v` evaluaba el operando dos
+veces), **#563** (un local arriba del slot 255 perdia el prefijo `wide`) y **#564** (`invokespecial`
+sobre un `private` de un *nestmate*). Los otros dos cambian que se acepta: **#562** (el idiom de
+guarda de una variable de patron) y **#307** (la inferencia no recibia lo que produce la lambda). Del
+lado de la VM entra **#565**: `invokespecial` no tiraba `NullPointerException` con el receptor en null.
+
+**El efecto en la biblioteca, medido emision contra emision** --- el javac viejo respaldado contra el
+nuevo, las mismas 4822 fuentes: **457 clases cambian**. No es una muestra.
+
+**Este refresco SI regenera los `.class` versionados, y la deuda que pago era vieja.** Las tres
+mediciones, con dos implementaciones independientes que coinciden:
+
+| | |
+|---|---:|
+| arbol ≠ lo que emitia el javac **viejo** (deuda heredada) | 366 |
+| javac viejo ≠ javac nuevo (este refresco) | 457 |
+| arbol ≠ lo que emite el javac **nuevo** (lo regenerado) | **754** |
+
+O sea que **366 clases ya no eran reproducibles con su propio compilador congelado** antes de tocar
+nada: el invariante estaba roto desde el refresco del 2026-09-21, y la entrada del 2026-10-03 lo dejo
+anotado como deuda abierta. Ahora esta pago: **1005 `.class`** regenerados en total (biblioteca,
+`java/`, `java/texto/` y los repros), y el arbol da **6735 iguales, 0 distintos** contra lo que emite
+el congelado. **Punto fijo verificado**: recompilar las 4822 con el arbol ya regenerado da **cero**
+diferencias.
+
+**Dos herramientas nuevas, porque el procedimiento las pedia y no existian.**
+
+- `tools/resync.py` --- el paso que este archivo llama "la obligacion de recompilar el arbol". No habia
+  nada que lo hiciera, y por eso la deuda llego a 366. Verificado idempotente.
+- `tools/cruce.py` --- la cuarta compuerta, nuestro `.class` corrido por el `java` real. La media un
+  `cruce.sh` que vivia en el scratchpad de una sesion y se perdio, igual que `difnum.py` tres veces.
+
+**Y el cruce corregia una cuenta que este archivo viene repitiendo desde agosto.** "De las 45
+comparables, 43 dan el mismo entero; las dos que no son `JcIc` y `WdWide`" es cierto *como comparacion
+de enteros*, pero el `cruce.sh` no tenia el veredicto "la JVM real **rechaza** la clase", asi que
+**21 rechazos eran invisibles**. Con los `.class` viejos: **23 clases que una JVM real no carga**. Con
+los regenerados: **8**.
+
+| | antes | ahora |
+|---|---:|---:|
+| comparables (los dos lados imprimen un entero) | 160 | 165 |
+| iguales | 158 | 163 |
+| divergencias numericas | 2 | 2 |
+| **rechazadas por la JVM real** | **23** | **8** |
+
+**`JcIc` y `WdWide` ya coinciden**, y es la primera vez: eran #564 y #563. Se cayeron tambien
+`AmbUse`, `AmbUse2`, `AmbUse4`, `AmbUse5`, `Bs2`, `CertX500Test`, `JmxP12`, `LocalVars`,
+`PrefsTreeTest`, `RMI1`, `SecureRandomTest`, `SpiPkgTest` y `StkX` --- trece mas que nadie estaba
+mirando. Las dos divergencias numericas que quedan son `AwtSystemColorTest` (-1 contra 35) y
+`KajiBeansHumoR` (2 contra -1).
+
+**Las 8 que sobreviven, y son defectos abiertos de verdad:**
+
+| | la JVM real dice |
+|---|---|
+| `IoTest`, `WalkTest`, `KajiBeansHumoX`, `SecTest`, `UtilAuditTest` | `IncompatibleClassChangeError` --- es el **#567**, abajo |
+| `MathTest` | `VerifyError: Expecting a stack map frame`, en `deterministas()` @24 `iinc` |
+| `MhLayoutTest` | `VerifyError`; nuestra VM tambien falla, con el `field_offset` de la familia `method_handle_*` |
+| `CfileSweep` | `VerifyError`; nuestra VM tampoco la corre (se queda sin heap) |
+
+**Dos findings que este refresco destapo, los dos de la misma forma --- algo que esta en el `.class` y
+lo leemos mal.** Ninguno es regresion: los dos estaban antes y los tapaba un `.class` viejo.
+
+- **#566** --- **arreglado el mismo dia, despues de congelar**, asi que estos binarios lo tienen y
+  los proximos no. El arreglo no cambia **ningun** byte emitido --- toca que compila, no que se emite
+  ---, asi que el proximo refresco no obliga a regenerar el arbol otra vez: solo los cuatro `.class`
+  que hoy no se pueden emitir (`ScopedValueContainer` y su anidada, `OptRndTest`, `ScopedTest`). Era
+  el `throws` de una **variable de tipo** leido de un `.class`. `Exceptions` lleva el
+  borrado (`Throwable`) y la variable vive en el `Signature` (`^TX;`); leemos el primero, asi que
+  `throws X` se convierte en `throws Throwable` y el llamador que declara `throws X` queda rechazado.
+  **Es lo que hace que la biblioteca compile 4821/4822** con este congelado: la que falla es
+  `jdk/internal/vm/ScopedValueContainer.java:97`. Lo tapaba un `.class` **invalido** que el arbol
+  tenia versionado --- el `Exceptions` de `ScopedValue$CallableOp.call` nombraba un `Class` llamado
+  `X`, que no es una clase ---; el que emitimos ahora es correcto y coincide con el del JDK 25.
+- **#567** --- una **anonima sobre una interfaz leida de un `.class`** se emite con esa interfaz como
+  `super_class` en vez de `java/lang/Object` + `interfaces`. Si la interfaz esta en la misma unidad de
+  compilacion sale bien; de la classpath, no. Explica cinco de las ocho rechazadas.
+
+**La suite pago el cambio, y hay que decirlo.** `tools/suite.py` pasa de **0 rotas a 2**:
+`OptRndTest` y `ScopedTest`, las dos por el #566. Antes pasaban **porque el `.class` invalido hacia
+funcionar el analisis por accidente**. Cambiar un `.class` invalido por uno correcto y perder dos
+pruebas es el intercambio que corresponde, pero el snapshot entra con ese defecto adentro, conocido y
+reproducido.
+
+**Catorce fuentes con `.class` versionado no compilan con este congelado, y no es de esta semana.** Se
+verifico con el javac viejo respaldado: las once de `java/` fallan **identico** --- seis por el
+analisis de excepciones chequeadas (`WaitNotify`, `WaitTimeout`, `Joiner`, `SwProbe2`, `OptRndTest`,
+`ScopedTest`), mas `AbsSub`, `CLO1`, `QualI`, `EnumSwitch` e `IoKajiProbe` ---, y las otras tres son
+repros de findings (`finding_506`, `zz303`, `zz312`). Su `.class` sigue siendo el que estaba: no se
+pudo regenerar, asi que para esas catorce el invariante sigue roto.
+
+**Compuertas con estos binarios**, no con los de `src/`:
+
+- recompilacion de la biblioteca: **4821/4822** (la del #566);
+- `tools/suite.py`: **227 invocaciones, 2 rotas** (las dos del #566), 6 sin veredicto, que son de siempre;
+- los 48 diferenciales de texto: **2 con diferencias**, `Dtd1` y `Html4`, la linea base;
+- `tools/cruce.py`: **165 comparables, 163 iguales, 8 rechazadas**;
+- `cargo test --release --lib javac::`: **820 passed, 0 failed**.
+
+**Smoke test** (el que este archivo prescribe): `javac --emit -cp KajiLibrary` sobre `finding_09.java`
+escribe `MyList.class`; `jvm java/Add.class` desensambla; `run-headless java/Add.class main` da 6; las
+otras ocho arrancan y muestran su uso.
+
+**Una corroboracion que vale guardar:** el congelado nuevo y el javac de trabajo con el que se midieron
+los findings emiten lo mismo --- las 6738 clases de la biblioteca, byte a byte ---, asi que las
+mediciones de las fichas de #307, #564 y #565 valen tambien para este snapshot.
+
+Las once anteriores quedaron respaldadas fuera del repo antes de pisarlas, porque `bin/*` esta en
+`.gitignore` y no se recuperan desde git. No habia ningun `javac.exe` corriendo al momento de copiar.
