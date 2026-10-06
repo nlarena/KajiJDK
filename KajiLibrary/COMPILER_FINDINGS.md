@@ -17,21 +17,31 @@ file reached 17 thousand lines. Nothing is in both.
 
 ---
 
-## Status (2026-10-04)
+## Status (2026-10-06)
 
-**283 findings, #1-#564. Open: #307, #564, plus #288 with no working reproducer.**
+**284 findings, #1-#565. Open: none but #288, which has no working reproducer.**
 
 | # | where | what | how it is checked |
 |---|---|---|---|
-| **#307** | javac | inference does not look at the lambda body (JLS §18.2.1) | `Optional.of("perro").map(x -> x.toUpperCase()).orElseThrow().length()` does not compile: *no se encuentra el metodo: length / ubicacion: clase Object* |
-| **#564** | javac | `invokespecial` on a **nestmate's** `private` method | HotSpot refuses the class: `VerifyError: Bad invokespecial instruction`; our VM tolerates it and `JcIc` answers 622298 where the JDK answers 624722 |
 | **#288** | VM/GC | a stale reference reaching the GC in green mode | no reproducer fires today (see the `os-parallel` note); stays open until somebody looks at it with ThreadSanitizer |
 
-Both were **reproduced on 2026-10-03**. That day also closed six that the entries still called open and
-were not (#113, #127, #474, #500, #502, #509), plus four that really were: **#505**, which is what
-uncovered #560; **#559**, with HotSpot as the oracle --- `KajiLibrary/java/IoTest` went from
-`VerifyError ... exception handler 1041` to answering `-1` there, the same as on our own VM; and
-**#560** and **#561**, both measured against the JDK's own output.
+**#288** was last reproduced on 2026-10-03, and it is the only entry still open.
+
+Between 2026-10-03 and 2026-10-06, six entries that still said open were closed because they already
+were (#113, #127, #474, #500, #502, #509), and **nine** that really were open got fixed: **#505**,
+which is what uncovered #560; **#559**, with HotSpot as the oracle --- `KajiLibrary/java/IoTest` went
+from `VerifyError ... exception handler 1041` to answering `-1` there, the same as on our own VM;
+**#560** and **#561**, both measured against the JDK's own output; **#562**, the guard idiom of a
+pattern variable; **#563**, a local above slot 255 losing its `wide` prefix; **#307**, the inference
+that did not look at the lambda body, the oldest one of the batch; **#564**, `invokespecial` on a
+nestmate's private method --- **30 library classes** a real JVM would not load; and **#565**, which
+#564's own measurement uncovered: `invokespecial` never checked its receiver for null.
+
+> **An open entry is not the only thing worth reading.** #564's entry said the fix needed *both* sides,
+> compiler and VM. It did not: that claim had been copied from a stale comment in `codegen.rs`, and the
+> VM had been right for a while. Measuring it --- the JDK's own `.class` run on our VM --- is what
+> showed the claim was wrong *and* turned up #565. A finding's stated cause is a hypothesis, including
+> when we wrote it.
 
 > **Do not trust the title.** Three of those six carried their own *Cerrado el...* note **inside**
 > the `Open` section, and **#113 had no marker at all**, so no marker-based scan can see it. And the
@@ -218,7 +228,7 @@ that were reproduced that day --- about the rest, all that is known is what the 
 | #304 | ✅ | el diagnóstico señalaba el archivo equivocado | Tanda: Optional, Random, SplittableRandom —… |
 | #305 | ✅ | `null` era aplicable a un parámetro primitivo | Tanda: Optional, Random, SplittableRandom —… |
 | #306 | ✅ | una lambda hacia un genérico de otra clase no compilaba | Tanda: Optional, Random, SplittableRandom —… |
-| #307 | ⬜ | la inferencia no mira el cuerpo de la lambda | Tanda: Optional, Random, SplittableRandom —… ·medido 2026-10-03 |
+| #307 | ✅ | la inferencia no mira el cuerpo de la lambda | Tanda: Optional, Random, SplittableRandom —… ·cerrado 2026-10-05 |
 | #308 | ✅ | `() -> c[1]++` era un no-op | Tanda: Optional, Random, SplittableRandom —… |
 | #309 | ✅ | un `++` sobre un campo, en posición de valor, no emitía nada | `RandomGenerator` al 100 %, y el finding qu… |
 | #310 | ✅ | un primitivo pasado a un `Object...` no se boxeaba | Tanda: el merge de `java.lang`, `java.util`… |
@@ -362,7 +372,8 @@ that were reproduced that day --- about the rest, all that is known is what the 
 | #561 | ✅ | `e instanceof T v` evalua el operando DOS veces | Tanda 2026-10-03 (b): el #505 cerrado, y e… |
 | #562 | ✅ | el alcance de una variable de patron es EL `if`, no donde la condicion vale | Tanda 2026-10-03 (b): el #505 cerrado, y e… |
 | #563 | ✅ | un local arriba del slot 255 pierde el prefijo `wide` | Tanda 2026-10-04: los dos que arrastraba… ·medido 2026-10-04 |
-| #564 | ⬜ | `invokespecial` sobre un metodo `private` de un *nestmate* | Tanda 2026-10-04: los dos que arrastraba… ·medido 2026-10-04 |
+| #564 | ✅ | `invokespecial` sobre un metodo `private` de un *nestmate* | Tanda 2026-10-04: los dos que arrastraba… ·cerrado 2026-10-06 |
+| #565 | ✅ | `invokespecial` no tiraba `NullPointerException` con el receptor en null | Tanda 2026-10-04: los dos que arrastraba… ·cerrado 2026-10-06 |
 
 ## Index by section
 
@@ -453,7 +464,8 @@ in: the method notes (*lo que esta tanda deja*) belong to the batch, not to the 
 - Los que quedan abiertos, agrupados por causa (2026-09-09) *(historico)* --- los once estan cerrados
 - Tandas 2026-09-18 a 2026-10-03 (#539-#559)
 - Tanda 2026-10-03 (b): el #505 cerrado, y el #560 que destapo
-- Tanda 2026-10-04: los dos que arrastraba `bin/FROZEN.md` desde siempre
+- Tanda 2026-10-04: los dos que arrastraba `bin/FROZEN.md` desde siempre (y, al cierre del #564 el
+  2026-10-06, el #565 que ese cierre destapo)
 
 ## The method rules the record leaves behind
 

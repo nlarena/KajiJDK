@@ -6410,7 +6410,7 @@ que se estaba probando no tenía nada que ver.
 
 Repro: `finding_308.java` (da 1111, como `java` real).
 
-### Finding #307 — la inferencia no mira el cuerpo de la lambda (ABIERTO)
+### Finding #307 → ✅ — la inferencia no mira el cuerpo de la lambda
 
 ```java
 Optional.of("perro").map(x -> x.toUpperCase()).orElseThrow().length()
@@ -6474,6 +6474,53 @@ casos con una variable de tipo explícito, con el motivo en un comentario al lad
 > (`attribute.rs`, el sitio que llama a la inferencia) y `infer_call_nested` necesita el parámetro
 > nuevo: `infer.rs` está libre, `src/javac/attribute.rs` tiene trabajo sin commitear de la otra sesión.
 > Es el **mismo bloqueo que el #562**.
+
+> **Cerrado el 2026-10-05.** La segunda ronda del plan, y las tres cosas que hubo que acertar:
+>
+> - **`lambda_body_pairs`** junta los pares `(lo que produce el argumento funcional, retorno de su
+>   SAM)` de los argumentos **diferidos**. El segundo miembro va con los parametros de tipo **crudos**
+>   del metodo, que la inferencia freshea igual que los de un parametro cualquiera: para
+>   `Optional.<U>map(Function<? super T, ? extends U>)` el SAM es `apply`, su retorno sustituido es
+>   `? extends U`, y el par `(String, ? extends U)` reduce a `U = String`.
+> - **`infer_call_nested` recibe un `extra: &[(RType, RType)]`** y lo reduce despues de
+>   `nested_reduce`. El mecanismo ya existia: el #558 lo habia puesto para las llamadas anidadas, y
+>   esto es la misma forma con otra fuente de pares.
+> - **Hay que volver a llamar a `reattribute_deferred` con la solucion adoptada.** Esto es lo que
+>   costo: con el arreglo "listo", la comprobacion pasaba y **`--emit` seguia fallando**. La primera
+>   llamada a `reattribute_deferred` ya habia horneado `U = Object` en el tipo de la lambda, asi que
+>   para cuando se propagaba la solucion nueva no quedaba ninguna `U` donde ponerla, y la
+>   re-atribucion de despues del desugar volvia a inferir `Object` (`arg_types=[Function<String,
+>   Object>]`, `diferidos=[]`). Re-atribuir con `s2` lo arregla.
+>
+> **El primer miembro del par sale de tres fuentes distintas**, y son tres caminos: el **cuerpo-expresion**
+> (su `ty`, ya tipado), el **cuerpo-bloque** (el tipo de sus `return`, y solo si todos coinciden --- con dos
+> distintos el tipo del cuerpo es su *lub*, que es otra discusion), y el retorno del metodo que una
+> **referencia** nombra. Esa ultima no tiene cuerpo de donde leerlo: hay que **buscar** el metodo, y de que
+> sobrecarga se trata depende de una resolucion que todavia no paso. Asi que en vez de adivinarla se exige
+> que la respuesta no dependa de ella --- mismo retorno para **todos** los candidatos del nombre
+> (`toUpperCase()` y `toUpperCase(Locale)` devuelven los dos `String`), ninguno **generico**, y `new`
+> afuera ---. **Lo que no se puede afirmar no aporta par**, y entonces la llamada se queda con la
+> inferencia de la primera ronda, que es el comportamiento anterior.
+>
+> **Medido: las nueve formas compilan** (antes **dos**). El repro versionado `repros/finding_307.java` se
+> reescribio de negativo a positivo: siete formas, da **-1** con nuestro javac en nuestra VM, **-1** con
+> nuestro `.class` en la **HotSpot**, y **-1** con el `.class` del JDK 25. Con el javac anterior **no
+> compila** --- la forma 1 ya es "no se encuentra el metodo: length / ubicacion: clase Object" ---.
+>
+> **Las dos formas que ya andaban no se tocaron**, que es lo que esta ficha avisaba de cuidar: el contexto
+> de asignacion y el argumento de tipo explicito son las formas 6 y 7 del repro, y estan ahi como control.
+>
+> **Radio: cero.** De las 6738 clases de la biblioteca, recompiladas con el javac de antes y con el de
+> ahora, **ninguna** cambia: byte a byte iguales. Compuertas con este javac: recompilacion
+> **4822/4822**, suite **228 invocaciones, 0 rotas, 6 sin veredicto** --- identico, invocacion por
+> invocacion, al javac de antes del arreglo: las 6 sin veredicto son de siempre ---, los 48
+> diferenciales de texto en su linea base (`Dtd1`, `Html4`), `javac::` **819 passed, 0 failed**.
+>
+> Regresion: `attribute::tests::what_a_lambda_body_produces_constrains_the_inference`. Pide **las tres
+> fuentes** del par por separado, mas las dos formas de control, mas que un miembro inexistente **siga**
+> doliendo --- sin esa ultima el test pasaria tambien con `U = Object` ---. Validada con dos controles
+> negativos independientes: neutralizando la segunda ronda falla la forma de la lambda, y neutralizando
+> solo `method_ref_ret` falla solo la de la referencia a metodo.
 
 ### La equivocación que vale la pena contar
 
@@ -17393,7 +17440,7 @@ fallar**, porque desactivar solo el arreglo de `load` dejaba los `wide` de `stor
 conformaba. Un test que no distingue las dos mitades deja media regresion entrar. Con la version de
 ahora, desactivar cada mitad por separado lo hace fallar.
 
-### #564 ⬜ -- `invokespecial` sobre un metodo `private` de un *nestmate*
+### #564 ⬜→✅ -- `invokespecial` sobre un metodo `private` de un *nestmate*
 
 **Severidad: alta.** La clase **no se puede cargar** en una JVM real, y acá contesta mal en silencio.
 
@@ -17422,3 +17469,102 @@ por ese camino. Emitir solo la mitad del compilador cambiaria una clase que no c
 no corre adentro.
 
 **Repro:** `java/JcIc.java` (`run()` da 622298 y tiene que dar 624722), y la clase pasada a `java` real.
+
+> **Cerrado el 2026-10-06, y NO eran los dos lados.** El parrafo de arriba se escribio desde el
+> comentario que estaba al lado de `is_private` en `codegen.rs`, no desde la VM, y ese comentario habia
+> dejado de ser verdad: `invokevirtual.rs` ya tiene `SiteKind::Direct` --- "a `private` instance method
+> reached by `invokevirtual` [...] per JVMS 6.5 the resolved private method *is* the selected one" ---.
+> La medicion lo dice sin lugar a dudas: el `.class` del **JDK**, que usa `invokevirtual`, corrido por
+> **nuestra VM**, da 624722. Era un lado y medio: el compilador, y un agujero aparte de la VM que esto
+> destapo (el **#565**, abajo). El comentario quedo reescrito con lo que mide hoy.
+>
+> **El arreglo son dos palabras:** el `invokespecial` de un `private` de instancia se acota al caso en
+> que **la clase que se esta emitiendo es la que lo declara** (`class_internal == self.this_class`).
+> Para cualquier otro miembro del nido --- la de afuera desde una interna, una interna desde la de
+> afuera, dos hermanas, una anonima --- la clase actual no es asignable a la del `Methodref`
+> (JVMS 4.10.1.9) y la clase no carga.
+>
+> **Medido, las celdas del cruce:**
+>
+> | | nuestra VM | HotSpot |
+> |---|---|---|
+> | nuestro javac, **antes** | 622298 | `VerifyError: Bad invokespecial instruction` |
+> | nuestro javac, **ahora** | **624722** | **624722** |
+> | el javac del JDK | 624722 | 624722 |
+>
+> Y con `JVM_JIT=0` tambien 624722: el sitio del nestmate pasa por el *inline cache* --- es para lo que
+> `JcIc` existe --- y el valor no depende de que este encendido.
+>
+> **Donde se iban los 2424 de diferencia**, aislado y no deducido: `oneHollow(null)`. Con
+> `invokespecial` nuestra VM no chequeaba el receptor, asi que un `private` que **no toca `this`**
+> devolvia su numero --- 44 --- en vez de tirar `NullPointerException` (+2468). 2468 - 44 = 2424, toda
+> la divergencia. Eso es el **#565**, y es un bug distinto: sigue estando con el compilador arreglado,
+> por el `private` de la propia clase, que seguimos emitiendo con `invokespecial`.
+>
+> **Radio: 30 clases de la biblioteca, 48 sitios.** Todas de la misma forma --- una clase interna
+> llamando a un `private` de la de afuera: `SwingWorker$Task.onDone`, `Timer$Alarm.fire`,
+> `ObjectInputStream$GetFieldImpl`, `EventQueue$Dispatch`, los `Handler`/`Listener` de `javax.swing`
+> ---. O sea que eran **30 clases de la biblioteca que una JVM real no carga**, no solo el caso del
+> reproductor. Compuertas: recompilacion **4822/4822**, suite **229 invocaciones, 0 rotas, 6 sin
+> veredicto** (la 229 es la prueba nueva del #565), los 48 diferenciales de texto en su linea base,
+> `javac::` **820 passed, 0 failed**.
+>
+> **Lo que seguimos emitiendo distinto del javac real, y es a proposito:** para un `private` de **la
+> propia clase** el javac de verdad tambien emite `invokevirtual` --- medido, incluso en una clase
+> suelta sin nido, porque toda clase es su propio *nest host* ---. Nosotros seguimos con
+> `invokespecial`, que ahi **es legal** y la HotSpot lo carga sin chistar. Se dejo asi porque mover eso
+> cambia el opcode de casi toda llamada a un privado de la biblioteca, y el radio de este arreglo ya es
+> de 30 clases; es un booleano si alguna vez se quiere identidad de bytecode con el javac.
+>
+> **El agujero que lo dejo pasar**, y es el mismo que el del #559: **nuestro verificador acepta la
+> clase mala**. `verifier.rs`, en el `invokespecial` que no es `<init>`, solo pregunta que el receptor
+> sea una referencia inicializada; no mira la regla de JVMS 4.10.1.9 --- que la clase actual sea
+> asignable a la del `Methodref` ---. Con esa regla puesta, las 30 clases habrian fallado `verify_all`
+> en vez de salir a la calle.
+>
+> Regresion: `codegen::tests::a_nestmates_private_method_is_reached_by_invokevirtual`. Pide **las dos
+> mitades**: que el del nestmate haya cambiado y que el de la propia clase **no** se haya movido ---
+> un test que mirara solo la primera pasaria con un javac que emitiera `invokevirtual` para todo ---.
+> Validada con control negativo: con la condicion vieja, falla con `(183, "M$N", "oculto")`.
+
+### #565 ⬜→✅ -- `invokespecial` no tiraba `NullPointerException` con el receptor en null
+
+> **Destapado y cerrado el 2026-10-06**, midiendo de donde salian los 2424 del #564.
+
+**Severidad: alta.** Contesta mal **en silencio**, que es la peor de las dos formas, y no hay ningun
+`.class` invalido de por medio: la clase carga en cualquier JVM, corre, y da otro numero.
+
+JVMS 6.5 lo dice literal: *"if objectref is null, the invokespecial instruction throws a
+NullPointerException"*. El nuestro no preguntaba --- empujaba el frame igual ---, y el unico cuerpo
+donde eso se nota es uno que **no toca `this`**: cualquier otro se caeria en su propio `getfield` y el
+interprete tiraria la excepcion por el.
+
+**Se puede escribir en Java, y se mide contra la HotSpot con NUESTRO propio `.class`**, que es lo que lo
+hace un cruce decisivo y no una lectura de la spec: alcanza un `private` de **la propia clase**, que es
+legal con `invokespecial`, asi que la clase carga afuera y se le puede preguntar.
+
+```java
+private int hueco(int x) { return (x * 13) + 5; }
+static int uno(Npe2 o) { return o.hueco(3); }      // invokespecial, receptor null
+// nuestra VM: 44        la HotSpot con el MISMO .class: 2468 (la NPE)
+```
+
+**Arreglo** (`src/jvm/interpreter/bytecode_interpreter/invokespecial.rs`): despues de sacar los
+operandos --- la pila queda como la dejo la instruccion y el `pc` sigue apuntando al `invoke`, que es lo
+que el despacho del handler necesita, el mismo orden que ya usaba la intercepcion de `Object.clone` ---
+se pregunta por `locals[0]`. Va para **los tres usos** del opcode y no solo para el privado: en un
+`<init>` y en un `super.m()` el receptor no puede ser null, asi que no les cambia nada y la regla queda
+escrita una sola vez.
+
+**Sigue siendo alcanzable despues del #564**, y por eso es una ficha aparte: el `private` de la propia
+clase se emite con `invokespecial` igual que antes.
+
+**Medido.** `java/SpcNullTest.java` (nuevo, en la suite) da **-1** con nuestro `.class` en nuestra VM,
+con `JVM_JIT=0`, en la HotSpot, y con el `.class` del JDK en las dos. Con la VM sin el arreglo da **1**.
+Tiene las tres formas del opcode: el privado con receptor null, un `super.m()` y un `<init>`, los dos
+ultimos como control de que no se movieron.
+
+**Ojo con su `.class` versionado:** lo emitio el javac **congelado**, como manda el invariante, y
+difiere del que emite el javac de ahora --- pero la diferencia es el `StackMapTable` del #559, no este
+finding: `javap -p -c` da **identico** en los dos, que es justamente el punto ciego que la ficha del
+#559 nombro. Los dos corren -1 en las dos VM.

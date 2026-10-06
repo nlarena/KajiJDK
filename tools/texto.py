@@ -15,6 +15,12 @@ las dos veces el sintoma fue justamente que *todas* fallaran a la vez.
 arreglo de la VM que todavia no se congelo **no se ve** con el default: hay que pasarselo con
 `--vm target/release/run-headless.exe`. Lo mismo del lado del compilador con `--javac`.
 
+**OJO con `--javac`, igual que en `tools/suite.py`:** compilar deja los `.class` **al lado de la
+fuente**, en `java/texto/`, y esos `.class` estan **VERSIONADOS** --- el invariante es que los emite el
+javac *congelado*, no el del momento --. Con `--javac` se pisan 17 de ellos sin avisar. Despues de una
+corrida asi va `git checkout -- java/texto/`. Pasado el 2026-10-06; el aviso estaba en `suite.py` y
+faltaba aca, que tiene exactamente el mismo peligro.
+
 Uso:
 
     python tools/texto.py                 # las 48
