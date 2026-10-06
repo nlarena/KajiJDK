@@ -141,6 +141,11 @@ pub struct MethodSig {
     pub type_params: Vec<TypeParam>,
     pub params: Vec<Type>,
     pub ret: Type,
+    /// Los `^Throws` de la firma (JVMS 4.7.9.1), que es **el unico lugar** donde una excepcion que es
+    /// una variable de tipo sobrevive: el atributo `Exceptions` lleva el borrado. Vacio cuando la
+    /// firma no los trae --- javac solo los escribe si alguno es generico ---, y entonces el que vale
+    /// es el `Exceptions`. Ver el finding #566.
+    pub throws: Vec<Type>,
 }
 
 /// Lee los bytes de un `.class`. `None` si no es un class file válido o se trunca.
@@ -537,8 +542,19 @@ pub fn parse_method_signature(s: &str) -> Option<MethodSig> {
     }
     r.eat(b')');
     let ret = sig_java_type(&mut r)?;
-    // Los `^Throws` que puedan seguir no nos interesan todavía.
-    Some(MethodSig { type_params, params, ret })
+    // `ThrowsSignature*`: cada uno es `^` y despues una clase (`^Ljava/io/IOException;`) o una
+    // **variable de tipo** (`^TX;`). La segunda forma es la razon de ser de esto: el atributo
+    // `Exceptions` guarda el **borrado** de la variable --- `Throwable` para un `X extends
+    // Throwable` ---, asi que leyendo solo ese atributo `throws X` se vuelve `throws Throwable` y un
+    // llamador que declara `throws X` ya no lo cubre. Finding #566.
+    //
+    // Si la firma no trae ninguno, la lista queda vacia **a proposito**: javac escribe los `^` solo
+    // cuando al menos uno es generico, y en ese caso el `Exceptions` es la fuente completa.
+    let mut throws = Vec::new();
+    while r.eat(b'^') {
+        throws.push(sig_ref_type(&mut r)?);
+    }
+    Some(MethodSig { type_params, params, ret, throws })
 }
 
 pub fn parse_field_signature(s: &str) -> Option<Type> {

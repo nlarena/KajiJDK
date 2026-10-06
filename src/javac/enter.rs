@@ -889,6 +889,25 @@ fn build_external(
             Some(sig) => (sig.params.clone(), sig.ret.clone()),
             None => (m.params.clone(), m.ret.clone()),
         };
+        // El `throws`, con la **firma generica primero** y el atributo `Exceptions` (§4.7.5) de
+        // respaldo --- la misma forma que los parametros y el retorno de arriba ---.
+        //
+        // Sin el `Exceptions` no habria nada: un metodo del classpath parecia no declarar ninguna
+        // excepcion comprobada y el chequeo de §8.4.8.3 rechazaba el override legal; `implements
+        // Callable<T>` con `call() throws Exception` no compilaba (#104/#256).
+        //
+        // Y sin la firma se pierde la unica forma en que una excepcion que es **variable de tipo**
+        // llega hasta aca: el `Exceptions` lleva su **borrado**, asi que `V call() throws X` de un
+        // `.class` se leia `throws Throwable`, y entonces un `<V, X extends Throwable> V run(Op<V, X>)
+        // throws X` que lo llame no lo cubria. Compilando `Op` en la misma unidad andaba, porque ahi
+        // hay AST y no `.class`; de la classpath, no. Finding #566.
+        //
+        // La firma manda **solo si trae alguno**: javac escribe los `^` unicamente cuando al menos
+        // una de las excepciones es generica, y en ese caso los trae todas.
+        let mthrows: Vec<Type> = match &m.signature {
+            Some(sig) if !sig.throws.is_empty() => sig.throws.clone(),
+            _ => m.throws.iter().cloned().map(Type::Class).collect(),
+        };
         let last = params.len().saturating_sub(1);
         let psig: Vec<ParamSig> = params
             .iter()
@@ -941,11 +960,7 @@ fn build_external(
                 params: psig,
                 return_type: ret,
                 is_constructor: m.name == "<init>",
-                // Del atributo `Exceptions` del `.class` (§4.7.5). Sin esto, un método del
-                // classpath parecía no declarar ninguna excepción comprobada y el chequeo de
-                // §8.4.8.3 rechazaba el override legal — `implements Callable<T>` con
-                // `call() throws Exception` no compilaba (#104/#256).
-                throws: m.throws.iter().cloned().map(Type::Class).collect(),
+                throws: mthrows,
             },
             owner: Some(cid),
             modifiers: mmods,
@@ -3472,6 +3487,51 @@ mod tests {
         let Some(Resolved::Method { params, ret, .. }) = t.resolved(id) else { panic!() };
         assert!(matches!(ret, RType::TypeVar(_)), "el retorno es la variable T: {ret:?}");
         assert_eq!(params[0], *ret, "el param y el retorno son la **misma** T");
+    }
+
+    /// #566 --- una excepcion que es **variable de tipo** tiene que sobrevivir a venir de un `.class`.
+    ///
+    /// En el `.class` el `throws` se parte en dos: el atributo `Exceptions` lleva el **borrado**
+    /// (`Throwable`, para un `X extends Throwable`) y la variable vive en el `^TX;` del `Signature`.
+    /// Leiamos solo el primero, asi que `throws X` se volvia `throws Throwable` --- y entonces un
+    /// metodo que declara `throws X` y llama a ese otro no lo cubria, aunque el programa fuera legal.
+    ///
+    /// Se piden **las dos mitades**: que el parser de firmas lea los `^`, y que `enter` los prefiera
+    /// al `Exceptions` cuando los hay. Con una sola no alcanza --- parsear y no usarlo no cambia nada,
+    /// y usarlo sin parsearlo es una lista vacia ---.
+    #[test]
+    fn a_type_variable_in_throws_survives_reading_a_class_file() {
+        // La mitad del parser. `()TV;^TX;` es exactamente la firma de `CallableOp.call`.
+        let sig = crate::javac::classfile::parse_method_signature("()TV;^TX;").expect("la firma");
+        assert_eq!(sig.throws.len(), 1, "un solo `^`: {:?}", sig.throws);
+        assert!(
+            matches!(&sig.throws[0], crate::javac::ast::Type::Class(n) if n == "X"),
+            "el `^TX;` es la variable X, no su cota: {:?}",
+            sig.throws[0]
+        );
+        // Y una clase que **no** trae `^` sigue con la lista vacia, para que `enter` caiga al
+        // `Exceptions`, que es donde estan las excepciones no genericas.
+        let llano = crate::javac::classfile::parse_method_signature("()TV;").expect("la firma");
+        assert!(llano.throws.is_empty(), "sin `^` no se inventa nada: {:?}", llano.throws);
+
+        // La mitad de `enter`, de punta a punta sobre un `.class` de verdad:
+        // `<X extends Throwable> T orElseThrow(Supplier<? extends X>) throws X`.
+        let (t, _e) = enter_src("import java.util.Optional;\nclass A { Optional<String> o; }");
+        let opt = t.external("Optional").expect("Optional cargado del classpath");
+        let m = t
+            .members_of(opt)
+            .into_iter()
+            .find(|&m| {
+                t.symbol(m).name == "orElseThrow"
+                    && matches!(t.resolved(m), Some(Resolved::Method { params, .. }) if params.len() == 1)
+            })
+            .expect("el orElseThrow de un argumento");
+        let Some(Resolved::Method { throws, .. }) = t.resolved(m) else { panic!() };
+        assert_eq!(throws.len(), 1, "declara una: {throws:?}");
+        assert!(
+            matches!(throws[0], RType::TypeVar(_)),
+            "`throws X` tiene que llegar como la variable, no como su borrado `Throwable`: {throws:?}"
+        );
     }
 
     #[test]
