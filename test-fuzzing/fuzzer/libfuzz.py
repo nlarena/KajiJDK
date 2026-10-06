@@ -434,9 +434,16 @@ def compatible(want, have):
 
 
 def producers_for(pool, t):
-    """Operations whose result can be passed where `t` is expected, subtypes included."""
+    """Operations whose result can be passed where `t` is expected, subtypes included.
+
+    The subtypes are walked in sorted order, and that is not cosmetic. They live in a `set`,
+    and Python randomises string hashing per process, so iterating one gives a different order
+    in every run: the same seed produced different cases, and two runs of the identical command
+    gave 18 and 8 divergences. Every A/B that assumed the same seed meant the same cases was
+    comparing unrelated sequences.
+    """
     out = list(pool.by_return.get(t, ()))
-    for sub in pool.subtypes.get(t, ()):
+    for sub in sorted(pool.subtypes.get(t, ())):
         out.extend(pool.by_return.get(sub, ()))
     return out
 
@@ -456,8 +463,8 @@ class Pool(object):
         for o in ops:
             self.by_return.setdefault(o["produces"], []).append(o)
         self.subtypes = {}
-        for sub, sups in SUPERS.items():
-            for sup in sups:
+        for sub in sorted(SUPERS):
+            for sup in sorted(SUPERS[sub]):
                 self.subtypes.setdefault(sup, set()).add(sub)
         self.index()
         self.index_mutators()
@@ -486,7 +493,7 @@ class Pool(object):
     def constants_for(self, t):
         """Named constants usable where `t` is expected, the subtypes of `t` included."""
         out = list(CONSTANTS.get(t, ()))
-        for sub in self.subtypes.get(t, ()):
+        for sub in sorted(self.subtypes.get(t, ())):
             out.extend(CONSTANTS.get(sub, ()))
         return out
 
@@ -543,7 +550,7 @@ def argument(t, r, pool, vars_, depth):
             USED.append((t, lit))
         return lit
     lam = lambda_for(t, r, pool) if (t in SAM or any(sub in SAM for sub in
-                                                    pool.subtypes.get(t, ()))) else None
+                                                    sorted(pool.subtypes.get(t, ())))) else None
     if lam is not None and r.random() < pool.cfg["lambda_weight"]:
         return lam
     fab = FACTORIES.get(t)
@@ -1223,7 +1230,7 @@ def lambda_for(t, r, pool):
     """`(p0, p1) -> body` for a functional interface, or None when `t` is not one."""
     m = SAM.get(t)
     if m is None:
-        for sub in pool.subtypes.get(t, ()):
+        for sub in sorted(pool.subtypes.get(t, ())):
             if sub in SAM:
                 t, m = sub, SAM[sub]
                 break
@@ -1322,14 +1329,15 @@ def plan_types(pool, report=print, rounds=6):
         return (t in FACTORIES or bool(pool.constants_for(t)) or t in SAM
                 or any(sub in SAM for sub in pool.subtypes.get(t, ())))
 
-    for t in set(list(pool.by_return) + [a for o in pool.ops for a in o["args"]]):
+    universe = sorted(set(list(pool.by_return) + [a for o in pool.ops for a in o["args"]]))
+    for t in universe:
         if free(t):
             COST[t] = FREE
     changed = True
     rnd = 0
     while changed and rnd < rounds:
         changed, rnd = False, rnd + 1
-        for t in list(set(list(pool.by_return) + [a for o in pool.ops for a in o["args"]])):
+        for t in universe:
             best, winners = None, []
             for o in producers_for(pool, t):
                 need = [COST.get(a) for a in o["args"]]
@@ -1401,8 +1409,8 @@ def load_pool(surface_path, pol, cfg, report=print):
         for sup in c.get("supers", []):
             SUPERS.setdefault(jvm_name(cls), set()).add(jvm_name(sup))
     # Transitive: `ChronoUnit` is an `Enum` and a `TemporalUnit`, and whatever those are.
-    for t in list(SUPERS):
-        seen, stack = set(), list(SUPERS[t])
+    for t in sorted(SUPERS):
+        seen, stack = set(), sorted(SUPERS[t])
         while stack:
             x = stack.pop()
             if x in seen:

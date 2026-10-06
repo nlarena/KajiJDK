@@ -82,15 +82,27 @@ public abstract class CharBuffer extends Buffer
      * Wraps part of an array in a buffer, positioned at {@code offset} with a limit just past
      * the given length. The array is not copied.
      *
+     * <p>A range that does not fit is an {@code IndexOutOfBoundsException}, which is what the
+     * specification promises. The bounds are checked by {@code position} and {@code limit},
+     * and those report a bad value as {@code IllegalArgumentException} because that is the
+     * right answer for THEM -- so it is translated here. Without the translation this method
+     * reported the wrong exception, and so did its six siblings: differential fuzzing against
+     * OpenJDK grouped 125 divergences under this single pair of exception classes.
+     *
      * @param array the array to wrap
      * @param offset the initial position
      * @param length the number of elements between the position and the limit
      * @return a buffer over {@code array}
+     * @throws IndexOutOfBoundsException if the range does not fit in the array
      */
     public static CharBuffer wrap(char[] array, int offset, int length) {
         HeapCharBuffer b = new HeapCharBuffer(array, 0, array.length);
-        b.position(offset);
-        b.limit(offset + length);
+        try {
+            b.position(offset);
+            b.limit(offset + length);
+        } catch (IllegalArgumentException bad) {
+            throw new IndexOutOfBoundsException();
+        }
         return b;
     }
 

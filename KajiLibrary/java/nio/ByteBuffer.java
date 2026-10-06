@@ -96,8 +96,12 @@ public abstract class ByteBuffer extends Buffer implements Comparable<ByteBuffer
      */
     public static ByteBuffer wrap(byte[] array, int offset, int length) {
         HeapByteBuffer b = new HeapByteBuffer(array, 0, array.length);
-        b.position(offset);
-        b.limit(offset + length);
+        try {
+            b.position(offset);
+            b.limit(offset + length);
+        } catch (IllegalArgumentException bad) {
+            throw new IndexOutOfBoundsException();
+        }
         return b;
     }
 
