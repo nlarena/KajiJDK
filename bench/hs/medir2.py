@@ -45,7 +45,7 @@ import numpy as np
 REPO = Path(__file__).resolve().parents[2]
 JAVA = Path(r"C:\Program Files\Java\jdk-25\bin\java.exe")
 CLASES = REPO / "bench" / "hs"
-CLASE = "HsBench"
+CLASE = "HsBench"      # lo pisa el argumento 1; ver `main`
 
 ITER_INTERNAS = 300   # el lazo de `step`, fijo en la fuente
 MS_POR_ITER = 25        # cuanto queremos que dure UNA iteracion, al calibrar
@@ -321,8 +321,15 @@ def anova_y_tukey(grupos):
 
 
 def main():
-    iters = int(sys.argv[1]) if len(sys.argv) > 1 else 200
-    objetivo = float(sys.argv[2]) if len(sys.argv) > 2 else 2.0
+    # `medir2.py [clase] [iteraciones] [objetivo_ic_%]`. La clase es cualquiera de las de `bench/hs/`:
+    # cada una aisla una dimension distinta y todas tienen la misma forma `bench(iters, reps)`.
+    global CLASE
+    args = sys.argv[1:]
+    if args and not args[0].replace(".", "").isdigit():
+        CLASE = args.pop(0)
+    iters = int(args[0]) if len(args) > 0 else 200
+    objetivo = float(args[1]) if len(args) > 1 else 2.0
+    print(f"### dimension: {CLASE} ###")
 
     print(f"=== calibracion: una iteracion ~{MS_POR_ITER} ms, {iters} iteraciones por corrida ===")
     reps = {}
