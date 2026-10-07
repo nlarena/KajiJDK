@@ -41,6 +41,12 @@ public final class Pattern {
         return UNICODE_CASE | CANON_EQ | UNICODE_CHARACTER_CLASS;
     }
 
+    // Every bit the API defines. A method for the same reason as `unsupportedFlags` above.
+    private static int allFlags() {
+        return UNIX_LINES | CASE_INSENSITIVE | COMMENTS | MULTILINE | LITERAL | DOTALL
+                | UNICODE_CASE | CANON_EQ | UNICODE_CHARACTER_CLASS;
+    }
+
     private final String pattern;
     private final int flags;
 
@@ -59,6 +65,13 @@ public final class Pattern {
     private final Map<String, Integer> named;
 
     private Pattern(String p, int f) {
+        // Bits outside the declared set are rejected first — before the null check and before
+        // the pattern is parsed. That order is the JDK's and it is observable: it decides what
+        // `compile(null, 0x200)` and `compile("[", 0x200)` throw. The message carries the whole
+        // flag word, not just the offending bits, which is also what the JDK prints.
+        if ((f & ~allFlags()) != 0) {
+            throw new IllegalArgumentException("Unknown flag 0x" + Integer.toHexString(f));
+        }
         if (p == null) {
             throw new NullPointerException("regex");
         }
