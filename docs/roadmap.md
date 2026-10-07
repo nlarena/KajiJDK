@@ -758,6 +758,79 @@ El momento épico: las tres piezas funcionando juntas.
 - [ ] **`invokedynamic`** (359) — **estructuralmente cerrado, y no por falta de opcodes**: en esta VM un indy **no es una llamada**. El intérprete re-lee el constant pool y **re-corre el bootstrap en cada ejecución**, así que no hay ningún `MethodId` ligado que darle al JIT ni nada que una guarda de clase pueda proteger. Cerrarlo empieza siendo trabajo **del intérprete** (darle un call site ligado que cachear); recién después el JIT puede tratarlo como un `Direct`. Mismo patrón que el interning: el bloqueo no era del compilador
 - [ ] **`os-parallel`** — el JIT sigue apagado ahí a propósito: es el único modo con el heisenbug abierto y no se le agrega una variable a un problema con ~17 sesiones de acotamiento. Además, el argumento que autoriza emitir accesos `volatile` como `mov` planos es **una propiedad del sustrato** (green tiene un solo hilo, os-gil tiene el GIL tomado) — habilitarlo ahí lo invalida y hay que revisar cada acceso (marcador `VOLATILE-REVISIT-OS-PARALLEL` en el código)
 
+### Hito F4 · Medirnos contra HotSpot 🟣 — ✅ el instrumento y el perfil (2026-10-06)
+
+> Hasta acá la Fase F se medía **contra sí misma**: JIT apagado contra encendido, con gemelos de
+> efecto cero y cuadrado latino (`bench/BASELINE.tsv`). Eso dice si un cambio mejoró algo, y no dice
+> dónde estamos parados. Este hito agrega el otro eje.
+
+**El arnés vive en [`bench/hs/`](../bench/hs/)**, y lo que lo hace confiable son cuatro decisiones,
+ninguna de las cuales toca el motor. El primer intento dio **32–94% de dispersión** contra el techo
+documentado de ±12% de esta máquina, o sea inservible; quedó `medir.py` como contraejemplo y
+`medir2.py` como el bueno.
+
+- **Se mide adentro del proceso.** Un proceso por punto arrastra el arranque de la VM, la carga de la
+  biblioteca y el layout de un proceso distinto a **cada** medición.
+- **Se emite la serie completa y se clasifica antes de resumir.** Tomar la mediana asume estado
+  estacionario, y Barrett et al. midieron que a lo sumo el 43,5% de los pares ⟨VM, benchmark⟩ llegan
+  consistentemente a pico. `medir2.py` detecta puntos de cambio y clasifica `flat`/`warmup`/
+  `slowdown`/`sin-estacionario`, y sólo resume el último tramo.
+- **Intervalos de confianza, y se sigue muestreando** hasta que el semiancho baje del objetivo, que es
+  la regla de `JavaStats` en vez de fijar las repeticiones de antemano.
+- **ANOVA de una vía más Tukey HSD**, en escala logarítmica, en lugar de cocientes pareados: con tres
+  brazos, comparar de a pares no controla la probabilidad de concluir mal. Sin `scipy`, el p-valor de
+  F sale de la beta incompleta y el crítico del rango estudentizado de una tabla leída en forma
+  conservadora; las dos se validaron contra valores de tabla conocidos antes de usarlas.
+
+**El mismo `.class` de los dos lados**, compilado con el `javac` real, y se verifica que las dos VMs
+devuelvan el mismo número antes de cronometrar nada.
+
+#### El perfil, cinco dimensiones
+
+| dimensión | nuestro JIT / HotSpot | intervalo Tukey |
+|---|---:|---|
+| aritmética sobre locales | 2,78× | 2,27 – 3,41 |
+| `putfield` de referencia | ~4,9× | pendiente |
+| `aastore` | ~4,3× | pendiente |
+| despacho **monomórfico** | **8,70×** | 7,53 – 10,04 |
+| despacho **megamórfico** | **0,45×** | 0,40 – 0,51 |
+
+Nuestro intérprete queda entre 700× y 2500× según la dimensión, y el JIT propio da ~260–290× sobre
+él —tres derivaciones independientes que coinciden, lo que vale como control interno—.
+
+**La conclusión, y es la que reordena el trabajo: la brecha es el inlining.** HotSpot cuesta **0,93 ns
+por iteración interna** en la fila monomórfica, menos que una llamada: inlinea la llamada entera y
+después optimiza el cuerpo. Al pasar a megamórfico pierde ~18× y **nosotros ganamos 2,2×**. O sea que
+donde perdemos 8,7× no competimos contra un despacho mejor sino contra la **ausencia** de despacho, y
+en cuanto esa ventaja desaparece la comparación se da vuelta. Eso pone al inlining por encima del
+asignador global de registros —que Wimmer acota en ~15%— y de los stencils de copy-and-patch:
+ninguno de los dos es del tamaño de un 8,7×. El plan sale de
+[`papers/upgrades/3.md`](../papers/upgrades/3.md).
+
+#### Dos cosas que la medición enseñó y conviene no repetir
+
+- **Un `slowdown` que no era nuestro.** La mitad de las corridas salió clasificada como degradación y
+  se persiguió: el GC no participa (cero líneas `[gc]`; el workload no asigna), no hay deopt ni
+  recompilación (con `JVM_JIT_LOG`, los eventos de más en una corrida larga son **todos del `println`
+  final**), no se reproduce con la máquina quieta, **aparece también en HotSpot** y aparece *más* en
+  nuestro brazo sin JIT que en el que tiene JIT. Era carga externa, amplificada por un clasificador
+  que resumía por media con desvíos cuadráticos —un solo pico bastaba—; ahora resume por mediana y
+  MAD.
+- **Dos errores de normalización, los dos detectados por dar una respuesta imposible.** La calibración
+  le da a cada brazo el `reps` que hace que **una iteración dure lo mismo**, así que comparar ns por
+  iteración compara tiempos iguales *por construcción*: la primera versión decía que nuestro
+  intérprete era 0,82× HotSpot, o sea más rápido. Hay que dividir por el trabajo.
+
+- [ ] **Lo que falta:** los intervalos de las dos filas de memoria (se perdieron por un filtro al
+  invocar, y esa tanda llegó a 29% de IC); y las dos medidas de Krun que están a nuestro alcance
+  —**turbo boost apagado** y pausa térmica entre corridas— para que el ancho del intervalo deje de
+  depender de la tanda. **No** hacer pinning de CPU ni apagar ASLR: Barrett et al. probaron el primero
+  y lo abandonaron porque HotSpot crea sus hilos de compilación según los cores visibles y recortarlos
+  **empeora el brazo medido**, y dejaron el segundo prendido a propósito porque apagarlo muestrea un
+  solo punto del espacio de layouts
+
+---
+
 ## FASE G — `plain_data` / value types (modelo de datos)
 
 > Los **"huérfanos de Object"**: tipos planos sin header, sin identidad, sin
