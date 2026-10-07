@@ -17,25 +17,26 @@ file reached 17 thousand lines. Nothing is in both.
 
 ---
 
-## Status (2026-10-06, after the `bin/` refresh)
+## Status (2026-10-07)
 
-**286 findings, #1-#567. Open: #567, plus #288, which has no working reproducer.**
+**286 findings, #1-#567. Open: only #288, which has no working reproducer.**
 
 | # | where | what | how it is checked |
 |---|---|---|---|
-| **#567** | javac | an anonymous class over an **interface read from a `.class`** gets it as `super_class` | HotSpot refuses the class: `IncompatibleClassChangeError ... has interface ... as super class`; our VM tolerates it. Explains 5 of the 8 classes a real JVM still rejects |
 | **#288** | VM/GC | a stale reference reaching the GC in green mode | no reproducer fires today (see the `os-parallel` note); stays open until somebody looks at it with ThreadSanitizer |
 
 **#566** and **#567** were both raised on 2026-10-06 by the `bin/` refresh, and neither was a
 regression: regenerating the versioned `.class` replaced two files that had been making the compiler
-*look* right, and the defects underneath came into view. **#566 was fixed the same day** --- zero
-emitted bytes change, and the library went back to 4822/4822. **#288** was last reproduced on
-2026-10-03.
+*look* right, and the defects underneath came into view. Both were fixed within a day, and #567's fix
+also closed the gap **#402** had left documented --- without which it could not land. **#288** was last
+reproduced on 2026-10-03.
 
-> **The frozen `bin/` still carries #566**, because it was frozen before the fix. Four versioned
-> `.class` cannot be regenerated until the next refresh --- `ScopedValueContainer` and its nested
-> class, `OptRndTest` and `ScopedTest` --- and for those four the invariant is still broken. The
-> refresh would be cheap: the fix changes no emitted bytes, so only those four need regenerating.
+> **The frozen `bin/` predates all three fixes** (#566, #567 and #402's gap), so the frozen `javac`
+> still carries them. Six versioned `.class` cannot be regenerated until the next refresh ---
+> `ScopedValueContainer` and its nested class, `OptRndTest`, `ScopedTest`, and the two that only exist
+> once #402's gap is closed, `SortedSet$1` and `TreeSet$1` --- and for those the invariant is still
+> broken. The refresh is cheap for #566 (no emitted bytes change) and moves 8 classes for the other
+> two.
 
 > **A `.class` the tree carries is not evidence that the compiler is right.** #566 had been masked for
 > weeks by an **invalid** versioned `.class` --- an `Exceptions` attribute naming a type variable,
@@ -392,7 +393,7 @@ that were reproduced that day --- about the rest, all that is known is what the 
 | #564 | ✅ | `invokespecial` sobre un metodo `private` de un *nestmate* | Tanda 2026-10-04: los dos que arrastraba… ·cerrado 2026-10-06 |
 | #565 | ✅ | `invokespecial` no tiraba `NullPointerException` con el receptor en null | Tanda 2026-10-04: los dos que arrastraba… ·cerrado 2026-10-06 |
 | #566 | ✅ | el `throws` de una variable de tipo leido de un `.class` | Tanda 2026-10-06: lo que destapo el refresco… ·cerrado 2026-10-06 |
-| #567 | ⬜ | una anonima sobre una interfaz leida de un `.class` sale con la interfaz como `super_class` | Tanda 2026-10-06: lo que destapo el refresco… ·medido 2026-10-06 |
+| #567 | ✅ | una anonima sobre una interfaz leida de un `.class` sale con la interfaz como `super_class` | Tanda 2026-10-06: lo que destapo el refresco… ·cerrado 2026-10-07 |
 
 ## Index by section
 

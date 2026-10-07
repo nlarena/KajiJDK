@@ -8999,6 +8999,39 @@ argumentos que hace `super("D")`, y la anonima con cuerpo colgando de esa. Prueb
 —`DEFAULT_VALUE` sigue llegando por el constructor de un argumento— y esta explicado ahi con el numero
 de finding al lado.
 
+
+> **El agujero que esta ficha dejaba abierto se cerro el 2026-10-07**, destapado por el #567.
+>
+> La sustitucion se abandonaba si en el tipo resultante quedaba **cualquier** variable de tipo, con el
+> motivo escrito al lado: *"es justo lo que no esta en alcance en `$N`"*. Es cierto para la `T` de un
+> **metodo generico** --- `$N` es una clase local y no hereda los parametros de tipo del metodo --- y
+> **falso para la de la clase que envuelve**, que si lo esta: un `E dos()` dentro del cuerpo de la
+> anonima compila sin problema. Ahora la decision mira **quien declara** la variable: se acepta la de
+> una clase, se sigue rechazando la de un metodo.
+>
+> En un contexto **estatico** de una clase generica la variable tampoco esta en alcance, pero ahi el
+> `new G<E>(...)` ya es ilegal en el sitio y el atributado lo reporta: dejarla pasar aca no fabrica una
+> clase mala, mueve el error a donde corresponde.
+>
+> **Lo que habia debajo era peor que el error.** Cuando `make_anon` no podia sintetizar el reenvio se
+> rendia **en silencio**: el `new Base<E>(c) { ... }` se emitia como un `new Base(c)` pelado, **sin la
+> anonima y sin el override**. En el arbol se podia ver a simple vista --- `SortedSet$1.class` y
+> `TreeSet$1.class` **no existian** ---, y el efecto es que `SortedSet.spliterator().getComparator()` y
+> el de `TreeSet` no devolvian el comparador, que es justo lo que un spliterator `SORTED` promete.
+> Ahora las dos clases se emiten, con su `getComparator()` y su `val$order` capturado, y el sitio del
+> `new` instancia la anonima.
+>
+> **Radio de los dos arreglos juntos (#567 + #402):** **2 clases nuevas** (`SortedSet$1`, `TreeSet$1`)
+> y **6 que cambian** (`SortedSet`, `TreeSet`, `Files$1`, `BasicMenuUI$1`, `BasicProgressBarUI$1`,
+> `BasicSpinnerUI$1`). Compuertas: recompilacion **4822/4822, 0 errores**; suite **230 invocaciones, 0
+> rotas**, 6 sin veredicto; cruce con la JVM real **169 comparables, 167 iguales, 3 rechazadas** (eran
+> 8); `javac::` **823 passed, 0 failed**.
+>
+> Regresion: `codegen::tests::an_anonymous_class_can_name_its_enclosing_type_parameter`. **No se
+> conforma con que compile** --- compilaba antes tambien, con la anonima descartada ---: pide que `$1`
+> exista, que tenga el metodo del cuerpo, y que el `new` instancie `$1` y no la base. Control negativo:
+> con la regla vieja falla.
+
 ### Finding #403 ⬜→✅ — el parser no acepta el constructor canonico compacto de un `record`
 
 > **Cerrado el 2026-09-07.** `src/javac/parser.rs`: se acepta `Nombre {` --sin lista de parametros--
@@ -17665,7 +17698,7 @@ adentro). **No arreglado.**
 > los de `OptRndTest` y `ScopedTest` ---, y para esos cuatro el invariante sigue roto. El refresco
 > seria barato: como el radio es cero, no hay que volver a regenerar las 992 clases, solo esas cuatro.
 
-### #567 ⬜ -- una anonima sobre una interfaz leida de un `.class` sale con la interfaz como `super_class`
+### #567 ⬜→✅ -- una anonima sobre una interfaz leida de un `.class` sale con la interfaz como `super_class`
 
 **Severidad: alta.** La clase **no se puede cargar** en ninguna otra JVM, y aca contesta bien, que es la
 peor combinacion: el artefacto no sale de casa y nada lo avisa.
@@ -17696,6 +17729,37 @@ sobre `ObjectInputFilter$FilterInfo`), `WalkTest` (sobre `DirectoryStream$Filter
 `IncompatibleClassChangeError`: tenia dos defectos encima, se le arreglo el de arriba y aparecio este.
 
 **Repro:** `KajiLibrary/repros/finding_567/` (`Fuera.java` + `Usa2.java`). **No arreglado.**
+
+> **Cerrado el 2026-10-07.** La causa **no estaba en el desugar de anonimas**, que esta sano: estaba en
+> como `make_anon` busca el simbolo del supertipo para decidir `extends` contra `implements`. Usaba
+> `resolve_type(scope, name)` y despues `external(name)`, mucho menos que la resolucion real del
+> archivo. Para un anidado nombrado con punto las dos fallan: el *class finder* registra los externos
+> por su nombre **simple**, y el simple de un anidado es `Fuera$Pide`, no `Fuera.Pide`. Con el miss,
+> `is_iface` quedaba en `false` y la interfaz salia de `super_class`.
+>
+> **Delimitado antes de tocar nada:** una interfaz **top-level** leida de un `.class` siempre salio
+> bien. Es el nombre anidado, no la classpath --- lo que explica por que el caso simple parecia sano.
+>
+> El arreglo es un reintento con `resolve_name_to_sym` --- el resolvedor real, que parte por el ultimo
+> punto, resuelve el *outer* y baja a su miembro-tipo ---, puesto **al final**, despues de agotar la
+> busqueda directa, para no cambiar nada de lo que ya resolvia: mismo criterio que el reintento del
+> #514. Un **parametro de tipo** queda excluido: `new T(){}` no es legal, y aceptarlo cambiaria la
+> decision por un simbolo que no es una clase.
+>
+> **Las cinco clases reales que la HotSpot rechazaba ahora cargan y corren**: `IoTest`, `WalkTest`,
+> `SecTest` y `UtilAuditTest` dan `-1`, y `KajiBeansHumoX` corre. El cruce con la JVM real baja de
+> **8 rechazadas a 3** (`MathTest`, `MhLayoutTest`, `CfileSweep`, que son de otras causas).
+>
+> **Y destapo el agujero del #402**, que hubo que cerrar para que esto pudiera entrar: al resolver por
+> fin el supertipo, `make_anon` intenta sintetizar el constructor de reenvio, y para
+> `new Spliterators.IteratorSpliterator<E>(this, flags) {...}` --- la forma de `SortedSet.spliterator()`
+> y `TreeSet.spliterator()` --- esa sintesis se rendia. Ver la nota al pie de la ficha del #402.
+>
+> Regresion: `codegen::tests::an_anonymous_class_over_a_nested_interface_implements_it`. Pide **tres**
+> cosas: el caso que fallaba, y dos controles --- la interfaz de la **misma unidad**, y una **clase** de
+> supertipo, que tiene que seguir en `extends` con `interfaces` vacio ---. Sin los controles, un javac
+> que pusiera `Object` siempre pasaria el test y rompiria toda anonima sobre una clase. Validada con
+> control negativo: sin el reintento falla con `left: "java/nio/file/DirectoryStream$Filter"`.
 
 ### Las tres que quedan rechazadas y no tienen ficha todavia
 
