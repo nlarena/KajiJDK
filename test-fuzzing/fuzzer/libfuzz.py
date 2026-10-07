@@ -231,6 +231,8 @@ def word_with(focus, r):
 
 
 def text_literal(r, cfg):
+    if REGEX_HINT[0] and r.random() < cfg["regex_weight"]:
+        return escape(r.choice(REGEX_TEXT))
     if FOCUS is not None and r.random() < cfg["focus_weight"]:
         return word_with(FOCUS, r)
     if r.random() < cfg["useful_weight"]:
@@ -409,6 +411,115 @@ def mutate(t, expr, r, pool):
             return r.choice(siblings)
     return expr
 
+
+# Patterns and the subjects that go with them. A regex API fed random Unicode gets rejected at
+# the parser and the engine is never reached -- the same failure the numeric strings fixed for
+# `BigInteger`, one level deeper. ReTest seeds from half a million patterns mined from real
+# projects; this is the same idea at the scale a hand-written list allows, and the subjects are
+# paired so that both the accepting and the rejecting path through the engine get walked.
+# Patterns that reach the engine's corners are included on purpose: nested quantifiers,
+# backreferences, lookarounds, possessive and reluctant forms, boundaries, named groups.
+REGEX_SEEDS = [
+    ('[a-z]+', 'abc', '123'),
+    ('[A-Za-z0-9_]{3,8}', 'ab_12', '!!'),
+    ('[A-Z][a-z]+', 'Hola', 'hola'),
+    ('\\d+', '12345', 'abc'),
+    ('\\d{4}-\\d{2}-\\d{2}', '2026-10-06', '2026-10'),
+    ('(\\d{1,3}\\.){3}\\d{1,3}', '192.168.0.1', '192.168'),
+    ('[\\w.-]+@[\\w.-]+\\.[a-z]{2,}', 'a.b@c.com', 'a@b'),
+    ('https?://[\\w./-]+', 'http://x.y/z', 'ftp://x'),
+    ('-?\\d+(\\.\\d+)?', '-3.14', '.'),
+    ('[+-]?\\d+[eE][+-]?\\d+', '1e-5', '1e'),
+    ('#[0-9a-fA-F]{6}', '#A1b2C3', '#GGGGGG'),
+    ('^\\s*$', '   ', ' x '),
+    ('^\\s+|\\s+$', '  x', 'x'),
+    ('[^,]+', 'abc', ','),
+    ('(\\w+)\\s*=\\s*(\\w+)', 'k = v', '= ='),
+    ('<([a-z]+)[^>]*>.*?</\\1>', '<b>x</b>', '<b>x</i>'),
+    ('(a|b)*c', 'ababc', 'abd'),
+    ('a*a*a*b', 'aaab', 'aaac'),
+    ('(a+)+b', 'aaab', 'aaac'),
+    ('a++b', 'aaab', 'aac'),
+    ('a+?b', 'aab', 'aa'),
+    ('a{2,}', 'aaa', 'a'),
+    ('a{0}', '', 'a'),
+    ('(?:ab)+', 'abab', 'aba'),
+    ('(?<year>\\d{4})-(\\d{2})', '2026-10', '26-10'),
+    ('(a)\\1', 'aa', 'ab'),
+    ('(?=.*x).*', 'axb', 'ab'),
+    ('(?!\\d)\\w+', 'abc', '1abc'),
+    ('(?<=a)b', 'ab', 'cb'),
+    ('(?<!a)b', 'cb', 'ab'),
+    ('(?i)hola', 'HOLA', 'chau'),
+    ('(?s).+', 'a\\nb', ''),
+    ('(?m)^b$', 'a\\nb', 'ab'),
+    ('(?x) a b', 'ab', 'a b'),
+    ('\\b\\w+\\b', 'una', ' '),
+    ('\\B\\w', 'bc', ' c'),
+    ('^\\p{Lu}\\p{Ll}+$', 'Hola', 'HOLA'),
+    ('\\p{InGreek}+', '\\u03b1\\u03b2', 'ab'),
+    ('[\\p{L}&&[^\\p{Lu}]]+', 'abc', 'ABC'),
+    ('[a-c&&[b-d]]', 'b', 'a'),
+    ('[^\\x00-\\x7F]+', '\\u00e9', 'abc'),
+    ('\\Qa+b\\E', 'a+b', 'aab'),
+    ('\\.\\*', '.x', 'x'),
+    ('()\\1*', '', 'a'),
+    ('(|a)*', 'aaa', ''),
+    ('[\\s\\S]*', 'a\\nb', ''),
+    ('x{2,3}?', 'xx', 'x'),
+    ('\\G[a-z]', 'ab', '1a'),
+    ('[', '', 'a'),
+    ('[]', '', 'a'),
+    ('(', '', 'a'),
+    (')', '', 'a'),
+    ('*', '', 'a'),
+    ('a{2,1}', '', 'a'),
+    ('(?<n>a)(?<n>b)', '', 'ab'),
+    ('\\1', '', 'a'),
+    ('(?<', '', 'a'),
+    ('[z-a]', '', 'a'),
+    ('\\p{NoSuchThing}', '', 'a'),
+    ('(?#comment)a', 'a', 'b'),
+]
+REGEX_TEXT = [x for triple in REGEX_SEEDS for x in triple]
+
+# Operations whose String arguments are patterns, or whose receiver is the subject.
+REGEX_OPS = {
+    ("java.util.regex.Pattern", "compile"), ("java.util.regex.Pattern", "matches"),
+    ("java.util.regex.Pattern", "quote"), ("java.util.regex.Pattern", "split"),
+    ("java.util.regex.Pattern", "splitAsStream"), ("java.util.regex.Pattern", "asPredicate"),
+    ("java.lang.String", "matches"), ("java.lang.String", "split"),
+    ("java.lang.String", "replaceAll"), ("java.lang.String", "replaceFirst"),
+    ("java.util.regex.Matcher", "appendReplacement"),
+    ("java.util.regex.Matcher", "replaceAll"), ("java.util.regex.Matcher", "replaceFirst"),
+    ("java.util.Scanner", "useDelimiter"), ("java.util.Scanner", "hasNext"),
+}
+REGEX_HINT = [False]
+
+REGEX_PAIR = [None]
+
+
+def regex_string(r):
+    """The pattern on the first String of a hinted call, one of ITS subjects afterwards.
+
+    Drawing both independently from one flat list -- what the first version did -- gives
+    `"abc".matches("[0-9]{4}")`: the engine rejects at the first character and the matching path
+    is never walked, which is the whole failure the corpus was meant to fix. The seeds are
+    triples for exactly that reason, and `call_inner` builds the arguments before the receiver,
+    so the pattern is asked for first in both shapes that matter: `Pattern.matches(regex, input)`
+    and `subject.matches(regex)`. Both subjects stay in play: the one that matches and the one
+    that does not walk different paths through the engine, and only one of them is a path the
+    pattern's author ever tested.
+    """
+    if REGEX_PAIR[0] is None:
+        pat, yes, no = REGEX_SEEDS[r.randrange(len(REGEX_SEEDS))]
+        REGEX_PAIR[0] = (yes, no)
+        return pat
+    yes, no = REGEX_PAIR[0]
+    return yes if r.random() < 0.5 else no
+
+
+
 ACCEPTS = {
     "Ljava/lang/Object;": is_ref,
     "Ljava/lang/CharSequence;": lambda t: t in ("Ljava/lang/String;",
@@ -532,6 +643,13 @@ def perturb(t, e, r, pool):
 
 
 def argument(t, r, pool, vars_, depth):
+    # The regex corpus is consulted FIRST, before live variables, the cache and the named
+    # constants. It was last, inside `text_literal`, and never ran: the pool holds hundreds of
+    # String constants, so `Pattern.compile` kept being handed things like
+    # `Attributes.NAME_CONSTANT_VALUE` and the corpus sat unused while the generated programs
+    # were full of regex calls.
+    if REGEX_HINT[0] and t == "Ljava/lang/String;" and r.random() < pool.cfg["regex_weight"]:
+        return escape(regex_string(r))
     live = [i for i, (vt, _) in enumerate(vars_) if compatible(t, vt)]
     if live and r.random() < 0.6:
         return "v" + str(r.choice(live))
@@ -578,6 +696,21 @@ def argument(t, r, pool, vars_, depth):
 
 
 def call(o, r, pool, vars_, depth):
+    # While this operation's arguments are being built, String literals come from the regex
+    # corpus. The receiver is drawn under the same hint on purpose: for `"abc".matches(re)` the
+    # subject is the receiver and the pattern is the argument, so both roles need to come from
+    # the paired corpus rather than from Unicode noise.
+    was, held = REGEX_HINT[0], REGEX_PAIR[0]
+    REGEX_HINT[0] = was or (o["cls"], o["name"]) in REGEX_OPS
+    if REGEX_HINT[0] and not was:
+        REGEX_PAIR[0] = None
+    try:
+        return call_inner(o, r, pool, vars_, depth)
+    finally:
+        REGEX_HINT[0], REGEX_PAIR[0] = was, held
+
+
+def call_inner(o, r, pool, vars_, depth):
     args = []
     for t in o["args"]:
         e = argument(t, r, pool, vars_, depth)
@@ -708,15 +841,28 @@ def add_observer(vars_, r, pool):
 
 
 def call_on(o, receiver, r, pool, vars_):
-    # `receiver` is already a variable name here, so it needs no parentheses.
-    """`o` invoked on an expression we already have, rather than on a fresh one."""
-    args = []
-    for t in o["args"]:
-        e = argument(t, r, pool, vars_, 0)
-        if e is None:
-            return None
-        args.append(e)
-    return receiver + "." + o["name"] + "(" + ", ".join(args) + ")"
+    """`o` invoked on an expression we already have, rather than on a fresh one.
+
+    `receiver` is already a variable name, so it needs no parentheses. The regex hint is set
+    here as well as in `call`: the receiver-centred sequences reach their target through this
+    path, so a hint placed only in `call` never fired for the operations that matter --
+    `"abc".matches(re)` is built here, and the corpus went unused while the generated programs
+    were full of `matches`, `split` and `replaceAll` calls fed with Unicode noise.
+    """
+    was, held = REGEX_HINT[0], REGEX_PAIR[0]
+    REGEX_HINT[0] = was or (o["cls"], o["name"]) in REGEX_OPS
+    if REGEX_HINT[0] and not was:
+        REGEX_PAIR[0] = None
+    try:
+        args = []
+        for t in o["args"]:
+            e = argument(t, r, pool, vars_, 0)
+            if e is None:
+                return None
+            args.append(e)
+        return receiver + "." + o["name"] + "(" + ", ".join(args) + ")"
+    finally:
+        REGEX_HINT[0], REGEX_PAIR[0] = was, held
 
 
 # =============================================================================================
@@ -1167,8 +1313,51 @@ def case_text(vars_):
     return " ".join(out)
 
 
-def reduce_case(vars_, kind, pool, r, tag, limit, rounds=20):
+
+def keeps_failing(ref_v, ours_v, kind, want_cause, mode):
+    """Whether a candidate still shows the failure we are reducing.
+
+    Requiring the exact same category -- what the first version did -- ends a reduction the
+    moment shrinking changes it, and shrinking changes it often: drop a declaration and a case
+    that `threw at a different statement` now throws at the same one, so the category moves
+    while the defect does not. Delta debugging without a usable oracle solves this by testing a
+    weaker relation than equality, and ours is ready made: the cause key, which is the pair of
+    exception classes with the statement index deliberately dropped.
+
+    `strict` is the old behaviour, `any` accepts any divergence at all and is only safe when
+    the case has one plausible defect in it.
+    """
+    k = classify(ref_v, ours_v)
+    if k is None:
+        return False
+    if mode == "any":
+        return True
+    if mode == "strict":
+        return k == kind
+    return cause_key({"ref": ref_v, "ours": ours_v, "kind": k}) == want_cause
+
+def holds(cand, kind, pool, tag, limit, times, want_cause=None, mode="cause"):
+    """Whether `cand` still diverges the same way, over `times` separate executions.
+
+    Our VM crashes and hangs intermittently, so a single execution is not evidence. The
+    delta-debugging-under-flakiness work replaces "the failure is preserved" with a statistical
+    assessment over repeated runs, and -- the part that keeps it affordable -- only pays for the
+    repeats when the decision depends on them. So candidates are screened once, in bulk, and
+    only the one about to be accepted (or the ones about to end the reduction) are re-run.
+    """
+    for j in range(times):
+        ref, ours, info = run_once(tag + "c" + str(j), [cand], pool, limit)
+        if ref is None or 0 not in ref:
+            return False
+        if not keeps_failing(ref[0], ours.get(0), kind, want_cause, mode):
+            return False
+    return True
+
+
+def reduce_case(vars_, kind, pool, r, tag, limit, rounds=20, confirm=2,
+                want_cause=None, mode="cause"):
     cur, steps = vars_, []
+    flaky = 0
     for n in range(rounds):
         cands = sorted([c for c in shrink(cur, r, pool) if c and size(c) < size(cur)], key=size)
         cands = cands[:80]
@@ -1177,16 +1366,40 @@ def reduce_case(vars_, kind, pool, r, tag, limit, rounds=20):
         ref, ours, info = run_once("R" + tag + "x" + str(n), cands, pool, limit)
         if ref is None:
             break
-        ok = [i for i in info["live"] if i in ref and classify(ref[i], ours.get(i)) == kind]
-        if not ok:
-            break
-        assert not dangling(cands[min(ok, key=lambda k: size(cands[k]))]), \
-            "a reduced case names a variable that does not exist"
-        i = min(ok, key=lambda k: size(cands[k]))
-        steps.append({"java": case_text(cands[i]), "ref": ref[i], "ours": ours.get(i)})
-        cur = cands[i]
+        ok = sorted([i for i in info["live"]
+                     if i in ref and keeps_failing(ref[i], ours.get(i), kind, want_cause, mode)],
+                    key=lambda k: size(cands[k]))
+        # A candidate that looked good once gets confirmed before it is committed; if it does
+        # not hold up, the next best is tried instead of ending the reduction.
+        chosen = None
+        for i in ok[:3]:
+            assert not dangling(cands[i]), "a reduced case names a variable that does not exist"
+            if confirm <= 0 or holds(cands[i], kind, pool, "R" + tag + "x" + str(n), limit,
+                                     confirm, want_cause, mode):
+                chosen = i
+                break
+            flaky += 1
+        if chosen is None:
+            # Nothing survived. Before concluding the case is minimal, give the smallest few
+            # another chance: this is exactly where an intermittent failure ends a reduction
+            # early and leaves a case bigger than it needed to be.
+            revived = None
+            for i in sorted(range(len(cands)), key=lambda k: size(cands[k]))[:3]:
+                if i in ok:
+                    continue
+                if holds(cands[i], kind, pool, "R" + tag + "r" + str(n), limit, 1,
+                         want_cause, mode):
+                    revived = i
+                    break
+            if revived is None:
+                break
+            chosen = revived
+            flaky += 1
+        steps.append({"java": case_text(cands[chosen]), "ref": ref.get(chosen),
+                      "ours": ours.get(chosen)})
+        cur = cands[chosen]
     ref, ours, _ = run_once("R" + tag + "end", [cur], pool, limit)
-    return cur, steps, (ref or {}).get(0), (ours or {}).get(0)
+    return cur, steps, (ref or {}).get(0), (ours or {}).get(0), flaky
 
 
 # =============================================================================================
@@ -1505,6 +1718,7 @@ def drop_classes(pool, bad):
 
 # =============================================================================================
 DEFAULT_CFG = {
+    "regex_weight": 0.75,
     "lambda_weight": 0.6,
     "mutate_weight": 0.3,
     "constant_weight": 0.5,
@@ -1913,6 +2127,12 @@ def main():
     ap.add_argument("--batches", type=int, default=5)
     ap.add_argument("--per-batch", type=int, default=400)
     ap.add_argument("--length", type=int, default=3, help="declarations per case")
+    ap.add_argument("--reduce-predicate", choices=["strict", "cause", "any"], default="cause",
+                    help="what a candidate must still show to count as reducing the same "
+                         "failure")
+    ap.add_argument("--reduce-confirm", type=int, default=2,
+                    help="extra executions used to confirm a candidate before accepting it; "
+                         "0 trusts a single run")
     ap.add_argument("--reduce", type=int, default=8,
                     help="how many distinct causes to minimise (0 turns reduction off)")
     ap.add_argument("--limit", type=int, default=30, help="seconds per batch per side")
@@ -1924,6 +2144,11 @@ def main():
     ap.add_argument("--allow-hostile", action="store_true",
                     help="include classes that are safe but stall a campaign")
     ap.add_argument("--exclude", nargs="*", default=[], help="extra class prefixes to drop")
+    ap.add_argument("--only", nargs="*", default=[],
+                    help="restrict the walk to these class prefixes. Without it a corner of "
+                         "the library cannot be reached in reasonable time: the cursor walks "
+                         "8060 operations in order, so `java.util.regex` is an hour away from "
+                         "the start and a change aimed at it cannot be tested at all")
     # Several queues can run at once, each taking every n-th operation. Splitting by index
     # rather than by package keeps every queue mixed: one queue would otherwise get all of
     # `java.time` and the other all of `javax`, and their divergence rates would not be
@@ -2002,6 +2227,13 @@ def main():
     unbuildable = [o for o in ordered if not buildable(o)]
     print("walk: %d operations, %d of them predicted unbuildable (kept, so they get counted)"
           % (len(ordered), len(unbuildable)))
+    if a.only:
+        # Exact class or a package prefix, never a bare startswith: `java.lang.String` would
+        # otherwise also select `StringBuffer` and `StringBuilder`, which is how a run meant to
+        # exercise regex came back dominated by `StringBuffer.insert`.
+        ordered = [o for o in ordered
+                   if any(o["cls"] == q or o["cls"].startswith(q + ".") for q in a.only)]
+        print("only: %d operations match %s" % (len(ordered), " ".join(a.only)))
     if a.shards > 1:
         ordered = [o for i, o in enumerate(ordered) if i % a.shards == a.shard]
         print("shard %d of %d: %d operations" % (a.shard, a.shards, len(ordered)))
@@ -2252,12 +2484,16 @@ def main():
     for key, members, d in reps:
         print("reducing [%s] x%d %s" % (d["kind"], members, d["java"][:80]), flush=True)
         t = time.time()
-        mn, rsteps, rv, ov = reduce_case(d["vars"], d["kind"], pool, r,
-                                         "%dx%d" % (a.seed, len(reduced)), a.limit)
+        mn, rsteps, rv, ov, flaky = reduce_case(d["vars"], d["kind"], pool, r,
+                                                "%dx%d" % (a.seed, len(reduced)), a.limit,
+                                                confirm=a.reduce_confirm,
+                                                want_cause=key, mode=a.reduce_predicate)
         reduced.append({"cause": list(key), "covers": members, "kind": d["kind"],
                         "blamed": d["blamed"],
                         "original": d["java"], "minimal": case_text(mn),
                         "minimal_ref": rv, "minimal_ours": ov, "steps": rsteps,
+                        "flaky_candidates": flaky,
+                        "minimal_kind": classify(rv, ov) if rv is not None else None,
                         "seconds": round(time.time() - t, 1)})
         save("reducing")
 
