@@ -8543,6 +8543,96 @@ mod tests {
         assert!(par(0xc4, 0x15), "falta `wide iload` para un slot arriba del 255");
     }
 
+    /// #402 --- una anonima **con argumentos** sobre un supertipo generico instanciado con la variable
+    /// de tipo de la **clase que la envuelve**.
+    ///
+    /// El constructor de reenvio de `$N` lleva los argumentos de tipo **escritos** en el `new`, no los
+    /// parametros declarados por la superclase. Esa sustitucion se abandonaba si quedaba **cualquier**
+    /// variable de tipo, y ahi se perdia este caso: la `E` de la clase que envuelve **si** esta en
+    /// alcance dentro de `$N`. El parametro quedaba `Collection<? extends ?>` y la llamada no resolvia.
+    ///
+    /// **Y lo que fallaba no era solo el error.** Antes de eso, cuando `make_anon` no podia sintetizar
+    /// el reenvio, se rendia **en silencio**: el `new Base<E>(c) { ... }` se emitia como un
+    /// `new Base(c)` pelado, sin la anonima y **sin el override**. Por eso el test mira que la clase
+    /// `$1` exista y que tenga el metodo: que compile no alcanza, porque compilaba antes tambien.
+    ///
+    /// La `T` de un **metodo generico** sigue afuera, y es el control: ahi `$N` de verdad no la ve.
+    #[test]
+    fn an_anonymous_class_can_name_its_enclosing_type_parameter() {
+        let con_la_de_la_clase = "import java.util.Collection;
+             public class M<E> {
+                 static class Base<T> { Base(Collection<? extends T> c) {} T uno() { return null; } }
+                 Object f(Collection<E> c) { return new Base<E>(c) { E dos() { return uno(); } }; } }";
+        verify_all(con_la_de_la_clase, "M$1");
+        let anon = compiled_class(con_la_de_la_clase, "M$1");
+        assert_eq!(
+            anon.class_name(anon.super_class),
+            Some("M$Base"),
+            "la anonima extiende la clase base"
+        );
+        assert!(
+            anon.methods.iter().any(|m| anon.utf8(m.name_index) == Some("dos")),
+            "y el cuerpo **esta**: sin esto el test pasaria con la anonima descartada en silencio"
+        );
+        // Y el sitio del `new` instancia la anonima, no la base pelada.
+        let m = compiled_class(con_la_de_la_clase, "M");
+        let code = m.method_code_by_name("f", "(Ljava/util/Collection;)Ljava/lang/Object;")
+            .expect("f con Code");
+        let nombra_anon = (0..code.code.len().saturating_sub(2)).any(|i| {
+            code.code[i] == 0xbb // new
+                && m.class_name(u16::from_be_bytes([code.code[i + 1], code.code[i + 2]]))
+                    == Some("M$1")
+        });
+        assert!(nombra_anon, "el `new` tiene que instanciar `M$1`");
+    }
+
+    /// #567 --- una anonima sobre una **interfaz anidada leida de un `.class`** tiene que salir con
+    /// `java/lang/Object` de superclase y la interfaz en `interfaces`, no al reves.
+    ///
+    /// `make_anon` decide `extends` contra `implements` por el `TypeKind` del supertipo, y lo buscaba
+    /// con una resolucion mas floja que la del resto del archivo: para un anidado nombrado con punto
+    /// (`DirectoryStream.Filter`) que viene del classpath, las dos busquedas directas fallan --- los
+    /// externos se registran por nombre **simple**, y el simple de un anidado es `Outer$Inner` ---, asi
+    /// que la interfaz terminaba en `super_class`. Una JVM real rechaza esa clase con
+    /// `IncompatibleClassChangeError`; la nuestra la toleraba, o sea que contestaba bien y no se notaba.
+    ///
+    /// Se piden **las dos mitades**: la que fallaba (interfaz anidada del classpath) y las dos que
+    /// siempre anduvieron (una interfaz de la **misma unidad**, y una **clase** de supertipo, que tiene
+    /// que seguir yendo por `extends`). Sin las de control, un javac que pusiera `Object` siempre
+    /// pasaria el test y romperia toda anonima sobre una clase.
+    #[test]
+    fn an_anonymous_class_over_a_nested_interface_implements_it() {
+        let interfaces_de = |c: &ClassFile| -> (String, usize) {
+            (
+                c.class_name(c.super_class).unwrap_or("<ninguna>").to_string(),
+                c.interfaces.len(),
+            )
+        };
+
+        // La que fallaba: `DirectoryStream.Filter` es una interfaz **anidada** y viene del classpath.
+        let del_classpath = "import java.nio.file.DirectoryStream;
+             public class M { static Object f() {
+                 return new DirectoryStream.Filter<String>() {
+                     public boolean accept(String e) { return true; } }; } }";
+        let (sup, n) = interfaces_de(&compiled_class(del_classpath, "M$1"));
+        assert_eq!(sup, "java/lang/Object", "la anonima extiende Object, no la interfaz");
+        assert_eq!(n, 1, "y la interfaz va en `interfaces`");
+
+        // Control: la misma forma con la interfaz en **esta** unidad, que siempre salio bien.
+        let misma_unidad = "public class M { interface Pide { int cuanto(); }
+             static Object f() { return new Pide() { public int cuanto() { return 7; } }; } }";
+        let (sup, n) = interfaces_de(&compiled_class(misma_unidad, "M$1"));
+        assert_eq!(sup, "java/lang/Object", "igual que la de arriba");
+        assert_eq!(n, 1);
+
+        // Control: sobre una **clase** sigue siendo `extends`, con `interfaces` vacio.
+        let sobre_clase = "public class M { static class Base { int cuanto() { return 1; } }
+             static Object f() { return new Base() { int cuanto() { return 7; } }; } }";
+        let (sup, n) = interfaces_de(&compiled_class(sobre_clase, "M$1"));
+        assert_eq!(sup, "M$Base", "una clase de supertipo va en super_class");
+        assert_eq!(n, 0, "y no hay interfaces");
+    }
+
     /// #564 --- el `private` de un **nestmate** va por `invokevirtual`, no por `invokespecial`.
     ///
     /// `invokespecial` exige que la clase actual sea **asignable a la del `Methodref`**

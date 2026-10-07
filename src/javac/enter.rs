@@ -2605,15 +2605,37 @@ fn sustituir_args_escritos(
         }
     }
 
-    /// Si en el tipo resuelto quedo algo sin resolver --o una variable de tipo-- a cualquier
-    /// profundidad. Una variable de tipo cuenta: es justo lo que no esta en alcance en `$N`.
-    fn tiene_sin_resolver(rt: &RType) -> bool {
+    /// Si en el tipo resuelto quedo algo que **no va a estar en alcance dentro de `$N`**, a cualquier
+    /// profundidad.
+    ///
+    /// Una variable de tipo cuenta **segun quien la declara**, y esa distincion es el finding #402
+    /// terminado:
+    ///
+    /// - la de un **metodo generico** (`<T> void f() { new G<T>(t) {}; }`) no esta en alcance en `$N`
+    ///   --- `$N` es una clase local, no hereda los parametros de tipo del metodo ---, asi que se
+    ///   abandona la sustitucion y queda el error de hoy, que es lo que esta ficha ya hacia;
+    /// - la de la **clase que envuelve** (`class M<E> { ... new Base<E>(c) {} }`) **si** lo esta: el
+    ///   cuerpo de la anonima la nombra sin problema --- un `E dos()` adentro compila ---, y
+    ///   rechazarla era lo que dejaba el parametro del reenvio en `Collection<? extends ?>` y hacia
+    ///   fallar la resolucion con "`Collection<E>` no se convierte a `Collection<? extends ?>`".
+    ///
+    /// Lo segundo no es un caso de laboratorio: `SortedSet.spliterator()` y `TreeSet.spliterator()`
+    /// son exactamente esa forma.
+    ///
+    /// En un contexto **estatico** de una clase generica la variable tampoco esta en alcance, pero ahi
+    /// el `new G<E>(...)` ya es ilegal en el sitio y el atributado lo reporta: dejarla pasar aca no
+    /// fabrica una clase mala, solo mueve el error a donde corresponde.
+    fn tiene_sin_resolver(table: &SymbolTable, rt: &RType) -> bool {
         match rt {
-            RType::Unresolved | RType::TypeVar(_) => true,
-            RType::Array(inner) => tiene_sin_resolver(inner),
+            RType::Unresolved => true,
+            RType::TypeVar(id) => !matches!(
+                table.symbol(*id).owner.map(|o| &table.symbol(o).kind),
+                Some(SymbolKind::Class { .. })
+            ),
+            RType::Array(inner) => tiene_sin_resolver(table, inner),
             RType::Parameterized { args, .. } => args.iter().any(|a| match a {
-                RTypeArg::Type(t) => tiene_sin_resolver(t),
-                RTypeArg::Extends(t) | RTypeArg::Super(t) => tiene_sin_resolver(t),
+                RTypeArg::Type(t) => tiene_sin_resolver(table, t),
+                RTypeArg::Extends(t) | RTypeArg::Super(t) => tiene_sin_resolver(table, t),
                 RTypeArg::Wildcard => false,
             }),
             _ => false,
@@ -2640,7 +2662,7 @@ fn sustituir_args_escritos(
         return None;
     }
     // Y tiene que resolver desde aca; si no, se deja el error de hoy.
-    if tiene_sin_resolver(&super::attribute::resolve_rtype(table, scope, &nuevo)) {
+    if tiene_sin_resolver(table, &super::attribute::resolve_rtype(table, scope, &nuevo)) {
         return None;
     }
     Some(nuevo)
@@ -2892,12 +2914,38 @@ fn sustituir_args_escritos(
         Some(Type::Parameterized { base: base_name.clone(), args: nuevos })
     }
 
+    /// El simbolo de un tipo escrito, para `make_anon` --- su unico llamador ---, que con el decide si
+    /// una anonima **extiende** el supertipo o lo **implementa**.
+    ///
+    /// El reintento con `resolve_name_to_sym` va **al final**, despues de agotar la busqueda directa,
+    /// para no cambiar en nada lo que ya resolvia --- mismo criterio que el reintento del #514 ---.
+    /// Lo que agrega es el caso que faltaba: un tipo **anidado** nombrado con punto (`Fuera.Pide`,
+    /// `ObjectInputFilter.FilterInfo`) que viene de un `.class`. Ahi las dos busquedas directas fallan,
+    /// porque el *class finder* registra los externos por su nombre **simple** y el nombre simple de un
+    /// anidado es `Fuera$Pide`; `resolve_name_to_sym` en cambio parte por el ultimo punto, resuelve el
+    /// `outer` y baja a su miembro-tipo.
+    ///
+    /// Con `is_iface` en `false` por un miss, la anonima salia con la interfaz en `super_class` en vez
+    /// de `Object` + `interfaces`, y una JVM real rechaza esa clase entera con
+    /// `IncompatibleClassChangeError`. Nuestra VM la toleraba, asi que contestaba bien y no se notaba.
+    /// Con la interfaz en la **misma unidad de compilacion** siempre salio bien, que es lo que hacia
+    /// parecer sano al desugar de anonimas. Finding #567.
+    ///
+    /// Un **parametro de tipo** no cuenta: `new T(){}` no es legal, y darlo por bueno aca cambiaria la
+    /// decision de `extends`/`implements` por un simbolo que no es una clase.
     fn type_symbol(&self, ty: &Type, scope: ScopeId) -> Option<SymbolId> {
         let name = match ty {
             Type::Class(n) | Type::Parameterized { base: n, .. } => n.as_str(),
             _ => return None,
         };
-        self.table.resolve_type(scope, name).or_else(|| self.table.external(name))
+        self.table
+            .resolve_type(scope, name)
+            .or_else(|| self.table.external(name))
+            .or_else(|| {
+                resolve_name_to_sym(self.table, scope, name)
+                    .filter(|&(_, es_var)| !es_var)
+                    .map(|(id, _)| id)
+            })
     }
 }
 
