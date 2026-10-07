@@ -75,6 +75,7 @@ fn compile_shaped(
             instance: &|_, _| None,
             array: &|_, _| None,
             invoke: &|_, _, _| None,
+            intrinsic: &|_, _| None,
             heap,
             array_store: &|_, _| None,
             class_mirror: &|_, _| None,
@@ -268,6 +269,7 @@ fn caller_calling(
                     record: Some(callee.address()),
                 }])
             },
+            intrinsic: &|_, _| None,
             heap: Heap::default(),
             array_store: &|_, _| None,
             class_mirror: &|_, _| None,
@@ -386,6 +388,7 @@ fn caller_calling_dispatched(
                     record: Some(callee.address()),
                 }])
             },
+            intrinsic: &|_, _| None,
             heap,
             array_store: &|_, _| None,
             class_mirror: &|_, _| None,
@@ -581,6 +584,7 @@ fn caller_with_chain(arms: &[(u32, &'static [u8])], heap: Heap) -> CompiledCode 
             instance: &|_, _| None,
             array: &|_, _| None,
             invoke: &|_, _, _| Some(alternatives.clone()),
+            intrinsic: &|_, _| None,
             heap,
             array_store: &|_, _| None,
             class_mirror: &|_, _| None,
@@ -677,14 +681,21 @@ fn pic_un_sitio_monomorfico_sigue_emitiendo_una_sola_comparacion() {
 }
 
 #[test]
-fn pic_un_sitio_megamorfico_rechaza_el_metodo() {
+fn pic_un_sitio_megamorfico_corta_el_metodo() {
     // Lo que el perfil contesta cuando se desborda —más clases distintas que ways— es `None`, y
     // `None` es lo mismo que contesta para un sitio frío o un `invokedynamic`: el compilador no
-    // tiene nada que compilar acá y rechaza el método entero.
+    // tiene nada que ligar acá.
     //
-    // Rechazar es la respuesta correcta y no la cómoda. Una cadena que no cubre el sitio se paga en
-    // cada llamada **y además** deopta, y un deopt retira la entrada on-stack del método: el bucle
-    // se perdería igual, pagando las guardas antes.
+    // **Lo que hace con eso cambió, y el argumento de antes sigue valiendo igual.** Decía: una
+    // cadena de guardas que no cubre el sitio se paga en cada llamada **y además** deopta, y un
+    // deopt retira la entrada on-stack del método, así que el bucle se perdería igual pagando las
+    // guardas antes. Es cierto, y por eso el emisor **no emite ninguna guarda acá**: la trampa es
+    // un deopt *incondicional*, sin comparación de clase, sin cadena y sin arms.
+    //
+    // La diferencia con rechazar es sola una y es toda a favor: todo lo que está **antes** del
+    // sitio corre nativo. Y el costo se paga una vez y no por iteración, justamente porque el
+    // deopt retira la entrada on-stack — lo que el argumento de arriba identificó como el problema
+    // de la cadena es lo que acota el precio de la trampa.
     let error = super::compile::compile(
         &Method {
             unit: 7,
@@ -704,6 +715,7 @@ fn pic_un_sitio_megamorfico_rechaza_el_metodo() {
             instance: &|_, _| None,
             array: &|_, _| None,
             invoke: &|_, _, _| None,
+            intrinsic: &|_, _| None,
             heap: Heap::default(),
             array_store: &|_, _| None,
             class_mirror: &|_, _| None,
@@ -711,7 +723,9 @@ fn pic_un_sitio_megamorfico_rechaza_el_metodo() {
             poll_word: &POLL as *const _ as usize,
         },
     );
-    assert!(matches!(error, Err(super::compile::Ineligible::Opcode { pc: 4, opcode: 0xb6 })), "{error:?}");
+    let trampa = error.expect("un sitio megamórfico corta el método, no lo rechaza");
+    assert_eq!(trampa.resume_sites.len(), 1, "una sola salida, sin guardas");
+    assert_eq!(trampa.resume_sites[0].pc, 4, "y es el pc del invoke, que no se ejecutó");
 }
 
 #[test]
@@ -890,6 +904,7 @@ fn compile_long(
             instance: &|_, _| None,
             array: &|_, _| None,
             invoke: &|_, _, _| None,
+            intrinsic: &|_, _| None,
             heap: Heap::default(),
             array_store: &|_, _| None,
             class_mirror: &|_, _| None,
@@ -1173,9 +1188,21 @@ fn a_method_that_uses_many_stack_slots_and_locals_still_works() {
 fn an_ineligible_method_is_reported_not_compiled() {
     // The safety net the whole design rests on: one opcode outside the subset and there is no
     // native code at all, for any part of the method.
-    let err = compile(&[ILOAD_0, 0xb6, 0x00, 0x02, IRETURN], 1, &|_| None).unwrap_err();
-    assert_eq!(err, Ineligible::Opcode { pc: 1, opcode: 0xb6 }); // invokevirtual: a *call*, never in
+    //
+    // El opcode es **`jsr`** (0xa8) y no un `invoke`, y el cambio de testigo es el contenido de
+    // este test. Un `invoke` que la VM no puede ligar ya no refuta el método: lo corta ahí con un
+    // deopt (ver `invoke_trap`), así que no sirve para preguntar "¿qué pasa cuando el método
+    // entero es inelegible?". `jsr` sí: el verificador lo prohibe en class files de versión 50.0 o
+    // mayor, `javac` no puede emitirlo, y no hay nada que resolver ni perfilar que lo pudiera
+    // convertir en una trampa alguna vez.
+    let err = compile(&[ILOAD_0, 0xa8, 0x00, 0x02, IRETURN], 1, &|_| None).unwrap_err();
+    assert_eq!(err, Ineligible::Opcode { pc: 1, opcode: 0xa8 });
     assert!(err.to_string().contains("outside the compiled subset"));
+    // Y el contraste, que es lo que hace visible la diferencia: el mismo método con un
+    // `invokevirtual` en el mismo lugar **compila**, y sale por el pc del invoke.
+    let trampa = compile(&[ILOAD_0, 0xb6, 0x00, 0x02, IRETURN], 1, &|_| None).unwrap();
+    assert_eq!(trampa.resume_sites.len(), 1);
+    assert_eq!(trampa.resume_sites[0].pc, 1);
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -1763,6 +1790,7 @@ fn getstatic_reads_the_live_four_bytes_at_the_address_it_was_given() {
             instance: &|_, _| None,
             array: &|_, _| None,
             invoke: &|_, _, _| None,
+            intrinsic: &|_, _| None,
             heap: Heap::default(),
             array_store: &|_, _| None,
             class_mirror: &|_, _| None,
@@ -1874,6 +1902,8 @@ impl FakeHeap {
             array_data: 12, // ...and the elements right after that
             int_element: 4,
             reference_element: 4,
+            string_length: 8,  // la palabra de largo, atras del encabezado
+            string_data: 12,   // ...y el texto atras de ella
             // Old starts where the "other" buffer does — everything below `EDEN_END` is Eden and
             // therefore young, which is the same split the real heap makes and the one the write
             // barrier's filter is compiled against.
@@ -1997,6 +2027,7 @@ fn compile_instance(
             instance: &|_, _| None,
             array: &|_, _| None,
             invoke: &|_, _, _| None,
+            intrinsic: &|_, _| None,
             heap,
             array_store: &|_, _| None,
             class_mirror: &|_, _| None,
@@ -2029,6 +2060,7 @@ fn compile_astore(code: &[u8], max_locals: usize, descriptor: &str, heap: Heap) 
             instance: &|_, _| None,
             array: &|_, _| None,
             invoke: &|_, _, _| None,
+            intrinsic: &|_, _| None,
             heap,
             array_store: &|_, _| {
                 Some(super::compile::ArrayStore { array_class: ARRAY_CLASS, element_class: ELEMENT_CLASS })
@@ -2192,6 +2224,7 @@ fn an_aastore_with_no_profile_refuses_its_method() {
             instance: &|_, _| None,
             array: &|_, _| None,
             invoke: &|_, _, _| None,
+            intrinsic: &|_, _| None,
             heap: heap.bases(),
             array_store: &|_, _| None,
             class_mirror: &|_, _| None,
@@ -2546,6 +2579,7 @@ fn a_body_with_exception_handlers_refuses_a_conflict_rather_than_carrying_one() 
                 instance: &|_, _| None,
                 array: &|_, _| None,
                 invoke: &|_, _, _| None,
+                intrinsic: &|_, _| None,
                 heap: heap.bases(),
                 array_store: &|_, _| None,
                 class_mirror: &|_, _| None,
@@ -2669,6 +2703,7 @@ fn a_conflict_inside_an_inlined_callee_compiles_and_names_the_dead_slot() {
                     record: None,
                     }])
                 },
+                intrinsic: &|_, _| None,
                 heap: heap.bases(),
                 array_store: &|_, _| None,
                 class_mirror: &|_, _| None,
@@ -2838,6 +2873,7 @@ fn a_method_with_exception_handlers_still_compiles_but_is_never_entered_on_stack
                 instance: &|_, _| None,
                 array: &|_, _| None,
                 invoke: &|_, _, _| None,
+                intrinsic: &|_, _| None,
                 heap: Heap::default(),
                 array_store: &|_, _| None,
                 class_mirror: &|_, _| None,
@@ -2897,6 +2933,7 @@ fn compile_static(
             instance: &|_, _| None,
             array: &|_, _| None,
             invoke: &|_, _, _| None,
+            intrinsic: &|_, _| None,
             heap,
             array_store: &|_, _| None,
             class_mirror: &|_, _| None,
@@ -3152,6 +3189,7 @@ fn compile_alloc(
             instance: &|_, _| Some(instance),
             array: &|_, _| None,
             invoke: &|_, _, _| None,
+            intrinsic: &|_, _| None,
             heap,
             array_store: &|_, _| None,
             class_mirror: &|_, _| None,
@@ -3330,8 +3368,11 @@ fn an_allocation_this_tier_cannot_do_inline_is_refused_rather_than_escaped() {
         compile_alloc(&code, 0, "()LCell;", blind, CELL).unwrap_err(),
         Ineligible::AllocOutOfReach { pc: 0 }
     );
-    // And a class the resolver will not answer for — the class-initialisation case, which is what
-    // this looks like from inside the compiler.
+    // Y una clase que el resolver no contesta — el caso de la inicialización, que es como se ve
+    // esto desde adentro del compilador. **Ése ya no rechaza**: corta el método en el `new` y deja
+    // que siga el intérprete, que es el único que puede correr un `<clinit>`. El contraste con el
+    // `AllocOutOfReach` de arriba es el punto: aquél es una propiedad del heap de esta VM y vale
+    // para todo el método, éste es una propiedad de *este* pc.
     let refused = super::compile::compile(
         &Method { unit: 0, code: &code, max_locals: 0, descriptor: "()LCell;", is_static: true, has_handlers: false },
         &Environment {
@@ -3344,6 +3385,7 @@ fn an_allocation_this_tier_cannot_do_inline_is_refused_rather_than_escaped() {
             instance: &|_, _| None,
             array: &|_, _| None,
             invoke: &|_, _, _| None,
+            intrinsic: &|_, _| None,
             heap: heap.bases(),
             array_store: &|_, _| None,
             class_mirror: &|_, _| None,
@@ -3351,7 +3393,245 @@ fn an_allocation_this_tier_cannot_do_inline_is_refused_rather_than_escaped() {
             poll_word: &POLL as *const _ as usize,
         },
     );
-    assert_eq!(refused.unwrap_err(), Ineligible::UnresolvedClass { pc: 0, index: 1 });
+    let trampa = refused.expect("una clase sin resolver corta el método, no lo rechaza");
+    assert_eq!(trampa.resume_sites.len(), 1, "una sola salida");
+    assert_eq!(trampa.resume_sites[0].pc, 0, "y es el pc del `new`, que no llegó a correr");
+}
+
+/// **Un sitio de llamada que no se puede ligar corta la rama, no el método** — la tercera forma de
+/// la misma enfermedad, y la más grande de las tres cuando el censo por tiempo midió lo que quedaba.
+///
+/// Esta es la forma de `String.indexOf(III)`, que es cómo se encontró: un camino normal que llama a
+/// `charAt`, y una rama de **pares subrogados** —sólo para caracteres de más de 16 bits— que llama
+/// al mismo `charAt` desde otro pc. El primer sitio se liga; el segundo nunca se ejecutó, así que no
+/// tiene perfil de receptor y la VM no ofrece destino. Antes eso refutaba el método entero, con el
+/// camino bueno adentro.
+///
+/// Que lo que refutaba era el **sitio** y no el callee se comprobó sin tocar el compilador: haciendo
+/// correr la rama de subrogados, `indexOf(III)` compila al instante. Este test es esa misma forma en
+/// veinte bytes, y lo que mide son las tres cosas que hacen que sea un arreglo:
+///
+///  1. **compila**, con el sitio igual de infligable que antes;
+///  2. el camino bueno **corre nativo** y no pasa por ninguna salida;
+///  3. la rama mala sale **en el pc del invoke** y devuelve el argumento que la llamada no
+///     consumió — que es lo que deja al intérprete hacer la llamada por su camino de siempre. Un
+///     pc de más querría decir que la llamada ocurrió, y entonces el intérprete la haría dos veces.
+///
+/// Y una cuarta, que es la mitad del arreglo y no se ve mirando el invoke: detrás de la trampa hay
+/// un `jsr`, que no está en el subconjunto y nunca va a estar. Compila igual, porque el corte lo
+/// deja inalcanzable — una rama entera deja de tener que pertenecer al subconjunto.
+#[test]
+fn un_sitio_infligable_corta_la_rama_y_no_el_metodo() {
+    let heap = FakeHeap::new();
+    // **El camino bueno va DESPUES de la trampa a proposito**, y no es cosmetica: con el orden al
+    // reves el test pasa sin que el emisor emita nada en el sitio, porque el control cae de largo
+    // justo arriba del stub y da la respuesta correcta por accidente de layout. Lo encontro un
+    // mutante que saco el salto y sobrevivio. Asi, caer de largo devuelve 42 donde tiene que
+    // deoptar, y el salto queda verificado.
+    //
+    //  0  iload_0
+    //  1  ifge   -> 11
+    //  4  iload_0
+    //  5  invokestatic #1   <- sin destino: la trampa
+    //  8  jsr               <- fuera del subconjunto para siempre, e inalcanzable
+    // 11  bipush 42         <- alcanzable, y emitido DESPUES de la trampa
+    // 13  ireturn
+    let code = [0x1a, 0x9c, 0x00, 0x0a, 0x1a, 0xb8, 0x00, 0x01, 0xa8, 0x00, 0x02, 0x10, 0x2a, 0xac];
+    let compiled = super::compile::compile(
+        &Method { unit: 0, code: &code, max_locals: 1, descriptor: "(I)I", is_static: true, has_handlers: false },
+        &Environment {
+            int_const: &|_, _| None,
+            long_const: &|_, _| None,
+            float_const: &|_, _| None,
+            double_const: &|_, _| None,
+            static_field: &|_, _| None,
+            field: &|_, _, _| None,
+            instance: &|_, _| None,
+            array: &|_, _| None,
+            // Ningún destino, que es lo que la VM contesta para un sitio que nunca corrió.
+            invoke: &|_, _, _| None,
+            intrinsic: &|_, _| None,
+            heap: heap.bases(),
+            array_store: &|_, _| None,
+            class_mirror: &|_, _| None,
+            string_literal: &|_, _| None,
+            poll_word: &POLL as *const _ as usize,
+        },
+    )
+    .expect("un sitio infligable no puede llevarse el método");
+
+    // (2) El camino bueno, nativo de punta a punta.
+    assert_eq!(call_at(&compiled, &[5], 0).0, Outcome::Returned(42), "el camino bueno no sale");
+
+    // (3) La rama mala sale en el pc del invoke, con su argumento intacto. Un `Returned(42)` acá
+    // es el emisor cayendo de largo sobre el código de la otra rama.
+    let (salida, buffer) = call_at(&compiled, &[-1], 0);
+    assert_eq!(salida, Outcome::Deopt(5), "sale en el pc del invoke, no de largo");
+    assert_eq!(
+        buffer[compiled.stack_base as usize], -1,
+        "el argumento que la llamada no consumió vuelve a la pila del intérprete",
+    );
+    assert_eq!(compiled.resume_sites.len(), 1, "y es la única salida del método");
+}
+
+/// **Los dos nativos que este tier escribe en línea**, contra un String de verdad en el heap.
+///
+/// `String.rawLength` y `String.rawCharAt` son `native`, o sea sin bytecode: no hay cuerpo que
+/// expandir ni código que llamar, así que hasta acá un `invokestatic` a cualquiera de los dos
+/// **rechazaba el método llamador entero**. El censo por tiempo midió que los dos juntos eran el
+/// 68% de todo lo que seguía interpretado, porque están abajo de `length`, `charAt`, `hashCode`,
+/// `equals` e `indexOf`.
+///
+/// Lo que se comprueba, y el orden importa porque cada cosa atrapa un error distinto:
+///
+///  1. **el largo**, que valida el desplazamiento de la palabra de largo;
+///  2. **las unidades**, que validan el desplazamiento del texto y el paso de dos bytes;
+///  3. **una unidad con el bit alto prendido** (`0xFFFD`), que es el único caso donde se ve la
+///     diferencia entre extender con signo y sin signo — con signo da `-3` en vez de `65533`, y
+///     cualquier dato ASCII lo tapa;
+///  4. **las tres guardas**, que son las del acceso a arreglo: nulo, índice negativo e índice
+///     pasado del largo. El nativo del intérprete no chequea nada porque el lado Java chequea
+///     antes, pero código nativo leyendo fuera del String leería memoria del proceso. Las tres
+///     deoptan en el pc de la llamada, o sea antes de leer.
+fn una_cadena(heap: &mut FakeHeap, at: usize, unidades: &[u16]) {
+    heap.write(at, 0xabc); // class_id; el `mark` queda en cero
+    heap.write(at + 8, unidades.len() as i32);
+    for (i, &u) in unidades.iter().enumerate() {
+        // Dos unidades por palabra de cuatro bytes, la de índice par en la mitad baja.
+        let palabra = at + 12 + (i / 2) * 4;
+        let previo = heap.read(palabra) as u32;
+        let nuevo = match i % 2 {
+            0 => (previo & 0xFFFF_0000) | u as u32,
+            _ => (previo & 0x0000_FFFF) | ((u as u32) << 16),
+        };
+        heap.write(palabra, nuevo as i32);
+    }
+}
+
+#[test]
+fn los_dos_nativos_de_string_se_escriben_en_linea() {
+    use super::compile::Intrinsic;
+    let mut heap = FakeHeap::new();
+    const S: usize = FakeHeap::NULL_PAGE + 32;
+    // 'a', 'b', y uno con el bit alto prendido — el que separa `movzx` de `movsx`.
+    una_cadena(&mut heap, S, &[0x0061, 0x0062, 0xFFFD]);
+
+    let compilar = |code: &[u8], descriptor: &str, heap: Heap| {
+        super::compile::compile(
+            &Method { unit: 0, code, max_locals: 2, descriptor, is_static: true, has_handlers: false },
+            &Environment {
+                // El índice 1 es `rawLength` y el 2 es `rawCharAt`; cualquier otro no es intrínseco,
+                // que es la respuesta ordinaria.
+                intrinsic: &|_, index| match index {
+                    1 => Some(Intrinsic::StringLength),
+                    2 => Some(Intrinsic::StringCharAt),
+                    _ => None,
+                },
+                int_const: &|_, _| None,
+                long_const: &|_, _| None,
+                float_const: &|_, _| None,
+                double_const: &|_, _| None,
+                static_field: &|_, _| None,
+                field: &|_, _, _| None,
+                instance: &|_, _| None,
+                array: &|_, _| None,
+                invoke: &|_, _, _| None,
+                heap,
+                array_store: &|_, _| None,
+                class_mirror: &|_, _| None,
+                string_literal: &|_, _| None,
+                poll_word: &POLL as *const _ as usize,
+            },
+        )
+    };
+
+    // (1) `rawLength`: aload_0; invokestatic #1; ireturn.
+    let largo = compilar(&[0x2a, 0xb8, 0x00, 0x01, 0xac], "(Ljava/lang/String;)I", heap.bases())
+        .expect("un nativo que este tier escribe no rechaza el método");
+    assert_eq!(call_at(&largo, &[S as i32], 0).0, Outcome::Returned(3));
+
+    // (2) y (3) `rawCharAt`: aload_0; iload_1; invokestatic #2; ireturn.
+    let unidad = compilar(&[0x2a, 0x1b, 0xb8, 0x00, 0x02, 0xac], "(Ljava/lang/String;I)I", heap.bases())
+        .expect("ídem");
+    assert_eq!(call_at(&unidad, &[S as i32, 0], 0).0, Outcome::Returned(0x0061), "'a'");
+    assert_eq!(call_at(&unidad, &[S as i32, 1], 0).0, Outcome::Returned(0x0062), "'b'");
+    assert_eq!(
+        call_at(&unidad, &[S as i32, 2], 0).0,
+        Outcome::Returned(0xFFFD),
+        "un `char` es un entero **sin** signo de 16 bits: extendido con signo esto daría -3",
+    );
+
+    // (4) Las tres guardas, todas en el pc del `invokestatic` — o sea sin haber leído nada.
+    assert_eq!(call_at(&largo, &[0], 0).0, Outcome::Deopt(1), "String nulo en `rawLength`");
+    assert_eq!(call_at(&unidad, &[0, 0], 0).0, Outcome::Deopt(2), "String nulo en `rawCharAt`");
+    assert_eq!(call_at(&unidad, &[S as i32, -1], 0).0, Outcome::Deopt(2), "índice negativo");
+    assert_eq!(call_at(&unidad, &[S as i32, 3], 0).0, Outcome::Deopt(2), "índice == largo");
+}
+
+/// **La rama de error deja de costar el método entero** — lo que el censo por tiempo midió, en el
+/// tamaño de un test.
+///
+/// Esta es la forma de `String.charAt`, que sola es el 24% de todo el trabajo que seguía
+/// interpretado en el corpus de `java/texto/`: un camino bueno de cuatro opcodes, y una rama de
+/// índice inválido que hace `new StringIndexOutOfBoundsException`. Nadie inicializa esa clase
+/// —la rama no corre nunca—, así que el resolver se negaba y el método entero se quedaba en el
+/// intérprete. Para siempre, porque un rechazo es permanente.
+///
+/// Lo que se comprueba son las tres cosas que lo hacen un arreglo y no un parche:
+///
+///  1. **compila**, con la clase igual de irresoluble que antes;
+///  2. el camino bueno **corre nativo** y devuelve lo suyo, sin pasar por ninguna salida;
+///  3. la rama mala sale **en el pc del `new`**, o sea antes de alocar nada, que es lo que deja al
+///     intérprete re-ejecutar esa instrucción y correr el `<clinit>` que acá no se podía correr.
+///
+/// Y una cuarta que es la mitad del arreglo y no se ve mirando el `new`: después de la trampa hay
+/// un `multianewarray`, que **no** está en el subconjunto. Compila igual, porque el corte lo deja
+/// inalcanzable. Una rama de error entera —con su `invokedynamic` de mensaje y su `athrow`— deja
+/// de tener que pertenecer al subconjunto.
+#[test]
+fn una_clase_sin_resolver_corta_la_rama_y_no_el_metodo() {
+    let heap = FakeHeap::new();
+    //  0  iload_0
+    //  1  iflt   -> 7
+    //  4  bipush 42
+    //  6  ireturn
+    //  7  new    #2        <- irresoluble: la trampa
+    // 10  multianewarray   <- fuera del subconjunto, e inalcanzable
+    let code = [0x1a, 0x9b, 0x00, 0x06, 0x10, 0x2a, 0xac, 0xbb, 0x00, 0x02, 0xc5, 0x00, 0x01, 0x02];
+    let compiled = super::compile::compile(
+        &Method { unit: 0, code: &code, max_locals: 1, descriptor: "(I)I", is_static: true, has_handlers: false },
+        &Environment {
+            int_const: &|_, _| None,
+            long_const: &|_, _| None,
+            float_const: &|_, _| None,
+            double_const: &|_, _| None,
+            static_field: &|_, _| None,
+            field: &|_, _, _| None,
+            // La clase #2 es la excepción, y es la que no se resuelve — igual que antes.
+            instance: &|_, _| None,
+            array: &|_, _| None,
+            invoke: &|_, _, _| None,
+            intrinsic: &|_, _| None,
+            heap: heap.bases(),
+            array_store: &|_, _| None,
+            class_mirror: &|_, _| None,
+            string_literal: &|_, _| None,
+            poll_word: &POLL as *const _ as usize,
+        },
+    )
+    .expect("la rama de error no puede llevarse el método");
+
+    // (2) El camino bueno, nativo de punta a punta.
+    assert_eq!(call_at(&compiled, &[5], 0).0, Outcome::Returned(42), "el camino bueno no sale");
+
+    // (3) La rama mala sale en el pc del `new`. El `7` es lo que importa: un `8` querría decir que
+    // la instrucción corrió, y entonces el intérprete la re-ejecutaría sobre un objeto ya alocado.
+    let salida = call_at(&compiled, &[-1], 0).0;
+    assert!(
+        matches!(salida, Outcome::AllocFailed(7) | Outcome::Deopt(7)),
+        "la rama mala sale en el pc del `new`, no en {salida:?}",
+    );
+    assert_eq!(compiled.resume_sites.len(), 1, "y es la única salida del método");
 }
 
 #[test]
@@ -3410,6 +3690,7 @@ fn compile_at(
             instance: &|_, _| None,
             array: &|_, _| None,
             invoke: &|_, _, _| None,
+            intrinsic: &|_, _| None,
             heap: Heap::default(),
             array_store: &|_, _| None,
             class_mirror: &|_, _| None,
@@ -3601,6 +3882,7 @@ fn a_guard_never_writes_a_home_register_before_it_can_still_fire() {
                 instance: &|_, _| None,
                 array: &|_, _| None,
                 invoke: &|_, _, _| None,
+                intrinsic: &|_, _| None,
                 heap: heap.bases(),
                 array_store: &|_, _| None,
                 class_mirror: &|_, _| None,
@@ -3676,6 +3958,7 @@ fn every_heap_opcode_agrees_at_every_cache_size_and_every_depth() {
                     instance: &|_, _| None,
                     array: &|_, _| None,
                     invoke: &|_, _, _| None,
+                    intrinsic: &|_, _| None,
                     heap: bases,
                     array_store: &|_, _| None,
                     class_mirror: &|_, _| None,
@@ -3832,6 +4115,7 @@ fn a_deopt_inside_an_inlined_callee_spills_both_frames_at_every_cache_size() {
                 has_handlers: false,
             },
             &Environment {
+                intrinsic: &|_, _| None,
                 int_const: &|_, _| None,
                 long_const: &|_, _| None,
                 float_const: &|_, _| None,
@@ -4239,6 +4523,7 @@ fn a_long_crossing_a_safepoint_poll_is_the_locals_buffer_and_nothing_else() {
             instance: &|_, _| None,
             array: &|_, _| None,
             invoke: &|_, _, _| None,
+            intrinsic: &|_, _| None,
             heap: Heap::default(),
             array_store: &|_, _| None,
             class_mirror: &|_, _| None,
@@ -4347,6 +4632,7 @@ fn compile_long_heap(
             instance: &|_, _| None,
             array: &|_, _| None,
             invoke: &|_, _, _| None,
+            intrinsic: &|_, _| None,
             heap,
             array_store: &|_, _| None,
             class_mirror: &|_, _| None,
@@ -4471,6 +4757,7 @@ fn the_resolver_decides_the_width_and_a_kind_mismatch_is_refused() {
             instance: &|_, _| None,
             array: &|_, _| None,
             invoke: &|_, _, _| None,
+            intrinsic: &|_, _| None,
             heap: heap.bases(),
             array_store: &|_, _| None,
             class_mirror: &|_, _| None,
@@ -4547,6 +4834,7 @@ fn compile_fp(
             instance: &|_, _| None,
             array: &|_, _| None,
             invoke: &|_, _, _| None,
+            intrinsic: &|_, _| None,
             heap: Heap::default(),
             array_store: &|_, _| None,
             class_mirror: &|_, _| None,
@@ -4833,6 +5121,7 @@ fn a_float_field_and_static_are_four_bytes_and_a_double_is_eight() {
             instance: &|_, _| None,
             array: &|_, _| None,
             invoke: &|_, _, _| None,
+            intrinsic: &|_, _| None,
             heap: heap.bases(),
             array_store: &|_, _| None,
             class_mirror: &|_, _| None,
@@ -4859,6 +5148,7 @@ fn a_float_field_and_static_are_four_bytes_and_a_double_is_eight() {
             instance: &|_, _| None,
             array: &|_, _| None,
             invoke: &|_, _, _| None,
+            intrinsic: &|_, _| None,
             heap: heap.bases(),
             array_store: &|_, _| None,
             class_mirror: &|_, _| None,
@@ -4921,6 +5211,7 @@ fn compile_array(code: &[u8], max_locals: usize, descriptor: &str, heap: Heap) -
                 ArrayOf::Reference(_) => Some(REF_ARRAY),
             },
             invoke: &|_, _, _| None,
+            intrinsic: &|_, _| None,
             heap,
             array_store: &|_, _| None,
             class_mirror: &|_, _| None,
@@ -5110,16 +5401,21 @@ fn anewarray_is_the_same_code_with_null_slots() {
 }
 
 #[test]
-fn an_array_class_without_a_mirror_refuses_the_whole_method() {
+fn an_array_class_without_a_mirror_cuts_the_method_there() {
     // The array counterpart of "a `new` of a class that is not `Done`". An array class has no
     // `<clinit>` to wait for, but its `Class<…>` mirror has to exist already — minting one
-    // *allocates*, and a compilation may not. So a `None` from the resolver refuses the method
-    // rather than escaping the opcode, exactly as an unresolved `new` does.
+    // *allocates*, and a compilation may not.
+    //
+    // Lo que hace el `None` del resolver es **cortar el método en ese pc**, igual que un `new` sin
+    // resolver: se compila lo de antes, se sale por el stub, y el intérprete sigue desde ahí y
+    // acuña el mirror por su camino de siempre.
     let heap = FakeHeap::new();
     // `T_FLOAT` (6) is the one `atype` the resolver above does not answer for.
     let code = newarray_program(6);
-    let err = compile_array(&code, 2, "()[F", heap.bases()).unwrap_err();
-    assert_eq!(err, Ineligible::UnresolvedClass { pc: 1, index: 6 }, "the `atype` names the class here");
+    let trampa = compile_array(&code, 2, "()[F", heap.bases())
+        .expect("sin mirror se corta el método, no se lo rechaza");
+    assert_eq!(trampa.resume_sites.len(), 1, "una sola salida");
+    assert_eq!(trampa.resume_sites[0].pc, 1, "y es el pc del `newarray`, que no llegó a correr");
     // And `multianewarray` (0xc5) is outside the subset entirely — a recursion over allocations
     // rather than an allocation. Se lo rechaza **con motivo propio** y no como opcode desconocido:
     // el problema no es que falte emitirlo sino que aloca `1 + n` arreglos, una cantidad que
@@ -5182,6 +5478,7 @@ fn compile_group2(
             instance: &|_, _| None,
             array: &|_, _| None,
             invoke: &|_, _, _| None,
+            intrinsic: &|_, _| None,
             array_store: &|_, _| None,
             class_mirror: &|_, _| mirror,
             string_literal: &|_, _| None,
@@ -5522,6 +5819,7 @@ fn instanceof_agrees_at_every_cache_size_and_every_depth() {
                     has_handlers: false,
                 },
                 &Environment {
+                    intrinsic: &|_, _| None,
                     int_const: &|_, _| None,
                     long_const: &|_, _| None,
                     float_const: &|_, _| None,
@@ -5618,6 +5916,7 @@ fn un_callee_inlineado_recibe_un_long_en_el_medio() {
                     record: None,
                 }])
             },
+            intrinsic: &|_, _| None,
             heap: heap.bases(),
             array_store: &|_, _| None,
             class_mirror: &|_, _| None,
@@ -5681,6 +5980,7 @@ fn un_callee_cuyos_argumentos_no_entran_en_sus_locales_se_rechaza() {
                     record: None,
                     }])
                 },
+                intrinsic: &|_, _| None,
                 heap: heap.bases(),
                 array_store: &|_, _| None,
                 class_mirror: &|_, _| None,

@@ -6,7 +6,7 @@ public class BkRefAC {
     static int step(Object[] arr, Object x, Object y, int n) {
         int acc = 1;
         if (NEVER != 0) {
-            acc = acc + ("" + n).length();
+            acc = acc + new int[2][2].length;
         }
         for (int i = 0; i < n; i++) {
             arr[i & 255] = x;
@@ -23,7 +23,7 @@ public class BkRefAC {
         Object y = new Object();
         int acc = 0;
         if (NEVER != 0) {
-            acc = acc + ("" + acc).length();
+            acc = acc + new int[2][2].length;
         }
         for (int k = 0; k < 1000; k++) {
             acc = (acc + step(arr, x, y, 300)) & 0xFFFFF;

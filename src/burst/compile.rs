@@ -1530,6 +1530,17 @@ pub struct Heap {
     /// VM stores one in four bytes; that is exactly why the interpreter's `aaload` passes a
     /// constant `SLOT_SIZE` rather than looking the element type up.
     pub reference_element: u32,
+    /// Byte offset of a `String`'s `length` word (en **unidades UTF-16**) dentro del objeto.
+    ///
+    /// Esta VM pone el texto **adentro** del String en vez de atrás de un `byte[] value`, así que
+    /// el objeto es `[class_id | mark | length | unidades…]` y un String se lee como un arreglo con
+    /// otro encabezado. Preguntado al módulo que es dueño del layout (`strings`), exactamente como
+    /// [`array_length`][Heap::array_length], y por el mismo motivo: el código compilado y el
+    /// intérprete no pueden llegar a discrepar sobre dónde está esa palabra.
+    pub string_length: u32,
+    /// Byte offset de la unidad `0` — o sea el encabezado entero del String. Las unidades son
+    /// UTF-16, dos bytes cada una, que es lo que `charAt` devuelve.
+    pub string_data: u32,
     /// The first offset of the **Old** generation — `HeapService::old_start`, the boundary the
     /// write barrier's predicate is stated in terms of (`holder >= old_start && value != 0 &&
     /// value < old_start`).
@@ -1539,6 +1550,38 @@ pub struct Heap {
     /// immediate — and it is only ever used to *filter* the barrier log, never to decide anything,
     /// so a stale value could at worst log a pair the replay then discards.
     pub old_start: u32,
+}
+
+/// **Un método `native` cuyo cuerpo este tier sí sabe escribir.**
+///
+/// Un `native` no tiene bytecode, así que no hay nada que inlinear y nada que llamar: hasta acá un
+/// `invoke` que se resolvía a uno quedaba fuera del subconjunto y **rechazaba el método llamador
+/// entero**. El censo por tiempo midió lo que eso cuesta y no es marginal — dos métodos de
+/// `java.lang.String` eran el 68% de todo el trabajo que seguía interpretado después de la trampa
+/// de las ramas de error, porque están abajo de `length`, `charAt`, `hashCode`, `equals` e
+/// `indexOf`, o sea abajo de todo lo que toca una cadena.
+///
+/// Lo que los hace expresables es que **no son llamadas**: los dos leen el heap y nada más, y este
+/// tier ya sabe leer el heap. `rawLength` es un `arraylength` con otro desplazamiento y
+/// `rawCharAt` es un `caload` con otro desplazamiento.
+///
+/// **Qué NO es esto.** No es "inlinear un nativo", que sería saltearse la interceptación del
+/// intérprete — la razón por la que [`Callee`] los rechaza y sigue siendo la correcta para el resto.
+/// Es que para estos dos la interceptación *es* la lectura, así que escribirla acá y hacerla allá
+/// son la misma operación. Un nativo con efectos (un `park`, un `println`, un `System.exit`) no
+/// entra por acá y no puede entrar.
+///
+/// `burst` no sabe qué es un constant pool, así que **quién es cuál lo decide la VM**, en
+/// [`Environment::intrinsic`]; acá sólo están las formas.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum Intrinsic {
+    /// `String.rawLength(String)` → `int`. Pops una referencia, deja la palabra de largo.
+    StringLength,
+    /// `String.rawCharAt(String, int)` → `char`. Pops `(referencia, índice)`, deja la unidad
+    /// UTF-16, **extendida sin signo** — un `char` es un entero sin signo de 16 bits, y
+    /// extenderlo con signo da la respuesta correcta para todo lo que no tenga el bit alto
+    /// prendido, que es lo que haría invisible el error.
+    StringCharAt,
 }
 
 /// What a compiled `new` needs to know about the class it is allocating: how many bytes, and what
@@ -1832,6 +1875,16 @@ pub struct Environment<'a> {
     /// (a reference field, a `volatile` one, a `float`). The `pc` is passed because the VM keys its
     /// own resolved-site cache by it; the answer depends only on the unit and the index.
     pub field: &'a dyn Fn(Unit, usize, u16) -> Option<(u32, Kind)>,
+    /// **Qué nativo es el `invokestatic` de este índice**, o `None` para todos los demás — que es
+    /// la respuesta ordinaria y no un error, igual que para un opcode fuera de la lista blanca.
+    ///
+    /// Acá es donde la VM decide qué quiere decir "intrínseco" sin que `burst` aprenda lo que es un
+    /// constant pool. Lo que el lado de la VM tiene que comprobar, y es la condición que mantiene
+    /// esto correcto: que el `methodref` nombre exactamente uno de los nativos de [`Intrinsic`]
+    /// **y que el método al que resuelve sea realmente `native`**. Un método con cuerpo que se
+    /// llame igual tiene que entrar por el camino de siempre, porque su cuerpo puede hacer cosas
+    /// —chequear rangos, tirar una excepción— que la lectura de acá no hace.
+    pub intrinsic: &'a dyn Fn(Unit, u16) -> Option<Intrinsic>,
     /// Resolves a `new`'s class-constant index to the two facts an inline allocation needs — see
     /// [`Instance`] — and answers `None` unless every precondition of a *bare* allocation holds:
     /// the class is loaded, its layout is known, its `Class<…>` mirror exists, and it is
@@ -3733,6 +3786,27 @@ fn transfer(
         // Popping top-first with `state.pop` therefore walks the arguments **downwards**, and a
         // mismatch is an [`Ineligible::WrongType`] like any other.
         0xb6..=0xba => {
+            // Los nativos que este tier escribe en línea tipan como la lectura que son, y el pop
+            // es lo que **tipa el operando** para el sitio de reanudación: un `int` donde va la
+            // referencia reconstruiría un frame con una cadena hecha de aritmética.
+            if let Some(intrinsic) = intrinsic_at(env, method.unit, code, pc) {
+                match intrinsic {
+                    Intrinsic::StringLength => {
+                        state.pop(pc, Kind::Reference)?;
+                    }
+                    Intrinsic::StringCharAt => {
+                        state.pop(pc, Kind::Int)?;
+                        state.pop(pc, Kind::Reference)?;
+                    }
+                }
+                state.stack.push(Kind::Int);
+                return Ok(());
+            }
+            // Una trampa no transfiere nada: no hay sucesor al que pasarle un estado, y la pila
+            // que el stub devuelve es la de la entrada a este pc, ya tipada por lo que la llenó.
+            if invoke_trap(env, method.unit, code, pc) {
+                return Ok(());
+            }
             let index = u16::from_be_bytes([code[pc + 1], code[pc + 2]]);
             // **The shape of the call is the shape of *any* of its targets.** Every alternative
             // of a dispatched site was selected for the same descriptor — that is what a vtable
@@ -4035,7 +4109,35 @@ fn decode(
         0xbb => {
             need(3)?;
             let index = u16::from_be_bytes([code[pc + 1], code[pc + 2]]);
-            let instance = (env.instance)(method.unit, index).ok_or(Ineligible::UnresolvedClass { pc, index })?;
+            // **Una clase sin resolver no rechaza el método: lo corta acá** — la trampa
+            // infrecuente, el `Flow::Return` de `athrow` y los monitores aplicado a una
+            // alocación.
+            //
+            // Lo que hacía antes era `Err(UnresolvedClass)`, y el censo por tiempo midió lo que
+            // eso cuesta: el 53% del trabajo que sigue interpretado está en métodos rechazados por
+            // un `new` que **no corre nunca**. `String.charAt` son 36 bytes y el
+            // `new StringIndexOutOfBoundsException` está en la rama del índice inválido; nadie
+            // inicializa esa clase, así que el resolver se niega y el método entero —el camino
+            // bueno incluido— se queda en el intérprete para siempre.
+            //
+            // **Por qué un corte y no una negativa, y por qué es estrictamente mejor.** Un deopt
+            // nombra una instrucción que *no se ejecutó*, así que todo lo anterior ya corrió
+            // nativo y el intérprete sigue desde este pc por su camino de siempre —incluyendo
+            // inicializar la clase, que es justo lo que acá no se podía hacer—. Comparado con lo
+            // de antes: antes el método era 100% interpretado; ahora es nativo hasta este punto y
+            // interpretado desde acá. El caso en que el resolver **sí** contesta no cambia en
+            // nada, porque entonces no se pasa por este brazo. No hay forma de perder.
+            //
+            // **Y lo que corta es más que el `new`.** Al ser `Flow::Return` el camino de atrás no
+            // se sigue, así que el `dup`, el `invokedynamic` del mensaje y el `athrow` que vienen
+            // después **no están en esta compilación**: no tienen que pertenecer al subconjunto.
+            // Una rama de error entera deja de pesar.
+            //
+            // Lo que **no** se corta acá es `AllocOutOfReach`: ésa es una propiedad del heap de
+            // esta VM y no de la rama, y vale para todos los `new` del método por igual.
+            let Some(instance) = (env.instance)(method.unit, index) else {
+                return Ok((Insn { len: 3, pops: 0, pushes: 1, flow: Flow::Return }, None));
+            };
             // The reference it pushes crosses the boundary in 32 bits like any other.
             reachable_heap()?;
             alloc_bounds(env.heap, instance.size).ok_or(Ineligible::AllocOutOfReach { pc })?;
@@ -4053,12 +4155,16 @@ fn decode(
         // needs its own reservation, its own log record and its own reference stored through the
         // parent. That is a loop over allocations rather than an allocation, so it belongs to a
         // step of its own — it stays an unknown opcode and refuses its method.
+        // Una clase de arreglo sin mirror corta igual que un `new` sin resolver, por el mismo
+        // argumento y con la misma forma — ver el brazo de arriba. El censo lo pide: el
+        // `anewarray java/lang/String` de `StandardCharsets.aliases` rechazaba ese método entero.
         0xbc => {
             need(2)?;
             reachable_heap()?;
             let atype = code[pc + 1];
-            (env.array)(method.unit, ArrayOf::Primitive(atype))
-                .ok_or(Ineligible::UnresolvedClass { pc, index: u16::from(atype) })?;
+            if (env.array)(method.unit, ArrayOf::Primitive(atype)).is_none() {
+                return Ok((Insn { len: 2, pops: 1, pushes: 1, flow: Flow::Return }, None));
+            }
             array_alloc_bounds(env.heap).ok_or(Ineligible::AllocOutOfReach { pc })?;
             simple(2, 1, 1)
         }
@@ -4066,8 +4172,9 @@ fn decode(
             need(3)?;
             reachable_heap()?;
             let index = u16::from_be_bytes([code[pc + 1], code[pc + 2]]);
-            (env.array)(method.unit, ArrayOf::Reference(index))
-                .ok_or(Ineligible::UnresolvedClass { pc, index })?;
+            if (env.array)(method.unit, ArrayOf::Reference(index)).is_none() {
+                return Ok((Insn { len: 3, pops: 1, pushes: 1, flow: Flow::Return }, None));
+            }
             array_alloc_bounds(env.heap).ok_or(Ineligible::AllocOutOfReach { pc })?;
             simple(3, 1, 1)
         }
@@ -4545,6 +4652,20 @@ fn decode(
         // [`invoke_len`] rather than a literal.
         0xb6..=0xba => {
             need(invoke_len(op) as usize)?;
+            // Un nativo que este tier sabe escribir **no es una llamada**: no se le pregunta al
+            // resolver de callees, no hay cuerpo que expandir y no deja frame. Su forma es la de
+            // la lectura que emite — ver [`Intrinsic`].
+            if let Some(intrinsic) = intrinsic_at(env, method.unit, code, pc) {
+                reachable_heap()?;
+                return Ok((simple(3, intrinsic_pops(intrinsic), 1), None));
+            }
+            // Un sitio que la VM no puede ligar **corta el método ahí** en vez de refutarlo — ver
+            // [`invoke_trap`]. No consume ni deja nada: la pila de operandos en la entrada a este
+            // pc es lo que el sitio de reanudación devuelve, con los argumentos todavía arriba,
+            // porque la llamada no ocurrió.
+            if invoke_trap(env, method.unit, code, pc) {
+                return Ok((Insn { len: invoke_len(op), pops: 0, pushes: 0, flow: Flow::Return }, None));
+            }
             let index = u16::from_be_bytes([code[pc + 1], code[pc + 2]]);
             let callee = first_callee(env, method.unit, pc, index, op)?;
             let pops = u16::try_from(callee.arg_slots).map_err(|_| Ineligible::TooBig)?;
@@ -4884,14 +5005,83 @@ fn callees<'a>(
     index: u16,
     opcode: u8,
 ) -> Result<Vec<Callee<'a>>, Ineligible> {
+    alternativas(env, unit, pc, index).ok_or(Ineligible::Opcode { pc, opcode })
+}
+
+/// **Los destinos que la VM ofrece para este sitio**, o `None` si no ofrece ninguno — que es la
+/// respuesta ordinaria y no un error.
+///
+/// Una lista vacía y un `None` son la misma cosa y se normalizan acá: un sitio sin ningún destino
+/// no es un sitio que se pueda emitir, y dejar que la distinción viajara haría que cada lugar que
+/// pregunta tuviera que acordarse de los dos casos.
+fn alternativas<'a>(env: &Environment<'a>, unit: Unit, pc: usize, index: u16) -> Option<Vec<Callee<'a>>> {
     match (env.invoke)(unit, pc, index) {
-        Some(list) if !list.is_empty() => Ok(list),
-        _ => Err(Ineligible::Opcode { pc, opcode }),
+        Some(list) if !list.is_empty() => Some(list),
+        _ => None,
     }
+}
+
+/// **Si el invoke de `pc` es una trampa**: un sitio de llamada que este tier no puede ligar, y que
+/// por eso se compila como un deopt incondicional en vez de rechazar el método.
+///
+/// Es la tercera forma de la misma enfermedad, y el censo por tiempo la midió como la más grande
+/// de las tres después de arreglar las otras dos: **una rama fría se lleva el método caliente.**
+///
+/// El caso que lo muestra entero es `String.indexOf(III)`, que tiene dos `invokevirtual charAt`: el
+/// del camino normal se liga sin problema, y el de la rama de **pares subrogados** —la que sólo
+/// corre para caracteres de más de 16 bits— nunca se ejecutó, así que no tiene perfil de
+/// receptor, la VM no ofrece destino, y el método entero se quedaba interpretado. Se comprobó
+/// haciendo correr esa rama: `indexOf(III)` compila al instante, sin tocar una línea del
+/// compilador. O sea que lo que refutaba el método no era el callee —`charAt` compila solo— sino
+/// el **sitio**. Lo mismo valía para `Html32.model`, donde el `indexOf(II)` del camino caliente se
+/// liga y el que está detrás de un `if` sobre un `charAt` no.
+///
+/// **Por qué un deopt es estrictamente mejor que la negativa**, que es el mismo argumento que para
+/// un `new` sin resolver: un deopt nombra una instrucción que no se ejecutó, así que todo lo
+/// anterior ya corrió nativo y el intérprete hace la llamada por su camino de siempre. Antes el
+/// método era 100% interpretado. Y el caso en que la VM **sí** ofrece destinos no pasa por acá.
+///
+/// Y como es `Flow::Return`, lo que viene después del sitio no está en la compilación y no tiene
+/// que pertenecer al subconjunto — igual que `athrow` y los monitores, cuya forma es ésta.
+///
+/// El precio, dicho: un método cuyo invoke infligable está al principio paga un cruce de frontera
+/// por llamada para no correr casi nada nativo. Es exactamente el precio que `monitorenter` ya
+/// paga, y por el mismo motivo se acepta en vez de meterle una heurística sin medición atrás.
+fn invoke_trap(env: &Environment, unit: Unit, code: &[u8], pc: usize) -> bool {
+    if !is_invoke(code[pc]) || pc + 3 > code.len() {
+        return false;
+    }
+    intrinsic_at(env, unit, code, pc).is_none()
+        && alternativas(env, unit, pc, u16::from_be_bytes([code[pc + 1], code[pc + 2]])).is_none()
 }
 
 /// The first target of a site — all the two passes that ask about the **shape** of a call need,
 /// since every alternative of one site was selected for the same descriptor.
+/// **Si el invoke de `pc` es uno de los nativos que este tier escribe en línea**, cuál.
+///
+/// Escrito una sola vez porque lo preguntan cuatro lugares —el decodificador, la transferencia de
+/// tipos, [`plan`] y el emisor— y una discrepancia entre ellos no sería un error visible sino
+/// código emitido para una forma distinta de la que el escaneo tipó.
+///
+/// Sólo `invokestatic`, y es una restricción deliberada y no una simplificación: los dos nativos
+/// de [`Intrinsic`] son `private static` y toman el String como primer argumento, así que un
+/// `invokevirtual` del mismo nombre es **otro método** —el de `boot/`, o el de KajiLibrary que sí
+/// tiene cuerpo y chequea rangos— y tiene que seguir yendo por el camino de siempre.
+fn intrinsic_at(env: &Environment, unit: Unit, code: &[u8], pc: usize) -> Option<Intrinsic> {
+    if code[pc] != 0xb8 || pc + 3 > code.len() {
+        return None;
+    }
+    (env.intrinsic)(unit, u16::from_be_bytes([code[pc + 1], code[pc + 2]]))
+}
+
+/// Cuántos operandos consume cada intrínseco. Los dos dejan exactamente uno.
+fn intrinsic_pops(intrinsic: Intrinsic) -> u16 {
+    match intrinsic {
+        Intrinsic::StringLength => 1,
+        Intrinsic::StringCharAt => 2,
+    }
+}
+
 fn first_callee<'a>(
     env: &Environment<'a>,
     unit: Unit,
@@ -5027,7 +5217,18 @@ fn plan<'a>(root: Method<'a>, env: &Environment<'a>) -> Result<Plan<'a>, Ineligi
         let sites: Vec<(usize, u16)> = bodies[at]
             .order
             .iter()
-            .filter(|&&pc| is_invoke(bodies[at].method.code[pc]))
+            // Un intrínseco ocupa un `invoke` pero no es un sitio de llamada: no se expande y no
+            // se llama, así que no entra ni en `children` ni en `native`. El emisor lo reconoce por
+            // su cuenta, con el mismo [`intrinsic_at`].
+            // Ni un intrínseco ni una trampa son sitios de llamada: no se expanden y no se
+            // llaman, así que no entran ni en `children` ni en `native`. El emisor los reconoce
+            // por su cuenta, con los mismos dos predicados.
+            .filter(|&&pc| {
+                let (unit, code) = (bodies[at].method.unit, bodies[at].method.code);
+                is_invoke(code[pc])
+                    && intrinsic_at(env, unit, code, pc).is_none()
+                    && !invoke_trap(env, unit, code, pc)
+            })
             .map(|&pc| (pc, u16::from_be_bytes([bodies[at].method.code[pc + 1], bodies[at].method.code[pc + 2]])))
             .collect();
         for (pc, index) in sites {
@@ -6222,7 +6423,15 @@ fn emit_body(
         // code to call, and will the frames it may hand back fit in the budget this excursion was
         // entered with. Both fail into an ordinary deopt at the invoke, where the interpreter makes
         // the call itself.
-        let deopt = match guards(op) || cached || body.native.contains_key(&pc) {
+        // Un intrínseco guarda como el acceso a arreglo que es —nulo, y el rango— así que necesita
+        // su stub y su sitio de reanudación. No sale de `guards(op)`, que es por opcode: este pc es
+        // un `invokestatic` y el de al lado puede ser una llamada de verdad.
+        let intrinseco = intrinsic_at(env, unit, code, pc).is_some();
+        // Una trampa de invoke **es** un deopt, así que necesita su stub y su sitio de
+        // reanudación. Como el intrínseco, no sale de `guards(op)`: eso es por opcode, y el
+        // invoke de al lado puede ser una llamada de verdad.
+        let trampa = invoke_trap(env, unit, code, pc);
+        let deopt = match guards(op) || cached || intrinseco || trampa || body.native.contains_key(&pc) {
             true => {
                 let label = a.new_label();
                 st.deopt[b][pc] = Some(label);
@@ -6322,7 +6531,24 @@ fn emit_body(
             // failing allocation would have left. Nothing after the bounds check can leave.
             0xbb => {
                 let index = u16::from_be_bytes([code[pc + 1], code[pc + 2]]);
-                let instance = (env.instance)(unit, index).ok_or(Ineligible::UnresolvedClass { pc, index })?;
+                // **La trampa infrecuente.** Clase sin resolver: ni una instrucción de alocación,
+                // sólo el salto al stub — ver el brazo de `decode`, donde está el argumento.
+                //
+                // El stub de este pc reporta [`Status::ALLOC`] y no `DEOPT`, porque es el stub de
+                // las alocaciones y hay uno por pc. Es el estado correcto —la instrucción no
+                // corrió y el intérprete la re-ejecuta— y además es la cuenta correcta: esto no es
+                // «un método que falla una guarda», que es lo que el contador de deopts existe
+                // para detectar, y no debe retirar la entrada on-stack del método.
+                //
+                // Las dos pasadas no pueden discrepar sobre si acá va la trampa o la alocación,
+                // y no porque se hayan puesto de acuerdo: **compilar no puede cambiar el estado de
+                // la VM** (`Exec::compile_method`), así que `env.instance` es una función pura
+                // mientras dura esta compilación y las dos le preguntan lo mismo. Si alguna vez
+                // dejara de serlo, lo que se rompe es esto.
+                let Some(instance) = (env.instance)(unit, index) else {
+                    a.jmp(deopt);
+                    continue;
+                };
                 let (bump, limit) =
                     alloc_bounds(env.heap, instance.size).ok_or(Ineligible::AllocOutOfReach { pc })?;
 
@@ -6401,7 +6627,12 @@ fn emit_body(
                     ArrayOf::Primitive(atype) => u16::from(atype),
                     ArrayOf::Reference(index) => index,
                 };
-                let ty = (env.array)(unit, of).ok_or(Ineligible::UnresolvedClass { pc, index })?;
+                let _ = index;
+                // La misma trampa que `new`, por el mismo argumento.
+                let Some(ty) = (env.array)(unit, of) else {
+                    a.jmp(deopt);
+                    continue;
+                };
                 let capacity = array_alloc_bounds(env.heap).ok_or(Ineligible::AllocOutOfReach { pc })?;
                 // `d - 1` both ways round: the count comes off this position and the reference goes
                 // back onto it.
@@ -7990,6 +8221,64 @@ fn emit_body(
             }
 
             0xb6..=0xba => {
+                // --- los nativos que este tier escribe en línea ---------------------------------
+                //
+                // Ni expansión ni llamada: las dos son **una lectura del heap**, y este tier ya
+                // sabe leer el heap. `rawLength` es un `arraylength` con otro desplazamiento y
+                // `rawCharAt` es un `caload` con otro desplazamiento — ver [`Intrinsic`].
+                //
+                // **Las guardas son las del arreglo, y las dos deoptan.** El nativo del intérprete
+                // no chequea nada, porque el lado Java chequea antes de llamarlo; pero código
+                // nativo que leyera fuera del String leería memoria del proceso, no un cero. Así
+                // que el rango se comprueba acá contra la misma palabra de largo, y lo que no pasa
+                // sale por el stub: el intérprete re-ejecuta la llamada y hace exactamente lo que
+                // hacía. Para todo índice válido —o sea para todo lo que el programa realmente
+                // ejecuta— la respuesta es idéntica, y para el resto esto es estrictamente más
+                // seguro que el intérprete.
+                //
+                // El orden importa y es el de `iaload`: los dos operandos se leen a scratch y
+                // ningún `home` se toca hasta que la última `jcc` quedó atrás, para que el stub no
+                // encuentre una *dirección* donde debería haber una referencia.
+                // Sitio que no se puede ligar: ni una instrucción de llamada, sólo el salto al
+                // stub — ver [`invoke_trap`]. Va primero porque es la respuesta más general: un
+                // sitio sin destinos no es un intrínseco ni tiene cuerpo que expandir.
+                if trampa {
+                    a.jmp(deopt);
+                    continue;
+                }
+                if let Some(intrinsic) = intrinsic_at(env, unit, code, pc) {
+                    let args = intrinsic_pops(intrinsic);
+                    let receptor = home(d - args);
+                    read_home(a, T0, receptor);
+                    a.cmp_ri(T0, 0);
+                    a.jcc(Cond::E, deopt); // String nulo: el NPE es del intérprete
+                    heap_address(a, env.heap, T0, T2);
+                    let w = work_reg(receptor);
+                    match intrinsic {
+                        // La palabra de largo: escrita como `u32`, nunca negativa, así que la
+                        // carga con signo es el valor **y** la normalización — igual que
+                        // `arraylength`.
+                        Intrinsic::StringLength => {
+                            a.movsxd_rm(w, Mem::at(T0, env.heap.string_length as i32));
+                        }
+                        Intrinsic::StringCharAt => {
+                            read_home(a, T1, home(d - 1)); // el índice, arriba del String
+                            a.cmp_ri(T1, 0);
+                            a.jcc(Cond::L, deopt);
+                            a.mov_rm32(T2, Mem::at(T0, env.heap.string_length as i32));
+                            a.cmp_rr(T1, T2);
+                            a.jcc(Cond::Ge, deopt);
+                            a.imul_rri(T1, T1, 2); // unidades UTF-16
+                            a.add_rr(T0, T1);
+                            // **Sin signo**: un `char` es un entero de 16 bits sin signo, y
+                            // extenderlo con signo acierta para todo lo que no tenga el bit alto
+                            // prendido — que es lo que haría invisible el error.
+                            a.movzx_rm16(w, Mem::at(T0, env.heap.string_data as i32));
+                        }
+                    }
+                    write_home(a, receptor, w);
+                    continue;
+                }
                 let kids = body.children.get(&pc).expect("plan expanded every invoke it accepted");
                 // The receiver is the **bottom-most** of the operands this call consumes — the slot
                 // that becomes the callee's local 0 — and it is at the same place whichever arm
@@ -8650,6 +8939,7 @@ mod tests {
                 instance: &|_, _| None,
                 array: &|_, _| None,
                 invoke: &|_, _, _| None,
+                intrinsic: &|_, _| None,
                 array_store: &|_, _| None,
                 class_mirror: &|_, _| None,
                 string_literal: &|_, _| None,
@@ -8670,16 +8960,31 @@ mod tests {
 
     #[test]
     fn one_foreign_opcode_disqualifies_the_whole_method() {
-        // iload_0; invokestatic #0; ireturn -- a call is outside the subset, so the method is
-        // rejected outright rather than compiled up to that point.
-        let err = compile(&[0x1a, 0xb8, 0x00, 0x00, 0xac], 1, &no_constants).unwrap_err();
-        assert_eq!(err, Ineligible::Opcode { pc: 1, opcode: 0xb8 });
-        // **Esta lista se vació dos veces, y conviene decir por qué.** Primero estaban `athrow`
+        // iload_0; invokestatic #0; ireturn. Este entorno no ofrece ningún destino para el sitio,
+        // y eso **ya no rechaza el método**: lo corta ahí, con un deopt incondicional, igual que
+        // un `new` sin resolver — ver [`invoke_trap`]. Lo que se comprueba es que compila y que la
+        // salida está en el pc del invoke, o sea que la llamada no ocurrió.
+        let trampa = compile(&[0x1a, 0xb8, 0x00, 0x00, 0xac], 1, &no_constants).unwrap();
+        assert_eq!(trampa.resume_sites.len(), 1, "una sola salida");
+        assert_eq!(trampa.resume_sites[0].pc, 1, "y es el pc del invoke");
+        // Un opcode que **sigue** afuera, para que este test conserve su contenido: `jsr` (0xa8),
+        // que el verificador prohibe en class files de versión 50.0 o mayor, así que `javac` no
+        // puede emitirlo y nada lo va a convertir en una trampa.
+        let err = compile(&[0x1a, 0xa8, 0x00, 0x02, 0xac], 1, &no_constants).unwrap_err();
+        assert_eq!(err, Ineligible::Opcode { pc: 1, opcode: 0xa8 });
+        assert!(err.to_string().contains("outside the compiled subset"));
+        // **Esta lista se vació tres veces, y conviene decir por qué.** Primero estaban `athrow`
         // (0xbf) y los monitores (0xc2/0xc3), hasta que el grupo 5 los compiló a un deopt
         // incondicional. Después `f2i` (0x8b) y `d2i` (0x8e), las conversiones angostas de punto
         // flotante a entero, **hasta que entraron al subconjunto**: hoy `cvtt*2si` las resuelve en
         // una instrucción y guarda el *integer indefinite value* de x86 para que el intérprete
         // aplique la saturación de la JLS §5.1.3.
+        //
+        // **La tercera vez fueron los cinco `invoke`** (0xb6..0xba), y no porque entraran al
+        // subconjunto: un sitio que la VM no puede ligar se compila como un deopt incondicional en
+        // vez de refutar el método. El motivo está medido y está en [`invoke_trap`] — lo que
+        // refutaba `String.indexOf(III)` no era su callee sino un sitio en la rama de pares
+        // subrogados, que nunca se ejecutó.
         //
         // El patrón es el de siempre en este archivo: **un test que usa "esto todavía no compila"
         // como andamio se rompe cuando el compilador mejora**. Van tres vueltas: `athrow` y los
@@ -8721,10 +9026,21 @@ mod tests {
         // descriptor says `()I`, so it is a type error rather than an unknown opcode.
         let err = compile(&[0x03, 0xb1, 0xac], 1, &no_constants).unwrap_err();
         assert_eq!(err, Ineligible::WrongType { pc: 1 }, "`return` in a non-void method");
-        // `new` (0xbb) is also in the subset since step 7, and it is *conditionally* in: this
-        // environment resolves no class, so it is refused for that rather than as a foreign opcode.
-        let err = compile(&[0xbb, 0x00, 0x02, 0x03, 0xac], 1, &no_constants).unwrap_err();
-        assert_eq!(err, Ineligible::UnresolvedClass { pc: 0, index: 2 });
+        // `new` (0xbb) es el caso que **dejó** de rechazar. Este entorno no resuelve ninguna
+        // clase, y antes eso era un `UnresolvedClass` que se llevaba el método entero; desde el
+        // censo por tiempo es una **trampa**: el método compila, el `new` es un salto al stub, y
+        // el intérprete sigue desde ese pc —que es donde puede inicializar la clase—. Se
+        // comprueba lo que lo hace correcto: hay un único punto de salida y está en el pc del
+        // `new`, o sea que la instrucción no corrió.
+        let trampa = compile(&[0xbb, 0x00, 0x02, 0x03, 0xac], 1, &no_constants).unwrap();
+        assert_eq!(trampa.resume_sites.len(), 1, "una sola salida");
+        assert_eq!(trampa.resume_sites[0].pc, 0, "y es el pc del `new`, que no llegó a correr");
+        // Y lo que viene **después** del `new` ya no tiene que pertenecer al subconjunto: acá hay
+        // un `multianewarray`, que se rechaza con motivo propio cuando se lo alcanza, y el método
+        // compila igual porque el corte lo deja inalcanzable. Es la mitad del arreglo que no se ve
+        // en el `new` mismo — una rama de error entera deja de pesar.
+        compile(&[0xbb, 0x00, 0x02, 0xc5, 0x00, 0x01, 0x02, 0xac], 1, &no_constants)
+            .expect("lo que sigue a la trampa no se camina");
         // The four heap opcodes are *conditionally* in the subset, so their rejections have their
         // own shapes. `getstatic`/`putstatic` need a resolver that answers with an address, and
         // this one answers nothing...

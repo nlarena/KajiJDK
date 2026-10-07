@@ -9,7 +9,7 @@ public class BkRefWC {
     static int step(BkRefWC o, Object x, Object y, int n) {
         int acc = 1;
         if (NEVER != 0) {
-            acc = acc + ("" + n).length();
+            acc = acc + new int[2][2].length;
         }
         for (int i = 0; i < n; i++) {
             o.a = x;
@@ -26,7 +26,7 @@ public class BkRefWC {
         Object y = new Object();
         int acc = 0;
         if (NEVER != 0) {
-            acc = acc + ("" + acc).length();
+            acc = acc + new int[2][2].length;
         }
         for (int k = 0; k < 1000; k++) {
             acc = (acc + step(o, x, y, 300)) & 0xFFFFF;

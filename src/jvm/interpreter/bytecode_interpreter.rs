@@ -426,6 +426,23 @@ struct SharedVm {
     /// Logical clock: opcodes executed so far. The allocation-rate trigger measures
     /// "time" in opcodes (we have no wall clock), and a safepoint is polled per step.
     steps: usize,
+    /// **El censo por tiempo** (`JVM_PROFILE=1`): opcodes interpretados por metodo, o `None` en
+    /// una corrida normal, que es cuando esto no cuesta ni una suma.
+    ///
+    /// Es el mismo tic que [`steps`][SharedVm::steps], desagregado por el metodo del frame de
+    /// arriba. Lo que lo hace la medida correcta para decidir donde trabaja el JIT es que un
+    /// metodo **compilado deja de sumar**: su cuerpo corre nativo y no vuelve a pasar por
+    /// `run_one`. O sea que lo que queda en esta tabla es, literalmente, el trabajo que el JIT
+    /// **no** se llevo — y ordenarla por el contador contesta «que rechazo cae en camino
+    /// caliente», que es una pregunta que un censo de *metodos* no puede contestar.
+    ///
+    /// Un contador y no un reloj a proposito: es **deterministico**. El ruido de layout de esta
+    /// maquina (±3-12%, ver `bench/BASELINE.tsv`) tapa la mayoria de los efectos que buscamos, y
+    /// dos corridas de esto dan exactamente el mismo numero.
+    ///
+    /// Solo el motor **green**: es el unico que pasa cada opcode por `run_one`. Los sustratos de
+    /// hilos de SO corren los opcodes frame-local sobre su `RunningCtx` sin tocar `SharedVm`.
+    perfil: Option<std::collections::HashMap<MethodId, u64>>,
     /// #296: el plazo de cada hilo dormido en `Thread.sleep`, en **reloj real** y por indice de
     /// hilo. Va aparte de `GreenThread::sleep_until`, que sigue en pasos para `wait(ms)`,
     /// `join(ms)` y `parkNanos`: el sleep es lo que el codigo compara con `currentTimeMillis`, y
@@ -555,6 +572,7 @@ impl JVM {
                 uncaught_entry: None,
                 gc_policy: gc::GcPolicy::from_env(),
                 steps: 0,
+                perfil: std::env::var_os("JVM_PROFILE").map(|_| std::collections::HashMap::new()),
                 sleep_real: std::collections::HashMap::new(),
                 last_gc_step: 0,
                 last_gc_used: 0,
@@ -2104,6 +2122,7 @@ impl Exec<'_> {
                             .map(|(class_id, element)| crate::burst::compile::ArrayType { class_id, element })
                     },
                     invoke: &|unit, pc, index| Self::jit_callee(metaspace, jit, unit, pc, index),
+                    intrinsic: &|unit, index| Self::jit_intrinsic(metaspace, unit, index),
                     // Where the heap is, and the three layout constants an array read needs — each
                     // taken from the module that owns it, so compiled code and the interpreter
                     // cannot come to disagree about where a `length` word or an element sits.
@@ -2126,6 +2145,12 @@ impl Exec<'_> {
                         // VM's life (Eden plus both survivors), and only ever used to decide
                         // whether a store is worth *recording* — never whether it is legal.
                         old_start: heap.old_start().min(u32::MAX as usize) as u32,
+                        // El layout del String, pedido al módulo que es su dueño por la misma
+                        // razón que las tres constantes de arreglo de arriba: el código compilado
+                        // y el intérprete no pueden llegar a discrepar sobre dónde está la palabra
+                        // de largo o dónde empieza el texto.
+                        string_length: strings::LENGTH_OFFSET as u32,
+                        string_data: strings::STRING_HEADER as u32,
                     },
                     // `aastore`: the array class this site was profiled storing into, and that
                     // array class's element class — the two mirror offsets its type guard compares
@@ -2166,11 +2191,46 @@ impl Exec<'_> {
         // distinto compilan **conjuntos distintos de métodos**, y cuando una da bien y la otra mal
         // la diferencia entre esos dos conjuntos es el sospechoso. Sin esto hay que adivinarlo.
         if std::env::var_os("JVM_JIT_LOG").is_some() {
+            let metaspace = &self.shared.metaspace;
             let veredicto = match &result {
                 Ok(_) => "compila".to_string(),
-                Err(e) => format!("rechaza {e:?}"),
+                // **El indice, resuelto a su nombre.** Un `UnresolvedClass { index: 55 }` dice
+                // que un `new` no se pudo resolver y no dice de que; para el censo por tiempo esa
+                // es justo la distincion que decide el trabajo, porque un `new` de una excepcion
+                // esta en la rama de error --que no corre nunca-- y rechaza igual el metodo
+                // entero. El pool esta a mano aca y no lo esta en `burst`, que a proposito no
+                // sabe lo que es un constant pool.
+                Err(e) => {
+                    use crate::burst::compile::Ineligible as I;
+                    let cf = metaspace.get(metaspace.class_of(method));
+                    let nombre = match e {
+                        I::UnresolvedClass { index, .. }
+                        | I::UnresolvedStatic { index, .. }
+                        | I::UnresolvedField { index, .. } => {
+                            cf.and_then(|cf| cf.class_name(*index)).map(str::to_string)
+                        }
+                        // **Un `invoke` fuera del subconjunto no dice nada sin el callee.** El
+                        // emisor lo cuenta como opcode desconocido porque `jit_callee` contesto
+                        // `None` --nativo, abstracto, virtual, sin inicializar--, y «26% del
+                        // tiempo rechazado es `invokestatic`» no se puede accionar mientras no se
+                        // sepa *a que*. El indice esta en los dos bytes que siguen al opcode.
+                        I::Opcode { pc, opcode: 0xb6..=0xb9 } => {
+                            let code = metaspace.code(method);
+                            let index = match (code.get(pc + 1), code.get(pc + 2)) {
+                                (Some(hi), Some(lo)) => u16::from_be_bytes([*hi, *lo]),
+                                _ => 0,
+                            };
+                            cf.and_then(|cf| cf.methodref_target(index))
+                                .map(|(c, n, d)| format!("{c}.{n}{d}"))
+                        }
+                        _ => None,
+                    };
+                    match nombre {
+                        Some(n) => format!("rechaza {e:?} <{n}>"),
+                        None => format!("rechaza {e:?}"),
+                    }
+                }
             };
-            let metaspace = &self.shared.metaspace;
             eprintln!(
                 "[jit] {} {}.{}{}",
                 veredicto,
@@ -2197,6 +2257,49 @@ impl Exec<'_> {
             is_static: metaspace.is_static(method),
             has_handlers: !metaspace.exception_table(method).is_empty(),
         }
+    }
+
+    /// **Qué nativo es este `invokestatic`**, para los dos que el emisor sabe escribir en línea
+    /// — `None` para todos los demás, que es la respuesta ordinaria.
+    ///
+    /// Es la contracara de [`jit_callee`][Self::jit_callee]: aquél se niega a expandir un `native`
+    /// porque inlinear el cuerpo que *aparenta* tener saltearía la interceptación del intérprete, y
+    /// ésa sigue siendo la respuesta correcta para `park`, `println`, `exit` y todo lo que tenga
+    /// efectos. Para estos dos la interceptación **es** una lectura del heap, así que escribirla en
+    /// el emisor y hacerla en `natives::dispatch` son la misma operación.
+    ///
+    /// # Las dos condiciones, y por qué hacen falta las dos
+    ///
+    /// El nombre no alcanza. `java/lang/String.charAt(I)C` existe **con cuerpo** en KajiLibrary —
+    /// chequea el rango y tira `StringIndexOutOfBoundsException`— y existe **nativo** en la copia
+    /// de `boot/`; interceptar por nombre se saltearía el chequeo del primero. Así que se exige:
+    ///
+    ///  1. que el `methodref` nombre exactamente uno de los dos pares `(nombre, descriptor)` de
+    ///     KajiLibrary, que son `private static` y toman el String como primer argumento;
+    ///  2. y que el método al que **resuelve** sea de verdad `native`.
+    ///
+    /// La segunda es la que lo hace seguro: si alguna vez `rawCharAt` dejara de ser nativo —se
+    /// escribiera en Java, como ya pasó con `equals` y `hashCode`— esto deja de interceptarlo solo,
+    /// y el método entra por el camino de siempre en vez de ejecutar una lectura que ya no es su
+    /// cuerpo.
+    ///
+    /// Como todo resolver, es de **sólo lectura**: `resolved_call_readonly` no carga nada, que es
+    /// lo que mantiene cierto que compilar no cambia el estado de la VM.
+    fn jit_intrinsic(
+        metaspace: &MetaspaceService,
+        unit: MethodId,
+        index: u16,
+    ) -> Option<crate::burst::compile::Intrinsic> {
+        use crate::burst::compile::Intrinsic;
+        let caller = metaspace.class_of(unit);
+        let (class, name, descriptor) = metaspace.get(caller)?.methodref_target(index)?;
+        let cual = match (class, name, descriptor) {
+            ("java/lang/String", "rawLength", "(Ljava/lang/String;)I") => Intrinsic::StringLength,
+            ("java/lang/String", "rawCharAt", "(Ljava/lang/String;I)C") => Intrinsic::StringCharAt,
+            _ => return None,
+        };
+        let callee = metaspace.resolved_call_readonly(caller, index)?;
+        metaspace.is_native(callee).then_some(cual)
     }
 
     /// **Which calls this tier may inline** (F3 step 8): the callee the invoke at `(unit, pc)`
@@ -3001,6 +3104,16 @@ impl Exec<'_> {
         // Keep the code cache current with the top frame before dispatch — a no-op compare
         // unless a frame change (invoke/return/unwind) landed us in a different method.
         self.sync_code_cache();
+        // Un opcode interpretado mas para el metodo de arriba. Va **despues** de
+        // `sync_code_cache` porque es ahi donde `code_method` ya apunta al frame actual: antes,
+        // un invoke o un return recien ocurrido lo dejaria todavia en el metodo anterior y el
+        // opcode se le cobraria al llamador.
+        if self.shared.perfil.is_some() {
+            let metodo = self.running.code_method;
+            if let (Some(perfil), Some(metodo)) = (self.shared.perfil.as_mut(), metodo) {
+                *perfil.entry(metodo).or_insert(0) += 1;
+            }
+        }
         let pc_before = self.pc();
         let opcode = self.current_code()[self.pc()];
         let step = match opcode {
@@ -4385,6 +4498,42 @@ fn is_branch(opcode: u8) -> bool {
     matches!(opcode, 0x99..=0xa7 | 0xc6 | 0xc7 | 0xc8)
 }
 
+/// **Vuelca el censo por tiempo** a stderr, una fila por metodo, si `JVM_PROFILE` estaba puesto.
+///
+/// Las columnas son `pasos`, `veredicto`, `frio`, `bytes` y el metodo; van en TSV detras de un
+/// prefijo fijo para que un script las separe del resto de lo que la VM escribe a stderr — que
+/// incluye el `System.out` del programa y las lineas `[gc]`, y es la razon por la que el prefijo
+/// no es opcional.
+///
+/// - **`pasos`** son opcodes **interpretados**, no tiempo. Un metodo compilado deja de sumar,
+///   asi que esta columna mide exactamente el trabajo que el JIT no se llevo.
+/// - **`veredicto`** viene del cache, no de un segundo analisis: `compila`, `rechaza` o `frio`.
+/// - **`frio`** son las invocaciones contadas cuando el veredicto es `frio`, para separar «le
+///   falto poco para el umbral» de «se llamo una vez».
+/// - **`bytes`** es el largo del cuerpo, que es lo que distingue un metodo caro de uno barato
+///   llamado muchas veces.
+///
+/// Ordenado por `pasos` descendente: la primera fila con veredicto `rechaza` es, por
+/// construccion, el rechazo que mas cuesta.
+fn volcar_perfil(shared: &SharedVm, running: &RunningCtx) {
+    let Some(perfil) = &shared.perfil else { return };
+    let mut filas: Vec<(u64, MethodId)> = perfil.iter().map(|(&m, &n)| (n, m)).collect();
+    filas.sort_unstable_by(|a, b| b.0.cmp(&a.0).then(a.1.cmp(&b.1)));
+    let total: u64 = filas.iter().map(|f| f.0).sum();
+    eprintln!("[perfil] #metodos	{}	#pasos-interpretados	{total}", filas.len());
+    eprintln!("[perfil] pasos	veredicto	frio	bytes	metodo");
+    for (pasos, m) in filas {
+        let (veredicto, frio) = running.jit.veredicto(m);
+        eprintln!(
+            "[perfil] {pasos}	{veredicto}	{frio}	{}	{}.{}{}",
+            shared.metaspace.code(m).len(),
+            shared.metaspace.class_of(m),
+            shared.metaspace.name(m),
+            shared.metaspace.descriptor(m),
+        );
+    }
+}
+
 /// Runs the entry method to completion, returning its result. Thin driver over
 /// [`JVM::step`] — the same loop the visualizer runs, minus the pausing.
 pub fn execute(metaspace: MetaspaceService, entry: Frame) -> Option<Value> {
@@ -4394,6 +4543,7 @@ pub fn execute(metaspace: MetaspaceService, entry: Frame) -> Option<Value> {
             let mut interp = JVM::new(metaspace, entry);
             loop {
                 if let Step::Return(value) = interp.exec().step() {
+                    volcar_perfil(&interp.shared, &interp.running);
                     return value;
                 }
             }
@@ -4432,6 +4582,7 @@ pub fn execute_reporting(metaspace: MetaspaceService, entry: Frame) -> RunReport
                     break value;
                 }
             };
+            volcar_perfil(&interp.shared, &interp.running);
             RunReport {
                 value,
                 console: std::mem::take(&mut interp.shared.console),

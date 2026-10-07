@@ -70,12 +70,16 @@ use super::heap::HeapService;
 use super::metaspace::MetaspaceService;
 
 /// The `length` word (in UTF-16 code units) sits right after the object header.
-const LENGTH_OFFSET: usize = HEADER_SIZE;
+///
+/// `pub` desde que el JIT escribe `rawLength` en línea: el desplazamiento tiene que salir de acá,
+/// que es el módulo dueño del layout, y no estar escrito una segunda vez del otro lado — ver
+/// `burst::compile::Heap::string_length`.
+pub const LENGTH_OFFSET: usize = HEADER_SIZE;
 /// The payload starts after the header + length word. Public because it is also the size
 /// of an *empty* String, which is what the `new` opcode must allocate for one.
 pub const STRING_HEADER: usize = HEADER_SIZE + 4;
-/// Bytes per UTF-16 code unit.
-const UNIT_SIZE: usize = 2;
+/// Bytes per UTF-16 code unit. `pub` por lo mismo que [`LENGTH_OFFSET`].
+pub const UNIT_SIZE: usize = 2;
 /// Object header (8) + the array's length word (4).
 const ARRAY_HEADER: usize = HEADER_SIZE + 4;
 

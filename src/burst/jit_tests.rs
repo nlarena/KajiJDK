@@ -1637,19 +1637,35 @@ fn a_loop_before_a_monitorenter_still_runs_natively() {
     // the behaviour — a `monitorenter` that fell through instead of deopting would show up here as
     // a count far below the number of entries, and one that refused the method would show up as
     // nothing compiled at all.
-    assert_eq!(stats.compiled, 2, "`loopThenSync` and `syncSimple`");
-    assert_eq!(stats.native_calls, stats.deopts, "every entry ends at the monitor, none returns");
+    // **Tres desde que el emisor escribe `String.rawLength` en línea.** `String.length()` son cinco
+    // bytes —`aload_0; invokestatic rawLength; ireturn`— y hasta ese cambio ese `invokestatic` a un
+    // nativo la dejaba fuera del subconjunto y se llevaba el método entero. No es ruido de este
+    // workload: es el método que el censo por tiempo midió como el 11,8% de **todo** el trabajo
+    // interpretado del corpus de `java/texto/`.
+    assert_eq!(stats.compiled, 3, "`loopThenSync`, `syncSimple` y `String.length`");
+    // Acá había un `assert_eq!(native_calls, deopts)` —«toda entrada termina en el monitor y
+    // ninguna vuelve»— y valía mientras los dos únicos métodos compilados fueran los del monitor.
+    // `String.length` **sí** vuelve, así que la igualdad es falsa por diseño y lo que queda es la
+    // misma afirmación partida en dos. La aritmética, medida: 8967 entradas y 5998 deopts, o sea
+    // 5998 de los dos métodos del monitor —una por llamada, las 2 × 3000 menos el calentamiento— y
+    // 2969 de `String.length`, que es el único que retorna.
+    //
+    // Los dos modos de falla que la igualdad atajaba siguen atajados y por separado: un
+    // `monitorenter` que cayera de largo en vez de deoptar daría muchos **menos** deopts que
+    // llamadas, y uno que rechazara el método daría dos compilados en vez de tres.
+    assert!(stats.native_calls > stats.deopts, "`String.length` retorna: {stats:?}");
     assert!(stats.deopts > 5000, "{} deopts: one per call, twice per iteration", stats.deopts);
     // `syncMethod` is the *other* exclusion and it is structural: `ACC_SYNCHRONIZED` is a flag, not
     // an opcode, the interpreter takes its monitor before the JIT's dispatch point is reached, and
     // that dispatch is gated on there being no monitor. So it is never offered, never scanned and
     // never refused — which is why it is absent from both counters rather than present in
     // `rejected`. `run` itself is the one refusal: its loop calls a method that loops.
-    // Dos desde el cambio de imagen de arranque, y es **el mismo** `+1` que en
-    // `getstatic_of_an_int_agrees_with_the_interpreter`: el método de biblioteca que ahora entra al
-    // camino se escanea y se rechaza en los dos workloads. `syncMethod` sigue sin ser ofrecido, que
-    // es lo que este aserto existe para decir.
-    assert_eq!(stats.rejected, 2, "`run` y uno de la biblioteca; `syncMethod` sigue sin ofrecerse");
+    // **Uno de nuevo.** Fueron dos desde el cambio de imagen de arranque: el método de biblioteca
+    // que entró al camino se escaneaba y se rechazaba. Ese método era `String.length()`, y ahora
+    // **compila** —es el mismo `+1`/`-1` que se ve arriba en `compiled`—, así que el único rechazo
+    // que queda es el de `run`, por su `getstatic`. `syncMethod` sigue sin ser ofrecido, que es lo
+    // que este aserto existe para decir.
+    assert_eq!(stats.rejected, 1, "sólo `run`; `syncMethod` sigue sin ofrecerse");
 }
 
 // =============================================================================================
@@ -1733,6 +1749,8 @@ fn subset_census() {
         array_data: 12,
         int_element: 4,
         reference_element: 4,
+        string_length: crate::jvm::interpreter::strings::LENGTH_OFFSET as u32,
+        string_data: crate::jvm::interpreter::strings::STRING_HEADER as u32,
         // The real heap's shape: young below Eden's end plus two survivors, Old above. Nothing here
         // runs, so this only has to be a plausible constant for the filter to be compiled against.
         old_start: 264 + 2 * 256,
@@ -2238,6 +2256,7 @@ fn subset_census() {
                         record: Some(1),
                     }])
                 },
+                intrinsic: &|_, _| None,
                 heap: CENSUS_HEAP,
                 // The `checkcast`/`instanceof`/`ldc Foo.class` stub: **any `CONSTANT_Class`**
                 // resolves, to a plausible mirror offset no code here compares against. Asking
@@ -2527,12 +2546,17 @@ fn methods_outside_the_subset_are_scanned_once_and_never_again() {
     // compilador mejora**, que es exactamente cuando uno menos quiere ruido.
     //
     // Por eso ahora apunta a un **gemelo del banco**, cuya refutación no es una carencia del
-    // emisor sino **estructural**: lleva un `invokedynamic` en una rama nunca tomada, y acá un
-    // indy no es una llamada — el intérprete re-corre el bootstrap en cada ejecución, así que no
-    // hay `MethodId` ligado que darle al JIT. Cerrar eso empieza siendo trabajo del *intérprete*,
-    // no del compilador. Y si algún día se cierra, el que avisa no es este test sino
-    // `los_controles_del_banco_no_compilan_nada`, que cuenta las compilaciones de cada control y
-    // falla ruidosamente — que es el orden correcto para enterarse.
+    // emisor sino **estructural**: lleva un `multianewarray` de dos dimensiones en una rama nunca
+    // tomada, y a ese opcode se lo rechaza por lo que *es* — aloca una cantidad de arreglos que
+    // depende de un operando, y una salida que reanuda en un límite de instrucción lo
+    // re-ejecutaría entero, así que no puede terminar.
+    //
+    // **Y la cuarta vez ya pasó**, que es el mejor argumento que este comentario tiene: el veneno
+    // era un `invokedynamic` en esa misma rama muerta, y se murió — no porque el indy entrara al
+    // subconjunto, sino porque un sitio de llamada que nunca corrió dejó de refutar el método. El
+    // que avisó no fue este test sino `los_controles_del_banco_no_compilan_nada`, exactamente como
+    // decía acá que iba a pasar. El criterio del veneno nuevo está en `bench/BkArithC.java`: la
+    // negativa no puede ser sobre un sitio frío.
     let (_, _, stats) = run("bench/BkArithC.class", true);
     assert_eq!(stats.compiled, 0, "un gemelo del banco no compila nada, por construcción");
     assert_eq!(stats.rejected, 2, "cada método se escanea exactamente una vez, y se rechaza");
@@ -2573,9 +2597,13 @@ fn references_agree_with_the_interpreter() {
     let stats = differential("java/JrRef.class", 604_164);
     // `getOwn`, `getBase`, `getAfter`, `mix`, `nullField`, `sum`, `at`, `nullness`, `pick`.
     // Every one of them begins with an `aload` of a slot the previous step could not marshal.
-    assert_eq!(stats.compiled, 9);
-    // `run` is scanned once (from the back-edge of its own loop) and refused: it allocates.
-    assert_eq!(stats.rejected, 1);
+    // **Diez, y `run` es el décimo.** Era nueve y `run` se rechazaba, por un sitio de llamada que
+    // este tier no podía ligar; desde la trampa del invoke se compila cortado en ese sitio. Que
+    // `deopts` siga en el mismo número exacto es lo que dice que no cambió nada más: la
+    // compilación de `run` no deja entradas on-stack — la trampa corta antes de su único header,
+    // así que no hay por dónde entrar — y `run` se llama una sola vez.
+    assert_eq!(stats.compiled, 10, "los nueve, y `run` cortado en su invoke");
+    assert_eq!(stats.rejected, 0, "ya no queda ninguno refutado");
     // Three deopt sites, hit once per round for 400 rounds: a null receiver, an index of -1 and
     // an index of `length`. Each is a *restart* — the interpreter re-runs the method from its
     // first byte and throws the exception itself — so the count is exactly the number of attempts
@@ -3040,6 +3068,7 @@ fn an_object_allocated_by_compiled_code_survives_a_minor_collection() {
             },
             array: &|_, _| None,
             invoke: &|_, _, _| None,
+            intrinsic: &|_, _| None,
             heap: crate::burst::compile::Heap {
                 eden_base: bases.eden,
                 other_base: bases.other,
@@ -3052,6 +3081,8 @@ fn an_object_allocated_by_compiled_code_survives_a_minor_collection() {
                 array_data: 12,
                 int_element: 4,
                 reference_element: 4,
+                string_length: crate::jvm::interpreter::strings::LENGTH_OFFSET as u32,
+                string_data: crate::jvm::interpreter::strings::STRING_HEADER as u32,
                 old_start: bases.max_offset.min(u32::MAX as usize) as u32,
             },
             array_store: &|_, _| None,
@@ -3233,6 +3264,7 @@ fn a_reference_stored_by_compiled_code_survives_a_minor_with_no_root_but_the_bar
             instance: &|_, _| None,
             array: &|_, _| None,
             invoke: &|_, _, _| None,
+            intrinsic: &|_, _| None,
             heap: crate::burst::compile::Heap {
                 eden_base: bases.eden,
                 other_base: bases.other,
@@ -3245,6 +3277,8 @@ fn a_reference_stored_by_compiled_code_survives_a_minor_with_no_root_but_the_bar
                 array_data: 12,
                 int_element: 4,
                 reference_element: 4,
+                string_length: crate::jvm::interpreter::strings::LENGTH_OFFSET as u32,
+                string_data: crate::jvm::interpreter::strings::STRING_HEADER as u32,
                 old_start: heap.old_start() as u32,
             },
             array_store: &|_, _| None,
@@ -3397,6 +3431,7 @@ fn an_aastore_by_compiled_code_keeps_its_element_alive_across_a_minor() {
             instance: &|_, _| None,
             array: &|_, _| None,
             invoke: &|_, _, _| None,
+            intrinsic: &|_, _| None,
             heap: crate::burst::compile::Heap {
                 eden_base: bases.eden,
                 other_base: bases.other,
@@ -3409,6 +3444,8 @@ fn an_aastore_by_compiled_code_keeps_its_element_alive_across_a_minor() {
                 array_data: array_operations::ARRAY_HEADER_SIZE as u32,
                 int_element: array_operations::array_element_width("[I") as u32,
                 reference_element: array_operations::array_element_width("[Ljava/lang/Object;") as u32,
+                string_length: crate::jvm::interpreter::strings::LENGTH_OFFSET as u32,
+                string_data: crate::jvm::interpreter::strings::STRING_HEADER as u32,
                 old_start: heap.old_start() as u32,
             },
             // The two mirrors the VM's own resolver would derive from this site's profile.
@@ -3595,6 +3632,7 @@ fn compile_newarray(
                     .map(|(class_id, element)| ArrayType { class_id, element })
             },
             invoke: &|_, _, _| None,
+            intrinsic: &|_, _| None,
             heap: crate::burst::compile::Heap {
                 eden_base: bases.eden,
                 other_base: bases.other,
@@ -3607,6 +3645,8 @@ fn compile_newarray(
                 array_data: array_operations::ARRAY_HEADER_SIZE as u32,
                 int_element: array_operations::array_element_width("[I") as u32,
                 reference_element: array_operations::array_element_width("[Ljava/lang/Object;") as u32,
+                string_length: crate::jvm::interpreter::strings::LENGTH_OFFSET as u32,
+                string_data: crate::jvm::interpreter::strings::STRING_HEADER as u32,
                 old_start: bases.max_offset.min(u32::MAX as usize) as u32,
             },
             array_store: &|_, _| None,
@@ -3684,10 +3724,11 @@ fn a_compiled_array_is_zeroed_to_the_rounded_stride() {
         array_operations::jit_array_class(&metaspace, "[C").is_none(),
         "an array class with no mirror yet must not be allocatable by compiled code"
     );
-    assert!(
-        compile_newarray(&heap, &metaspace, 5, "(I)[C").is_err(),
-        "...and a method containing that `newarray` must be refused outright"
-    );
+    // ...y un método que contenga ese `newarray` se **corta ahí**: compila lo de antes y sale por
+    // el stub, que es lo que deja al intérprete acuñar el mirror. Antes se lo rechazaba entero.
+    let trampa = compile_newarray(&heap, &metaspace, 5, "(I)[C")
+        .expect("sin mirror se corta el metodo, no se lo rechaza");
+    assert_eq!(trampa.resume_sites.len(), 1, "una sola salida, la del `newarray`");
     array_operations::array_class_mirror(&mut metaspace, &mut heap, "[C");
 
     // ---- dirty Eden, then recycle it -------------------------------------------------------

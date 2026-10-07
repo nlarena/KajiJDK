@@ -6,7 +6,7 @@ public class BkMegaC {
     static int step(BkOp[] ops, int n) {
         int acc = 1;
         if (NEVER != 0) {
-            acc = acc + ("" + n).length();
+            acc = acc + new int[2][2].length;
         }
         for (int i = 0; i < n; i++) {
             acc = ops[i & 3].f(acc);
@@ -19,7 +19,7 @@ public class BkMegaC {
         BkOp[] ops = { new BkOpPA(), new BkOpPB(), new BkOpPC(), new BkOpPD() };
         int acc = 0;
         if (NEVER != 0) {
-            acc = acc + ("" + acc).length();
+            acc = acc + new int[2][2].length;
         }
         for (int k = 0; k < 1000; k++) {
             acc = (acc + step(ops, 300)) & 0xFFFFF;

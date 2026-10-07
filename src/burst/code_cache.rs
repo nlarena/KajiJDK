@@ -717,6 +717,27 @@ impl JitCache {
         self.stats
     }
 
+    /// **Lo que este cache decidio sobre `key`**, para un perfil que tiene que decir no solo
+    /// cuanto tiempo interpretado gasto un metodo sino *por que* seguia interpretado.
+    ///
+    /// Son tres respuestas y la tercera es la que importa distinguir: `"compila"` corre nativo,
+    /// `"rechaza"` fue escaneado y refutado, y `"frio"` **nunca llego al umbral** — no es un
+    /// agujero del emisor sino un metodo que no se llamo lo suficiente. Un censo que las mezclara
+    /// atribuiria al JIT trabajo que el JIT nunca miro.
+    ///
+    /// El `u32` acompanya a `"frio"` con las invocaciones contadas; para los otros dos es `0`.
+    pub fn veredicto(&self, key: usize) -> (&'static str, u32) {
+        match self.entries.get(&key) {
+            Some(Entry::Compiled { .. }) => ("compila", 0),
+            Some(Entry::Rejected) => ("rechaza", 0),
+            Some(Entry::Cold(n)) => ("frio", *n),
+            // Sin entrada: con el JIT apagado `on_entry` sale antes de crearla, y con el prendido
+            // es un metodo cuyo cuerpo corrio sin pasar por una invocacion propia (el `main` de
+            // entrada, o un frame que puso el arranque).
+            None => ("frio", 0),
+        }
+    }
+
     /// Records one entry to `key` and says what to do about it.
     ///
     /// The counter lives here, so this is the *only* place hotness is decided. A `Compile` answer
@@ -1311,6 +1332,7 @@ mod tests {
                 instance: &|_, _| None,
                 array: &|_, _| None,
                 invoke: &|_, _, _| None,
+                intrinsic: &|_, _| None,
                 heap: Heap::default(),
                 array_store: &|_, _| None,
                 class_mirror: &|_, _| None,
@@ -1727,6 +1749,8 @@ mod tests {
                 array_data: 12,
                 int_element: 4,
                 reference_element: 4,
+                string_length: 8,  // la palabra de largo, atras del encabezado
+                string_data: 12,   // ...y el texto atras de ella
                 // Everything this fake hands out is "young": there is no Old generation to
                 // separate, so the barrier's filter can never fire and the log stays empty.
                 old_start: u32::MAX,
@@ -1750,6 +1774,7 @@ mod tests {
                 instance: &|_, _| Some(Instance { size: 16, class_id: 0x77 }),
                 array: &|_, _| None,
                 invoke: &|_, _, _| None,
+                intrinsic: &|_, _| None,
                 heap: eden.heap(),
                 array_store: &|_, _| None,
                 class_mirror: &|_, _| None,
@@ -1872,6 +1897,8 @@ mod tests {
                 array_data: 12,
                 int_element: 4,
                 reference_element: 4,
+                string_length: 8,  // la palabra de largo, atras del encabezado
+                string_data: 12,   // ...y el texto atras de ella
                 old_start: Self::EDEN_END,
             }
         }
@@ -1924,6 +1951,7 @@ mod tests {
                 instance: &|_, _| None,
                 array: &|_, _| None,
                 invoke: &|_, _, _| None,
+                intrinsic: &|_, _| None,
                 heap: heap.heap(),
                 array_store: &|_, _| {
                     Some(ArrayStore { array_class: TEST_ARRAY_CLASS, element_class: TEST_ELEMENT_CLASS })
