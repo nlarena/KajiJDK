@@ -593,9 +593,10 @@ final class Frag {
 final class RegexParser {
     private final String src;
     private final int len;
-    private final int flags;
-    private final boolean ci;
-    private final boolean comments;
+    // Not final: an inline `(?i)` changes them part-way through the pattern. See `setFlags`.
+    private int flags;
+    private boolean ci;
+    private boolean comments;
     private int pos;
     private int groups;
     private int loops;
@@ -606,7 +607,6 @@ final class RegexParser {
     }
 
     RegexParser(String pattern, int flags) {
-        this.flags = flags;
         String p = pattern;
         if ((flags & Pattern.LITERAL) != 0) {
             p = literalize(pattern);
@@ -615,8 +615,7 @@ final class RegexParser {
         }
         this.src = p;
         this.len = p.length();
-        this.ci = (flags & Pattern.CASE_INSENSITIVE) != 0;
-        this.comments = (flags & Pattern.COMMENTS) != 0 && (flags & Pattern.LITERAL) == 0;
+        this.setFlags(flags);
         this.pos = 0;
         this.groups = 0;
         this.loops = 0;
@@ -636,6 +635,15 @@ final class RegexParser {
         return this.named;
     }
 
+    // The flag word as it stands once parse() has finished, which is what Pattern.flags()
+    // reports: an inline modifier at the top level is part of it and one inside a group is
+    // not, because the group parsers restore the word on their way out. Measured against the
+    // JDK rather than assumed -- `(?i)a` reports CASE_INSENSITIVE, `((?i)a)b` reports nothing,
+    // and `(?i)(a(?s)b)c` reports only CASE_INSENSITIVE.
+    int finalFlags() {
+        return this.flags;
+    }
+
     private boolean dotall() {
         return (this.flags & Pattern.DOTALL) != 0;
     }
@@ -646,6 +654,115 @@ final class RegexParser {
 
     private boolean unixLines() {
         return (this.flags & Pattern.UNIX_LINES) != 0;
+    }
+
+    // --- inline flag groups ------------------------------------------------------------
+
+    // Everything that depends on a flag is read when a node is *built* -- CharNode takes
+    // `ci`, AnyNode takes `dotall()`, Begin/End take `multiline()` and `unixLines()` -- so a
+    // flag change part-way through the pattern only has to update these three fields. Nothing
+    // already built has to be revisited, which is what makes inline flags cheap here.
+    private void setFlags(int f) {
+        this.flags = f;
+        this.ci = (f & Pattern.CASE_INSENSITIVE) != 0;
+        this.comments = (f & Pattern.COMMENTS) != 0 && (f & Pattern.LITERAL) == 0;
+    }
+
+    // The bit a modifier letter stands for, or 0 when the character is not one.
+    private static int modifierBit(char c) {
+        if (c == 'i') {
+            return Pattern.CASE_INSENSITIVE;
+        }
+        if (c == 'd') {
+            return Pattern.UNIX_LINES;
+        }
+        if (c == 'm') {
+            return Pattern.MULTILINE;
+        }
+        if (c == 's') {
+            return Pattern.DOTALL;
+        }
+        if (c == 'x') {
+            return Pattern.COMMENTS;
+        }
+        if (c == 'u') {
+            return Pattern.UNICODE_CASE;
+        }
+        if (c == 'U') {
+            return Pattern.UNICODE_CHARACTER_CLASS;
+        }
+        return 0;
+    }
+
+    // Whether a '(?' is starting a flag construct. ')' counts: `(?)` is an empty but legal
+    // one, as is `(?-)`.
+    private static boolean startsFlags(char c) {
+        return modifierBit(c) != 0 || c == '-' || c == ')';
+    }
+
+    // '(?' is already consumed and `first` is the character after it.
+    //
+    // Two forms, and what separates them is where the change stops. `(?i)` applies from here
+    // to the end of the *enclosing* group -- which is why the group parsers save and restore
+    // the flag word instead of this method: `(a(?i)b)c` matches "aBc" and not "aBC", and
+    // `(?:(?i)a)b` matches "Ab" and not "AB". `(?i:X)` applies to X alone and is restored
+    // here. Both shapes were measured against the JDK rather than assumed.
+    //
+    // UNICODE_CASE and UNICODE_CHARACTER_CLASS are refused, the same way the `Pattern`
+    // constructor refuses them in the flags argument: this engine cannot deliver them, and
+    // accepting the letter and ignoring it would change what matches without saying so. That
+    // is a deliberate divergence from the JDK, which honors both.
+    private Frag inlineFlags(char first) {
+        int on = 0;
+        int off = 0;
+        boolean negating = false;
+        char c = first;
+        while (true) {
+            if (c == '-') {
+                if (negating) {
+                    throw this.error("Unknown inline modifier");
+                }
+                negating = true;
+            } else if (c == ')') {
+                this.setFlags((this.flags | on) & ~off);
+                BranchConn pass = new BranchConn();
+                return new Frag(pass, pass);
+            } else if (c == ':') {
+                int saved = this.flags;
+                this.setFlags((this.flags | on) & ~off);
+                Frag inner = this.expr();
+                this.expect(')');
+                this.setFlags(saved);
+                if (inner.head == null) {
+                    BranchConn pass = new BranchConn();
+                    return new Frag(pass, pass);
+                }
+                return inner;
+            } else {
+                int bit = modifierBit(c);
+                if (bit == 0) {
+                    throw this.error("Unknown inline modifier");
+                }
+                if (negating) {
+                    // `(?-u)` asks to turn off a flag this engine never has on, so it is a
+                    // no-op and accepting it is free. Only turning one *on* is refused: that
+                    // is the case where ignoring the letter would change what matches without
+                    // saying so.
+                    off = off | bit;
+                } else {
+                    if ((bit & (Pattern.UNICODE_CASE | Pattern.UNICODE_CHARACTER_CLASS)) != 0) {
+                        throw new UnsupportedOperationException(
+                            "UNICODE_CASE, CANON_EQ and UNICODE_CHARACTER_CLASS are not "
+                            + "supported");
+                    }
+                    on = on | bit;
+                }
+            }
+            if (this.pos >= this.len) {
+                throw this.error("Unknown inline modifier");
+            }
+            c = this.next();
+        }
     }
 
     // --- \Q..\E and LITERAL: rewrite quoted runs into ordinary escapes ----------------
@@ -913,16 +1030,23 @@ final class RegexParser {
     }
 
     // '(' expr ')'  — a capturing group, or a '(?...)' special group: '(?:...)' non-capturing,
-    // '(?=...)' / '(?!...)' lookahead, and '(?<name>...)' named capturing. Lookbehind,
-    // atomic groups and inline flag groups are rejected explicitly.
+    // '(?=...)' / '(?!...)' lookahead, '(?<name>...)' named capturing, and the inline flag
+    // forms '(?idmsux)' and '(?idmsux-idmsux:X)'. Lookbehind and atomic groups are rejected
+    // explicitly.
+    //
+    // Every construct that parses a *body* saves the flag word and restores it on the way out.
+    // That is what gives an inline `(?i)` the right reach: it lasts to the end of the group
+    // that encloses it and no further.
     private Frag group() {
         this.next();
         if (this.pos < this.len && this.peek() == '?') {
             this.next();
             char kind = this.next();
             if (kind == ':') {
+                int saved = this.flags;
                 Frag inner = this.expr();
                 this.expect(')');
+                this.setFlags(saved);
                 if (inner.head == null) {
                     BranchConn pass = new BranchConn();
                     return new Frag(pass, pass);
@@ -943,14 +1067,19 @@ final class RegexParser {
             if (kind == '>') {
                 throw this.error("Atomic groups are not supported");
             }
-            throw this.error("Unsupported group construct");
+            if (startsFlags(kind)) {
+                return this.inlineFlags(kind);
+            }
+            throw this.error("Unknown inline modifier");
         }
         return this.capturingGroup(null);
     }
 
     private Frag lookahead(boolean negate) {
+        int saved = this.flags;
         Frag inner = this.expr();
         this.expect(')');
+        this.setFlags(saved);
         LookAccept acc = new LookAccept();
         Lookahead la = new Lookahead();
         la.negate = negate;
@@ -979,8 +1108,10 @@ final class RegexParser {
         }
         GroupHead gh = new GroupHead(idx);
         GroupTail gt = new GroupTail(idx);
+        int saved = this.flags;
         Frag inner = this.expr();
         this.expect(')');
+        this.setFlags(saved);
         if (inner.head == null) {
             gh.next = gt;
         } else {

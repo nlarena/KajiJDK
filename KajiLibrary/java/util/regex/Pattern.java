@@ -80,9 +80,11 @@ public final class Pattern {
                 "UNICODE_CASE, CANON_EQ and UNICODE_CHARACTER_CLASS are not supported");
         }
         this.pattern = p;
-        this.flags = f;
         RegexParser parser = new RegexParser(p, f);
         this.root = parser.parse();
+        // Not `f`: an inline `(?i)` at the top level of the pattern is reported by flags(),
+        // so the value is only known once the pattern has been parsed.
+        this.flags = parser.finalFlags();
         this.groupCount = parser.groupCount();
         this.localCount = parser.localCount();
         this.named = parser.namedGroups();
