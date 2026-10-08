@@ -58,6 +58,9 @@ WORK = HERE / "runs"
 NEWLINE = chr(10)
 JAVAC = JAVA = None
 BOOT = None
+# The frozen snapshot of ourselves, when a campaign is also hunting regressions.
+PREV_VM = None
+PREV_BOOT = None
 SELF_CHECK = True
 MIN_SPLIT = 4
 MAX_SPLITS = 6
@@ -1093,12 +1096,28 @@ def run_once(name, cases, pool, limit):
     except subprocess.TimeoutExpired as e:
         out, code, err = decode(e.stdout), "timeout", decode(e.stderr)
     t2 = time.time()
+    # The frozen snapshot of ourselves, run on the same compiled class. It is the same binary
+    # shape as the run above, only aimed at the snapshot, so a difference between the two is a
+    # change WE made -- which is the one question the reference cannot answer.
+    prev = None
+    if PREV_VM:
+        pcmd = [str(PREV_VM), str(d / (name + ".class")), "run", "--boot", str(PREV_BOOT)]
+        try:
+            pr = subprocess.run(pcmd, cwd=str(REPO), capture_output=True, text=True,
+                                encoding="utf-8", errors="replace", timeout=limit)
+            prev = collect(pr.stdout + "\n" + pr.stderr)
+        except subprocess.TimeoutExpired as e:
+            # A snapshot that hangs leaves nothing to compare for that batch, the same way a
+            # hanging reference does. `None` keeps those cases out of the regression counts
+            # instead of scoring them against a side that never answered.
+            prev = collect(decode(e.stdout) + "\n" + decode(e.stderr)) or None
+    t3 = time.time()
     # Our VM writes System.out to stderr and the reference writes it to stdout: read both.
     tail = "\n".join(l for l in err.splitlines()
                      if not l.startswith("[gc]") and not LINE.match(l))[-600:]
     return collect(ref_out), collect(out + "\n" + err), {
-        "ref_s": t1 - t0, "ours_s": t2 - t1, "exit": code, "stderr": tail, "live": live,
-        "ref_timeout": ref_timeout, "unstable": unstable}
+        "ref_s": t1 - t0, "ours_s": t2 - t1, "prev_s": t3 - t2, "exit": code, "stderr": tail,
+        "live": live, "ref_timeout": ref_timeout, "unstable": unstable, "prev": prev}
 
 
 def run_split(name, cases, pool, limit, idx=None, floor=None):
@@ -1121,20 +1140,28 @@ def run_split(name, cases, pool, limit, idx=None, floor=None):
     ref, ours, info = run_once(name, sub, pool, limit)
     if ref is None:
         if len(idx) <= 1:
-            return {}, {}, {"ref_s": 0.0, "ours_s": 0.0, "exit": "javac", "live": [],
-                            "stderr": "", "javac": info.get("javac", "")[:600]}
+            return {}, {}, {"ref_s": 0.0, "ours_s": 0.0, "prev_s": 0.0, "exit": "javac",
+                            "live": [], "stderr": "", "prev": None,
+                            "javac": info.get("javac", "")[:600]}
         half = len(idx) // 2
-        ref, ours, info = {}, {}, {"ref_s": 0.0, "ours_s": 0.0, "exit": 0, "live": [],
-                                   "stderr": ""}
+        ref, ours, info = {}, {}, {"ref_s": 0.0, "ours_s": 0.0, "prev_s": 0.0, "exit": 0,
+                                   "live": [], "stderr": "",
+                                   "prev": {} if PREV_VM else None}
         for suffix, part in (("a", idx[:half]), ("b", idx[half:])):
             if not part:
                 continue
             r2, o2, i2 = run_split(name + suffix, cases, pool, limit, part, floor)
             ref.update(r2 or {})
             ours.update(o2 or {})
+            # `prev` has to be merged like the other two. It was not, and because a missing
+            # frozen value was read as "nothing changed", every batch that split reported no
+            # regressions at all -- which is how a deliberately broken library came back clean.
+            if info["prev"] is not None:
+                info["prev"].update(i2.get("prev") or {})
             info["live"] = info["live"] + i2.get("live", [])
             info["ref_s"] += i2.get("ref_s", 0.0)
             info["ours_s"] += i2.get("ours_s", 0.0)
+            info["prev_s"] += i2.get("prev_s", 0.0)
             info["unstable"] = set(info.get("unstable", ())) | set(i2.get("unstable", ()))
         return ref, ours, info
     missing = [k for k in info["live"] if k in ref and k not in ours]
@@ -1228,6 +1255,39 @@ def classify(ref, ours):
         return "exception versus value"
     return "different value"
 
+
+
+# What a change between the frozen snapshot and the current tree means, given what the reference
+# does. Three values: R the reference, F the snapshot, C the current tree.
+#
+# `None` when C == F: nothing we did moved this case, whatever the reference thinks of it.
+#
+# The other three are the point of the whole exercise. A plain two-way frozen-vs-current run
+# tells you behaviour MOVED and cannot tell you which way, and right after a fix most of what
+# moved IS the fix -- so a bare "changed" count would bury the one case that matters under the
+# ones we meant to change. The reference leg is already running, so the classification is free.
+REGRESSED = "regression"             # the snapshot matched the reference and we broke it
+REPAIRED = "fix"                     # the snapshot did not match and now we do
+MOVED = "changed, still wrong"       # both differ from the reference, differently
+
+
+def regression_kind(ref_v, frozen_v, cur_v):
+    if frozen_v is None or ref_v is None:
+        return None
+    if cur_v == frozen_v:
+        return None
+    f_ok = classify(ref_v, frozen_v) is None
+    c_ok = classify(ref_v, cur_v) is None
+    if f_ok and not c_ok:
+        return REGRESSED
+    if c_ok and not f_ok:
+        return REPAIRED
+    if f_ok and c_ok:
+        # Both agree with the reference yet differ from each other: only reachable when the
+        # comparison is looser than equality somewhere, so it is worth seeing rather than
+        # silently folding into "no change".
+        return MOVED
+    return MOVED
 
 def blame(ref, ours, ops):
     """Which statement the divergence belongs to, and the operation that produced it.
@@ -2189,6 +2249,12 @@ def main():
     ap.add_argument("--min-split", type=int, default=4)
     ap.add_argument("--max-splits", type=int, default=6)
     ap.add_argument("--boot", default=None, help="library our VM runs against")
+    ap.add_argument("--regress", default=None, metavar="FROZEN_DIR",
+                    help="also run the frozen snapshot in that directory as a third side, and "
+                         "classify every change between it and the tree under test as a "
+                         "regression, a fix, or a move that is still wrong. This is the only "
+                         "way to see a defect WE introduced: against the reference alone it is "
+                         "one more divergence among hundreds that were already there")
     ap.add_argument("--vm", default=None,
                     help="the run-headless binary to measure. Together with --boot and "
                          "--surface this aims a campaign at a frozen target: see "
@@ -2239,7 +2305,7 @@ def main():
     ap.add_argument("--out", default=None)
     a = ap.parse_args()
 
-    global JAVAC, JAVA, BOOT, MIN_SPLIT, MAX_SPLITS, SELF_CHECK, HEADLESS
+    global JAVAC, JAVA, BOOT, MIN_SPLIT, MAX_SPLITS, SELF_CHECK, HEADLESS, PREV_VM, PREV_BOOT
     b = Path(a.jdk) / "bin"
     JAVAC, JAVA = b / "javac.exe", b / "java.exe"
     BOOT, MIN_SPLIT, MAX_SPLITS = a.boot, a.min_split, a.max_splits
@@ -2247,6 +2313,21 @@ def main():
         HEADLESS = Path(a.vm).resolve()
     if not HEADLESS.exists():
         raise SystemExit("no VM binary at " + str(HEADLESS))
+    if a.regress:
+        fz = Path(a.regress).resolve()
+        PREV_VM, PREV_BOOT = fz / "run-headless.exe", fz / "KajiLibrary"
+        prov = fz / "PROVENANCE.json"
+        for q in (PREV_VM, PREV_BOOT, prov):
+            if not q.exists():
+                raise SystemExit("not a frozen target (no %s): %s" % (q.name, fz))
+        if PREV_VM.resolve() == HEADLESS.resolve():
+            raise SystemExit(
+                "--regress points at the same binary as --vm, so every case would compare the "
+                "snapshot with itself and report no change whatever we broke. Aim --regress at "
+                "the snapshot and leave --vm at the tree under test (or omit it).")
+        rec = json.load(io.open(str(prov), encoding="utf-8"))
+        print("regress: against %s taken %s (%d classes)"
+              % (rec["commit"][:12], rec["when"], rec["library_classes"]))
     SELF_CHECK = not a.no_self_check
 
     if a.no_mutate:
@@ -2329,6 +2410,7 @@ def main():
             # measured against the snapshot and one measured against the working tree are
             # indistinguishable in the output, which is the whole problem this is meant to fix.
             "frozen_target": bool(a.vm and a.boot),
+            "regress_against": str(a.regress) if a.regress else None,
             "seed": a.seed, "batches": a.batches, "per_batch": a.per_batch,
             "length": a.length, "limit": a.limit,
             "pool_operations": len(ordered), "pool_classes": len(pool.usable_classes),
@@ -2338,9 +2420,11 @@ def main():
              "ended_with_value": 0, "threw_at_first": 0, "threw_later": 0, "unstable": 0,
              "amp_cases": 0, "amp_diverge": 0, "amp_queue": 0, "causes": 0,
              "by_kind": {}, "by_operation": {}, "by_gap": {}, "op_declared": {},
+             "by_change": {}, "prev_silent": 0,
              "declared": 0,
              "ref_s": 0.0, "ours_s": 0.0}
     batches, divs, reduced = [], [], []
+    regressions = []
     seen = set()
     t0 = time.time()
 
@@ -2353,6 +2437,7 @@ def main():
             "batches": batches, "unreachable_sample": unreachable,
             "unstable_sample": unstable_sample,
             "divergences": [{k: v for k, v in d.items() if k != "vars"} for d in divs],
+            "regressions": regressions,
             "reduced": reduced}, ensure_ascii=False, indent=2) + "\n")
 
     def bump(table, key):
@@ -2478,6 +2563,20 @@ def main():
                 stats["threw_at_first"] += 1
             else:
                 stats["threw_later"] += 1
+            # Computed for every case, not only the divergent ones: a FIX agrees with the
+            # reference and so never shows up as a divergence at all.
+            frozen_v = (info.get("prev") or {}).get(k)
+            if PREV_VM and frozen_v is None:
+                # The snapshot gave no answer for this case, which is NOT the same as "nothing
+                # changed" and must never again be reported as if it were.
+                stats["prev_silent"] += 1
+            moved = regression_kind(ref[k], frozen_v, ours.get(k))
+            if moved is not None:
+                bump(stats["by_change"], moved)
+                if moved == REGRESSED:
+                    regressions.append({"batch": bi, "k": k, "java": text,
+                                        "ref": ref[k], "frozen": info["prev"].get(k),
+                                        "ours": ours.get(k)})
             kind = classify(ref[k], ours.get(k))
             where, culprit = (None, None)
             gap = None
@@ -2511,6 +2610,7 @@ def main():
             divs.append({"batch": bi, "k": k, "kind": kind,
                          "scheduled": o["cls"] + "." + o["name"],
                          "blamed": culprit, "statement": where, "declared_gap": gap,
+                         "changed": moved,
                          "vars": cases[k], "java": text, "ref": ref[k], "ours": ours.get(k)})
         print("batch %d: %d cases, %d divergences, cursor at %d/%d"
               % (bi, len(info["live"]), stats["diverge"], at % len(ordered), len(ordered)),
@@ -2596,6 +2696,23 @@ def main():
               % (bandit.pulls, bandit.novel,
                  100.0 * bandit.novel / max(bandit.pulls, 1),
                  len(bandit.retired), len(bandit.global_sig)))
+    if stats["by_change"] or a.regress:
+        print("")
+        print("against the frozen snapshot: %d cases changed behaviour"
+              % sum(stats["by_change"].values()))
+        for k, v in sorted(stats["by_change"].items(), key=lambda kv: -kv[1]):
+            print("  %-34s %5d" % (k, v))
+        if not stats["by_change"]:
+            print("  (nothing moved: no regression and no fix in this stretch of the pool)")
+        # Printed whenever the snapshot was asked and did not answer. Without this line a
+        # snapshot that never ran is indistinguishable from one that agreed about everything.
+        print("  snapshot gave no answer for %d of %d cases%s"
+              % (stats["prev_silent"], stats["cases"],
+                 "  <-- the comparison covered almost nothing"
+                 if stats["prev_silent"] > stats["cases"] // 2 else ""))
+        for x in regressions[:10]:
+            print("  REGRESSION  snapshot=%-40s now=%s"
+                  % (str(x["frozen"])[:40], str(x["ours"])[:40]))
     print("")
     print("operations blamed most often (charged to the statement that diverged):")
     for k, v in sorted(stats["by_operation"].items(), key=lambda kv: -kv[1])[:15]:
