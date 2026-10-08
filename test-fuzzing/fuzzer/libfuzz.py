@@ -2148,6 +2148,11 @@ def main():
     ap.add_argument("--min-split", type=int, default=4)
     ap.add_argument("--max-splits", type=int, default=6)
     ap.add_argument("--boot", default=None, help="library our VM runs against")
+    ap.add_argument("--vm", default=None,
+                    help="the run-headless binary to measure. Together with --boot and "
+                         "--surface this aims a campaign at a frozen target: see "
+                         "FROZEN-TARGET.md for why a moving one makes fuzzer progress "
+                         "unmeasurable")
     ap.add_argument("--allow-unsafe", action="store_true",
                     help="include classes that touch files, processes, network or devices")
     ap.add_argument("--allow-hostile", action="store_true",
@@ -2193,10 +2198,14 @@ def main():
     ap.add_argument("--out", default=None)
     a = ap.parse_args()
 
-    global JAVAC, JAVA, BOOT, MIN_SPLIT, MAX_SPLITS, SELF_CHECK
+    global JAVAC, JAVA, BOOT, MIN_SPLIT, MAX_SPLITS, SELF_CHECK, HEADLESS
     b = Path(a.jdk) / "bin"
     JAVAC, JAVA = b / "javac.exe", b / "java.exe"
     BOOT, MIN_SPLIT, MAX_SPLITS = a.boot, a.min_split, a.max_splits
+    if a.vm:
+        HEADLESS = Path(a.vm).resolve()
+    if not HEADLESS.exists():
+        raise SystemExit("no VM binary at " + str(HEADLESS))
     SELF_CHECK = not a.no_self_check
 
     if a.no_mutate:
@@ -2275,6 +2284,10 @@ def main():
             "shard": a.shard, "shards": a.shards,
             "tool": "libfuzz.py (whole library, surface discovered with javap)",
             "reference": a.jdk, "under_test": str(a.boot or "KajiLibrary"),
+            # A frozen target is only frozen if the record says so. Without this a result
+            # measured against the snapshot and one measured against the working tree are
+            # indistinguishable in the output, which is the whole problem this is meant to fix.
+            "frozen_target": bool(a.vm and a.boot),
             "seed": a.seed, "batches": a.batches, "per_batch": a.per_batch,
             "length": a.length, "limit": a.limit,
             "pool_operations": len(ordered), "pool_classes": len(pool.usable_classes),

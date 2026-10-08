@@ -270,8 +270,17 @@ def main():
                     help="limit to these package prefixes; default is the whole library")
     ap.add_argument("--nested", action="store_true", help="include nested classes (Outer$Inner)")
     ap.add_argument("--batch", type=int, default=200, help="classes per javap invocation")
+    ap.add_argument("--lib", default=None,
+                    help="the library to read instead of the working tree's KajiLibrary. "
+                         "A frozen measurement target needs its own map: the operation pool "
+                         "has to be the one that library has, not the one this checkout does")
     ap.add_argument("--out", default=str(HERE / "surface.json"))
     a = ap.parse_args()
+    if a.lib:
+        global KAJILIB
+        KAJILIB = Path(a.lib).resolve()
+        if not KAJILIB.is_dir():
+            raise SystemExit("no library at " + str(KAJILIB))
 
     javap = Path(a.jdk) / "bin" / "javap.exe"
     if not javap.exists():

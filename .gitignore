@@ -72,6 +72,15 @@
 /test-fuzzing/banco-vieja/
 /test-fuzzing/banco-corridas/
 
+# El blanco congelado contra el que se mide el PROGRESO DEL FUZZER: una copia de KajiLibrary,
+# del binario del VM y del mapa de superficie, los tres tomados en un commit fijo. Hace falta
+# porque una campania mide dos cosas a la vez -- que tan bien encuentra el generador, y cuanto
+# queda por encontrar -- y arreglar un defecto de biblioteca baja las divergencias sin que el
+# generador cambie, asi que las dos explicaciones son indistinguibles si el sujeto se mueve.
+# Son 85 MB derivados: `test-fuzzing/fuzzer/freeze.py` lo reconstruye, y lo que si se versiona
+# es esa receta mas `FROZEN-TARGET.md`, el mismo criterio que `bin/FROZEN.md` deja escrito.
+/test-fuzzing/frozen-target/
+
 # El mapa de la superficie comparable de KajiLibrary, que produce
 # `test-fuzzing/fuzzer/surface.py` leyendo con javap los dos lados. Es derivado y grande: se
 # regenera en un par de minutos y cambia entero cada vez que se recompila la biblioteca.
