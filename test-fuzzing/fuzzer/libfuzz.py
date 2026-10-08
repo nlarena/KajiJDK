@@ -203,12 +203,29 @@ def remember(t, expr, cfg):
 
 
 def escape(text):
+    r"""`text` as a Java string literal.
+
+    The line terminators cannot go out as a unicode escape. Java expands `\uXXXX` in an
+    earlier pass than the one that parses literals, so by the time the literal is read a
+    `\u000a` *is* a line break and the literal ends mid-line: `"a\u000ab"` is a compile
+    error, not a three-character string. Everything else is safe that way -- the other two
+    sequences that would break out of the literal, `\u0022` and `\u005c`, can only come
+    from a quote or a backslash, and both are handled above.
+
+    It surfaced the day the regex corpus stopped writing its subjects with the escaping a
+    *pattern* needs: the moment one of them held a real line break, the batch stopped
+    compiling. Before that no literal the generator emitted had ever contained one.
+    """
     out = []
     for ch in text:
         if ch == chr(92):
             out.append(chr(92) * 2)
         elif ch == '"':
             out.append(chr(92) + '"')
+        elif ch == chr(10):
+            out.append(chr(92) + 'n')
+        elif ch == chr(13):
+            out.append(chr(92) + 'r')
         elif 32 <= ord(ch) < 127:
             out.append(ch)
         else:
@@ -412,13 +429,26 @@ def mutate(t, expr, r, pool):
     return expr
 
 
-# Patterns and the subjects that go with them. A regex API fed random Unicode gets rejected at
-# the parser and the engine is never reached -- the same failure the numeric strings fixed for
-# `BigInteger`, one level deeper. ReTest seeds from half a million patterns mined from real
-# projects; this is the same idea at the scale a hand-written list allows, and the subjects are
-# paired so that both the accepting and the rejecting path through the engine get walked.
-# Patterns that reach the engine's corners are included on purpose: nested quantifiers,
-# backreferences, lookarounds, possessive and reluctant forms, boundaries, named groups.
+# Patterns and the subjects that go with them, as `(pattern, accepted, rejected)`. A regex API
+# fed random Unicode gets rejected at the parser and the engine is never reached -- the same
+# failure the numeric strings fixed for `BigInteger`, one level deeper. ReTest seeds from half a
+# million patterns mined from real projects; this is the same idea at the scale a hand-written
+# list allows, and the subjects are paired so that both the accepting and the rejecting path
+# through the engine get walked. Patterns that reach the engine's corners are in here on
+# purpose: nested quantifiers, backreferences, lookarounds, possessive and reluctant forms,
+# boundaries, named groups, class intersection, inline flags.
+#
+# The two subjects are "likely to match" and "likely not to", and no stronger than that: the
+# corpus feeds operations with different ideas of matching -- `matches` anchors, `find` does not,
+# `split` and `replaceAll` neither -- so a subject that `matches` rejects and `find` accepts is
+# useful, not wrong. What IS exact is whether a pattern compiles at all, and that lives in
+# REGEX_UNCOMPILABLE below, measured against the reference rather than assumed.
+#
+# Every subject is TEXT, not a pattern, which is the one trap here. `escape()` renders a real
+# backslash as `\\` for the Java literal, so writing a subject the way a pattern is written --
+# `'a\\nb'` for a line break -- produces the four characters a, backslash, n, b. Four seeds were
+# written that way and silently tested the wrong string for weeks: `(?m)^b$` never saw a line
+# break, and the Greek and Latin-1 classes never saw a non-ASCII character.
 REGEX_SEEDS = [
     ('[a-z]+', 'abc', '123'),
     ('[A-Za-z0-9_]{3,8}', 'ab_12', '!!'),
@@ -452,17 +482,17 @@ REGEX_SEEDS = [
     ('(?<!a)b', 'cb', 'ab'),
     ('(?i)hola', 'HOLA', 'chau'),
     ('(?s).+', 'a\\nb', ''),
-    ('(?m)^b$', 'a\\nb', 'ab'),
+    ('(?m)^b$', 'a\nb', 'ab'),
     ('(?x) a b', 'ab', 'a b'),
     ('\\b\\w+\\b', 'una', ' '),
     ('\\B\\w', 'bc', ' c'),
     ('^\\p{Lu}\\p{Ll}+$', 'Hola', 'HOLA'),
-    ('\\p{InGreek}+', '\\u03b1\\u03b2', 'ab'),
+    ('\\p{InGreek}+', '\u03b1\u03b2', 'ab'),
     ('[\\p{L}&&[^\\p{Lu}]]+', 'abc', 'ABC'),
     ('[a-c&&[b-d]]', 'b', 'a'),
-    ('[^\\x00-\\x7F]+', '\\u00e9', 'abc'),
+    ('[^\\x00-\\x7F]+', '\u00e9', 'abc'),
     ('\\Qa+b\\E', 'a+b', 'aab'),
-    ('\\.\\*', '.x', 'x'),
+    ('\\.\\*', '.*', 'x'),
     ('()\\1*', '', 'a'),
     ('(|a)*', 'aaa', ''),
     ('[\\s\\S]*', 'a\\nb', ''),
@@ -479,8 +509,19 @@ REGEX_SEEDS = [
     ('(?<', '', 'a'),
     ('[z-a]', '', 'a'),
     ('\\p{NoSuchThing}', '', 'a'),
-    ('(?#comment)a', 'a', 'b'),
+    ('(?#comment)a', '', 'a'),
 ]
+# The seeds the reference refuses to compile, by pattern. Every one was run against OpenJDK 25;
+# three that looked like they belonged here do not -- `a{0}` and `()\1*` compile and accept the
+# empty string, and `\1` compiles and then matches nothing at all, because a backreference to a
+# group that never participated always fails. `(?#comment)a` is the opposite case: it was listed
+# as compiling, and Java has no Perl-style comment group at all (`(?x)` plus `#` is its answer),
+# so it belongs here.
+REGEX_UNCOMPILABLE = {
+    "[", "[]", "(", ")", "*", "a{2,1}", "(?<n>a)(?<n>b)", "(?<", "[z-a]",
+    "\\p{NoSuchThing}", "(?#comment)a",
+}
+
 REGEX_TEXT = [x for triple in REGEX_SEEDS for x in triple]
 
 # Operations whose String arguments are patterns, or whose receiver is the subject.
