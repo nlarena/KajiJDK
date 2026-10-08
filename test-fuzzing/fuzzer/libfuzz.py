@@ -49,7 +49,7 @@ from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
-from policy import Policy, VALUE_CLASSES          # noqa: E402
+from policy import Policy, VALUE_CLASSES, declared_gap   # noqa: E402
 
 REPO = HERE.parent.parent
 KAJILIB = REPO / "KajiLibrary"
@@ -1118,6 +1118,11 @@ def run_split(name, cases, pool, limit, idx=None, floor=None):
 ABSENT = {"java.lang.NoSuchMethodError", "java.lang.AbstractMethodError",
           "java.lang.UnsatisfiedLinkError", "java.lang.NoClassDefFoundError"}
 
+# The category a declared gap is relabelled to. It stays a divergence -- it is counted in
+# `diverge` like any other, so the numbers remain comparable with campaigns run before this
+# existed -- but it is held out of the cause ranking and of reduction.
+DECLARED = "declared gap"
+
 # Throwing a SUBCLASS of what the specification promises satisfies the specification: `charAt`
 # promises IndexOutOfBoundsException and an ArrayIndexOutOfBoundsException is one. Without this,
 # 126 of 387 divergences in one campaign were that single pair, drowning everything else.
@@ -2110,6 +2115,10 @@ def pick_representatives(divs, limit):
     """
     groups = {}
     for x in divs:
+        if x.get("declared_gap"):
+            # Counted and written out elsewhere; it must not take a reduction slot from a
+            # defect nobody chose.
+            continue
         if x.get("blamed"):
             groups.setdefault(cause_key(x), []).append(x)
     ordered = sorted(groups.items(), key=lambda kv: (-len(kv[1]), str(kv[0])))
@@ -2274,7 +2283,9 @@ def main():
              "unreachable": 0, "no_reference": 0, "unattributed": 0,
              "ended_with_value": 0, "threw_at_first": 0, "threw_later": 0, "unstable": 0,
              "amp_cases": 0, "amp_diverge": 0, "amp_queue": 0, "causes": 0,
-             "by_kind": {}, "by_operation": {}, "ref_s": 0.0, "ours_s": 0.0}
+             "by_kind": {}, "by_operation": {}, "by_gap": {}, "op_declared": {},
+             "declared": 0,
+             "ref_s": 0.0, "ours_s": 0.0}
     batches, divs, reduced = [], [], []
     seen = set()
     t0 = time.time()
@@ -2415,8 +2426,12 @@ def main():
                 stats["threw_later"] += 1
             kind = classify(ref[k], ours.get(k))
             where, culprit = (None, None)
+            gap = None
             if kind is not None:
                 where, culprit = blame(ref[k], ours.get(k), case_ops.get(k, []))
+                gap = declared_gap(culprit, thrown(ref[k]), thrown(ours.get(k)))
+                if gap is not None:
+                    kind = DECLARED
             if bandit is not None and not bandit.blind:
                 bandit.update(targets[k], ref[k], r, kind, ours.get(k), culprit)
             if kind is None:
@@ -2426,6 +2441,11 @@ def main():
             if k in amplified_idx:
                 stats["amp_diverge"] += 1
             bump(stats["by_kind"], kind)
+            if gap is not None:
+                stats["declared"] = stats.get("declared", 0) + 1
+                bump(stats["by_gap"], gap)
+                if culprit:
+                    bump(stats["op_declared"], culprit)
             # `where`, not `at`: the first version unpacked this into `at`, which is the
             # cursor over the operation pool. One divergence set the cursor to a statement
             # index -- 0 or 1 -- so the campaign walked the first few operations of the library
@@ -2436,7 +2456,7 @@ def main():
                 stats["unattributed"] += 1
             divs.append({"batch": bi, "k": k, "kind": kind,
                          "scheduled": o["cls"] + "." + o["name"],
-                         "blamed": culprit, "statement": where,
+                         "blamed": culprit, "statement": where, "declared_gap": gap,
                          "vars": cases[k], "java": text, "ref": ref[k], "ours": ours.get(k)})
         print("batch %d: %d cases, %d divergences, cursor at %d/%d"
               % (bi, len(info["live"]), stats["diverge"], at % len(ordered), len(ordered)),
@@ -2504,6 +2524,11 @@ def main():
              stats["repeats"], stats["unreachable"]))
     for k, v in sorted(stats["by_kind"].items(), key=lambda kv: -kv[1]):
         print("  %-34s %5d" % (k, v))
+    if stats.get("declared"):
+        print("declared gaps: %d of the divergences above are differences this library makes "
+              "on purpose" % stats["declared"])
+        for k, v in sorted(stats["by_gap"].items(), key=lambda kv: -kv[1]):
+            print("  x%-4d %s" % (v, k))
     if a.amplify > 0:
         amp_c, amp_d = stats["amp_cases"], stats["amp_diverge"]
         rest_c = stats["cases"] - amp_c
@@ -2520,7 +2545,9 @@ def main():
     print("")
     print("operations blamed most often (charged to the statement that diverged):")
     for k, v in sorted(stats["by_operation"].items(), key=lambda kv: -kv[1])[:15]:
-        print("  %-52s %4d" % (k, v))
+        known = stats["op_declared"].get(k, 0)
+        note = "   (%d declared)" % known if known else ""
+        print("  %-52s %4d%s" % (k, v, note))
     print("unattributed: %d" % stats["unattributed"])
     print("written", out)
 

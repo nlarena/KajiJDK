@@ -180,3 +180,72 @@ class Policy(object):
         if not self.allow_hostile and member in HOSTILE_MEMBERS:
             return "hostile"
         return None
+
+
+# =============================================================================================
+# declared gaps
+# =============================================================================================
+
+# Differences this library produces ON PURPOSE: a documented decision not to implement
+# something, raising an exception instead of behaving the way the JDK does. A campaign finds
+# them over and over, because the generator keeps handing the same operations values that walk
+# into them -- four of the six divergences left in `java.util.regex.Pattern` after two real
+# fixes were this and nothing else.
+#
+# They are NOT filtered out. Dropping a divergence because it matched a pattern is exactly how
+# a deduplication heuristic buries a real defect, and we already watched one cause group turn
+# out to hold two unrelated bugs. They get their own category instead: still counted, still
+# written to the output, still visible in the summary, but kept out of the cause ranking so
+# they stop spending reduction slots on an answer we already know.
+#
+# Each entry pins the operation AND the exception we raise, and on top of that the reference
+# has to have got PAST the statement we died on -- see `declared_gap`. A genuine bug in the
+# same class with the same exception is therefore still reported, which matters more than it
+# sounds: the first draft of this rule would have swallowed the flag-mask defect fixed the same
+# afternoon.
+DECLARED_GAPS = [
+    {
+        "class": "java.util.regex.Pattern",
+        "members": None,          # any member, `<receiver>` included
+        "exception": "java.lang.UnsupportedOperationException",
+        "note": "UNICODE_CASE, CANON_EQ and UNICODE_CHARACTER_CLASS are refused rather than "
+                "silently ignored, in the flags argument and in the inline (?u)/(?U) forms; "
+                "see the class comment on Pattern",
+    },
+]
+
+
+def declared_gap(operation, ref_thrown, ours_thrown):
+    """The note for the declared gap this divergence is, or None when it is not one.
+
+    `operation` is what the blame charged, e.g. `java.util.regex.Pattern.<receiver>`; the other
+    two are `(statement index, exception class)` pairs, or None when that side returned a value.
+
+    What makes it a gap is not which exception we raised -- it is that we **refused where the
+    reference carried on**. The reference must have got past the statement we died on: either
+    it returned a value, or it threw later. When both sides die on the same statement they are
+    arguing about *which* exception is right, and that is an ordinary disagreement worth
+    reporting.
+
+    That distinction is not academic. The first version of this function matched on the
+    operation and the exception alone, and it would have labelled `Pattern.compile("x", -5)` --
+    reference IllegalArgumentException, ours UnsupportedOperationException, a cause with ten
+    members -- a declared gap and never reduced it. That was the missing flag-mask validation,
+    a real defect fixed the same day. A deduplication rule that buries the bug it was written
+    alongside is the exact failure Klees et al. warn about, so the rule asks the narrower
+    question.
+    """
+    if not operation or not ours_thrown:
+        return None
+    if ref_thrown is not None and ref_thrown[0] <= ours_thrown[0]:
+        return None
+    cls, _, member = operation.rpartition(".")
+    for g in DECLARED_GAPS:
+        if g["exception"] != ours_thrown[1]:
+            continue
+        if cls != g["class"] and not cls.startswith(g["class"] + "."):
+            continue
+        if g["members"] is not None and member not in g["members"]:
+            continue
+        return g["note"]
+    return None
