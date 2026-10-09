@@ -90,11 +90,16 @@ NONDETERMINISTIC_CLASSES = [
     "java.util.TimeZone", "java.util.SimpleTimeZone",
 ]
 
+# `dateNow` was missing and `now` was there, which is the list's standing failure mode: it
+# matches by NAME, so a clock reached through a differently spelled accessor walks straight in.
+# It was found by opening the gate on declared `hashCode`: a `HijrahChronology.dateNow(...)`
+# receiver gave two different hashes and looked like a defect until the case was read.
 NONDETERMINISTIC_MEMBERS = [
     # Object identity, in every form it leaks out.
     "hashCode", "identityHashCode", "toString", "clone", "getClass",
     # The clock.
-    "now", "currentTimeMillis", "nanoTime", "systemUTC", "systemDefaultZone", "instant",
+    "now",
+    "dateNow", "currentTimeMillis", "nanoTime", "systemUTC", "systemDefaultZone", "instant",
     "millis", "getTime",
     # Randomness.
     "random", "nextInt", "nextLong", "nextDouble", "nextFloat", "nextBoolean", "nextGaussian",
@@ -150,19 +155,31 @@ class Policy(object):
     """Decides whether one discovered operation may be invoked, and why not when it may not."""
 
     def __init__(self, allow_unsafe=False, allow_hostile=False, extra_classes=(),
-                 extra_members=()):
+                 extra_members=(), allow_nondeterministic=False):
         self.allow_unsafe = allow_unsafe
         self.allow_hostile = allow_hostile
+        # Letting these through is NOT safe for the differential oracle on its own: the value
+        # will not reproduce and every case becomes a divergence. It is only useful together
+        # with something that decides what part of a value is stable, which is why it is off by
+        # default and named for what it allows rather than for what it achieves.
+        self.allow_nondeterministic = allow_nondeterministic
         self.extra_classes = list(extra_classes)
         self.extra_members = set(extra_members)
         self.value_classes = set(VALUE_CLASSES)
+        # "<class>.<member>" for every member a class declares itself. Filled from the surface
+        # map by `load_pool`; empty until then, which leaves the old VALUE_CLASSES behaviour as
+        # the floor rather than opening anything by accident.
+        self.declared = set()
+
+    def declares(self, class_name, member):
+        return (class_name + "." + member) in self.declared
 
     def reject_class(self, name):
         if _prefix_match(name, self.extra_classes):
             return "excluded-by-request"
         if not self.allow_unsafe and _prefix_match(name, UNSAFE_CLASSES):
             return "unsafe"
-        if _prefix_match(name, NONDETERMINISTIC_CLASSES):
+        if not self.allow_nondeterministic and _prefix_match(name, NONDETERMINISTIC_CLASSES):
             return "nondeterministic"
         if not self.allow_hostile and _prefix_match(name, HOSTILE_CLASSES):
             return "hostile"
@@ -173,9 +190,15 @@ class Policy(object):
             return "excluded-by-request"
         if not self.allow_unsafe and member in UNSAFE_MEMBERS:
             return "unsafe"
-        if member in NONDETERMINISTIC_MEMBERS:
-            if not (class_name in self.value_classes
-                    and member in EXEMPT_FOR_VALUE_CLASSES):
+        if member in NONDETERMINISTIC_MEMBERS and not self.allow_nondeterministic:
+            # Exempt when the class declares the member itself. `Object.toString` and
+            # `Object.hashCode` carry the identity hash and cannot be compared across two VMs;
+            # an override is value-based and reproduces. `VALUE_CLASSES` stays as a fallback
+            # for the classes whose declaration the map does not show.
+            if member in EXEMPT_FOR_VALUE_CLASSES and (self.declares(class_name, member)
+                                                       or class_name in self.value_classes):
+                pass
+            else:
                 return "nondeterministic"
         if not self.allow_hostile and member in HOSTILE_MEMBERS:
             return "hostile"

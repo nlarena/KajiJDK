@@ -1898,6 +1898,14 @@ def load_pool(surface_path, pol, cfg, report=print):
     ops, dropped = [], {}
     def drop(why):
         dropped[why] = dropped.get(why, 0) + 1
+    # Which members each class declares itself, before any filtering, because the policy needs
+    # it to decide whether `toString` on that class is the identity-hash one or an override.
+    declared = set()
+    for cls, c in doc["classes"].items():
+        for o in c.get("ops") or []:
+            if not o.get("static") and not o.get("ctor"):
+                declared.add(cls + "." + o["name"])
+    pol.declared = declared
     classes = set()
     for cls, c in doc["classes"].items():
         why = pol.reject_class(cls)
@@ -1955,6 +1963,7 @@ def load_pool(surface_path, pol, cfg, report=print):
     value_types = {jvm_name(c) for c in VALUE_CLASSES
                    if doc["classes"].get(c, {}).get("declares_toString")}
     pool = Pool(ops, cfg, value_types, classes)
+    report("declared: %d class/member pairs the class implements itself" % len(declared))
     report("pool: %d operations over %d classes, %d named constants, %d hierarchy edges"
            % (len(ops), len(classes), kept_constants,
               sum(len(v) for v in SUPERS.values())))
@@ -2471,6 +2480,11 @@ def main():
                          "unmeasurable")
     ap.add_argument("--allow-unsafe", action="store_true",
                     help="include classes that touch files, processes, network or devices")
+    ap.add_argument("--allow-nondeterministic", action="store_true",
+                    help="stop dropping the members whose value does not reproduce. On its own "
+                         "this makes every such case a divergence; it exists to measure what "
+                         "the self-check does with them, and as the precondition for comparing "
+                         "only the stable part of a value")
     ap.add_argument("--allow-hostile", action="store_true",
                     help="include classes that are safe but stall a campaign")
     ap.add_argument("--exclude", nargs="*", default=[], help="extra class prefixes to drop")
@@ -2541,7 +2555,8 @@ def main():
 
     if a.no_mutate:
         DEFAULT_CFG["mutate_weight"] = 0.0
-    pol = Policy(a.allow_unsafe, a.allow_hostile, a.exclude)
+    pol = Policy(a.allow_unsafe, a.allow_hostile, a.exclude,
+                 allow_nondeterministic=a.allow_nondeterministic)
     pool, dropped, doc = load_pool(a.surface, pol, DEFAULT_CFG)
     doc_for_family = doc
     refused = keep_referable(pool, DEFAULT_CFG)
@@ -2638,7 +2653,7 @@ def main():
              "ended_with_value": 0, "threw_at_first": 0, "threw_later": 0, "unstable": 0,
              "amp_cases": 0, "amp_diverge": 0, "amp_queue": 0, "causes": 0,
              "by_kind": {}, "by_operation": {}, "by_gap": {}, "op_declared": {},
-             "by_change": {}, "prev_silent": 0, "prev_s": 0.0, "by_contract": {}, "by_verdict": {}, "prev_s": 0.0,
+             "by_change": {}, "prev_silent": 0, "prev_s": 0.0, "by_contract": {}, "by_verdict": {},
              "declared": 0,
              "ref_s": 0.0, "ours_s": 0.0}
     batches, divs, reduced = [], [], []
@@ -2751,9 +2766,6 @@ def main():
             continue
         stats["ref_s"] += info["ref_s"]
         stats["ours_s"] += info["ours_s"]
-        # What the snapshot leg costs. Without it a regression pass cannot say whether the
-        # third execution is worth its wall clock, which is the first question anyone asks.
-        stats["prev_s"] += info.get("prev_s", 0.0)
         # What the snapshot leg costs. Without it a regression pass cannot say whether the
         # third execution is worth its wall clock, which is the first question anyone asks.
         stats["prev_s"] += info.get("prev_s", 0.0)
