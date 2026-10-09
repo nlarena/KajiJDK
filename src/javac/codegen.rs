@@ -5899,26 +5899,27 @@ impl<'a> Emitter<'a> {
             &self.table.symbol(owner).kind,
             SymbolKind::Class { kind: TypeKind::Interface, .. }
         );
-        // A `private` instance method is **not virtual** — it never enters the vtable (it can't be
-        // overridden) — so a call to one in **this very class** is an `invokespecial` (JVMS §6.5).
-        // Static privates go through the `is_static` branch (invokestatic); private *interface*
-        // methods are left to the interface branch below.
+        // **Un `private` de instancia NO va por `invokespecial`** (finding #564). Desde los nestmates
+        // (Java 11, JEP 181) el javac real emite `invokevirtual` para todos: el chequeo de acceso del
+        // nido ocurre al **resolver**, y §6.5 selecciona después el propio método privado --- sin
+        // vtable y sin override ---. Nuestra VM hace eso (`SiteKind::Direct` en `invokevirtual.rs`).
         //
-        // **But only in this very class** (finding #564). `invokespecial` requires the current class
-        // to be **assignable to the reference class** (JVMS §4.10.1.9), and a *nestmate*'s private
-        // — `JcIc` calling `JcIc$JcNest.hollow` — is not: a real JVM refuses the whole class with
-        // `VerifyError: Bad invokespecial instruction`. Since nestmates (Java 11, JEP 181) such a
-        // call goes by **`invokevirtual`**, because the nest access check happens at *resolution*
-        // and §6.5 then selects the resolved private method itself — no vtable, no override. Our VM
-        // already does that (`SiteKind::Direct` in `invokevirtual.rs`); what this comment used to
-        // claim — that `invokevirtual` would miss the vtable and throw `NoSuchMethodError` — was
-        // true of an older interpreter and had outlived it.
-        let is_private = self.table.symbol(mid).modifiers.contains(&Modifier::Private);
-        // El único `private` que puede ir por `invokespecial`: el que declara **la clase que se está
-        // emitiendo**. Para cualquier otro miembro del nido --- la de afuera desde una interna, una
-        // interna desde la de afuera, dos hermanas --- la clase actual no es asignable a la del
-        // `Methodref`, y el `.class` no carga.
-        let private_de_esta_clase = is_private && class_internal == self.this_class;
+        // Se cerró en dos pasos, y el primero era el que rompía:
+        //
+        // - el `private` de un **nestmate** --- `JcIc` llamando a `JcIc$JcNest.hollow` --- con
+        //   `invokespecial` produce un `.class` que **una JVM real no carga**: §4.10.1.9 exige que la
+        //   clase actual sea asignable a la del `Methodref`, y no lo es. Eran **30 clases** de la
+        //   biblioteca. Arreglado el 2026-10-06;
+        // - el de la **propia clase** era legal --- la clase sí es asignable a sí misma --- y por eso
+        //   quedó un tiempo como estaba, anotado como diferencia deliberada. Pero el javac real
+        //   tampoco lo usa ahí, ni siquiera en una clase suelta sin anidadas, porque toda clase es su
+        //   propio *nest host*. Cerrado el 2026-10-07; son ~290 clases más de la biblioteca, ninguna
+        //   incorrecta antes, todas ahora idénticas a lo que emite el javac.
+        //
+        // Los `private` **estáticos** salen por la rama `is_static` (invokestatic) y los de
+        // **interfaz** por la de interfaz, así que este caso no los toca. Lo que **sí** sigue yendo
+        // por `invokespecial` es lo que de verdad no se despacha: `<init>`, `super.m()` y
+        // `Interfaz.super.m()`, cada uno en su rama de arriba.
 
         // El owner del `Methodref`/`InterfaceMethodref` de una invocación de despacho es el **tipo
         // estático del receptor** (§5.4.3.3/§5.4.3.4), no la clase que *declara* el método: `xs.add(i)`
@@ -6003,10 +6004,6 @@ impl<'a> Emitter<'a> {
             self.op(INVOKESPECIAL);
             self.u16(mref);
         } else if is_ctor {
-            let mref = self.pool.methodref(&class_internal, &mname, &desc);
-            self.op(INVOKESPECIAL);
-            self.u16(mref);
-        } else if private_de_esta_clase && !owner_is_interface {
             let mref = self.pool.methodref(&class_internal, &mname, &desc);
             self.op(INVOKESPECIAL);
             self.u16(mref);
@@ -8641,9 +8638,11 @@ mod tests {
     /// va por `invokevirtual`, porque el chequeo de acceso del nido ocurre al **resolver** y §6.5
     /// selecciona después el propio método privado --- sin vtable y sin override.
     ///
-    /// Se piden **las dos mitades**: que el del nestmate haya cambiado, y que el de la **propia clase**
-    /// --- donde `invokespecial` sí es legal, y es lo que seguíamos emitiendo --- no se haya movido.
-    /// Un test que mirara sólo la primera pasaría con un javac que emitiera `invokevirtual` para todo.
+    /// Se piden **las dos mitades**, y la segunda cambió de signo el 2026-10-07: al principio el
+    /// `private` de la **propia clase** se dejó en `invokespecial` --- ahí es legal, y la HotSpot lo
+    /// carga ---, pero el javac real tampoco lo usa, así que ahora **ninguno** de los dos va por
+    /// `invokespecial`. El control pasó a ser lo que de verdad no se despacha: un `super.m()` y un
+    /// `<init>`. Sin él, un javac que emitiera `invokevirtual` para absolutamente todo pasaría.
     #[test]
     fn a_nestmates_private_method_is_reached_by_invokevirtual() {
         let src = "public class M { int k = 1;
@@ -8651,10 +8650,14 @@ mod tests {
                        static class N { int j = 2;
                                         private int oculto(int x) { return x + j; }
                                         int suyo() { return oculto(1); } }
+                       static class B { int val() { return 7; } }
+                       static class H extends B { int val() { return 9; }
+                                                  int arriba() { return super.val(); } }
                        int f(N n) { return n.oculto(3); }
                        int g() { return propio(4); } }";
         verify_all(src, "M");
         verify_all(src, "M$N");
+        verify_all(src, "M$H");
 
         /// Las invocaciones de un método, como `(opcode, clase, nombre)`. Se recorre el `Code` por
         /// opcode porque lo que este finding decide es justamente **cuál** opcode apunta a qué
@@ -8687,18 +8690,40 @@ mod tests {
             "no puede quedar ningún invokespecial a `oculto`: {f:?}"
         );
 
-        // La mitad que **no** cambia: el privado de la propia clase, donde `invokespecial` es legal.
+        // El privado de la **propia clase** también: es la mitad que se cerró después.
         let g = invocaciones(&m, "g", "()I");
         assert!(
-            g.contains(&(INVOKESPECIAL, "M".into(), "propio".into())),
-            "el privado de la propia clase sigue por invokespecial: {g:?}"
+            g.contains(&(INVOKEVIRTUAL, "M".into(), "propio".into())),
+            "el privado de la propia clase también va por invokevirtual: {g:?}"
         );
         // Y lo mismo visto desde adentro del nestmate.
         let n = compiled_class(src, "M$N");
         let suyo = invocaciones(&n, "suyo", "()I");
         assert!(
-            suyo.contains(&(INVOKESPECIAL, "M$N".into(), "oculto".into())),
-            "dentro de `N`, `oculto` es de la propia clase: {suyo:?}"
+            suyo.contains(&(INVOKEVIRTUAL, "M$N".into(), "oculto".into())),
+            "dentro de `N`, `oculto` también: {suyo:?}"
+        );
+        assert!(
+            !m.methods.iter().any(|_| false)
+                && invocaciones(&m, "g", "()I")
+                    .iter()
+                    .all(|(op, _, nom)| !(*op == INVOKESPECIAL && nom == "propio")),
+            "y no puede quedar ningún invokespecial a `propio`"
+        );
+
+        // **El control, y es el que impide que esto pase con un javac que vuelva todo virtual:** lo
+        // que de verdad no se despacha sigue en `invokespecial`. `super.val()` y el `<init>` de la
+        // superclase, los dos en `M$H`.
+        let h = compiled_class(src, "M$H");
+        let arriba = invocaciones(&h, "arriba", "()I");
+        assert!(
+            arriba.contains(&(INVOKESPECIAL, "M$B".into(), "val".into())),
+            "`super.val()` va por invokespecial sobre la superclase directa: {arriba:?}"
+        );
+        let ctor = invocaciones(&h, "<init>", "()V");
+        assert!(
+            ctor.iter().any(|(op, _, nom)| *op == INVOKESPECIAL && nom == "<init>"),
+            "y el constructor encadena con invokespecial: {ctor:?}"
         );
     }
 

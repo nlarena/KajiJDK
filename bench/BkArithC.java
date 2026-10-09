@@ -39,6 +39,19 @@
 // garantía más fuerte —no es sobre una instrucción— y tiene un precio real: un monitor por
 // llamada, que en `BkMonoC`/`BkMegaC` son 300.000. Por eso no es el default.
 //
+// # El veneno va PRIMERO, y eso es una regla nueva
+//
+// No alcanza con que el veneno este en el metodo: tiene que estar **antes de cualquier cosa que
+// pueda cortar**. Una trampa es un `Flow::Return`, asi que todo lo que viene despues de ella no
+// esta en la compilacion -- y eso incluye al veneno. Paso: `BkMonoC.run` construia su arreglo de
+// receptores antes del `if (NEVER != 0)`, la trampa del `aastore` sin perfilar corto ahi, el veneno
+// quedo inalcanzable y el control compilo un metodo.
+//
+// Hoy cortan un `new` sin resolver, un `invoke` que la VM no puede ligar y un `aastore` sin
+// perfilar, y la lista solo puede crecer. Asi que la regla no es "evitar esos tres" sino: **el
+// bloque del veneno es la primera sentencia del metodo**, antes de toda alocacion y toda llamada.
+// En `step` y en los `BkOpP*.f` ya lo era; en los cuatro `run` que allocan hubo que moverlo.
+//
 // # Lo que hace que siga siendo un control mañana
 //
 // Nada de este comentario. Lo que lo sostiene es

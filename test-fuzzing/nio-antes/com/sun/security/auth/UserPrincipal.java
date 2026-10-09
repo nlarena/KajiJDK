@@ -1,0 +1,57 @@
+package com.sun.security.auth;
+
+import java.io.Serializable;
+import java.security.Principal;
+
+/**
+ * A user, without saying of which system.
+ *
+ * <p>It is this package's generic one: the others say where the identity came from -- Windows,
+ * Unix, LDAP -- and this one does not. It serves when that provenance does not matter or is
+ * not known.
+ *
+ * <p>Like every principal of this package: immutable, compared by name and by exact class. The
+ * second matters more than it seems -- a {@code UnixPrincipal} and an {@code NTUserPrincipal} with
+ * the same text are <strong>not</strong> the same identity, and comparing them only by name would
+ * make a policy written for one apply to the other.
+ */
+public final class UserPrincipal implements Principal, Serializable {
+
+    private static final long serialVersionUID = 892106070870210969L;
+
+    private final String name;
+
+    /**
+     * @throws NullPointerException if the name is {@code null}
+     */
+    public UserPrincipal(String name) {
+        if (name == null) {
+            throw new NullPointerException("the name cannot be null");
+        }
+        this.name = name;
+    }
+
+    /** The name. */
+    public String getName() {
+        return this.name;
+    }
+
+    public String toString() {
+        return "UserPrincipal:  " + this.name;
+    }
+
+    /** By exact class and name; see the class note. */
+    public boolean equals(Object o) {
+        if (o == this) {
+            return true;
+        }
+        if (o == null || !o.getClass().equals(this.getClass())) {
+            return false;
+        }
+        return this.name.equals(((UserPrincipal) o).getName());
+    }
+
+    public int hashCode() {
+        return this.name.hashCode();
+    }
+}

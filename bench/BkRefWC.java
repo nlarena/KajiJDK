@@ -21,13 +21,13 @@ public class BkRefWC {
     }
 
     static int run() {
-        BkRefWC o = new BkRefWC();
-        Object x = new Object();
-        Object y = new Object();
         int acc = 0;
         if (NEVER != 0) {
             acc = acc + new int[2][2].length;
         }
+        BkRefWC o = new BkRefWC();
+        Object x = new Object();
+        Object y = new Object();
         for (int k = 0; k < 1000; k++) {
             acc = (acc + step(o, x, y, 300)) & 0xFFFFF;
         }

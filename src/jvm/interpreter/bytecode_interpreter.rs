@@ -251,6 +251,15 @@ struct RunningCtx {
     /// unwind — all detected by `code_method` mismatch). Lets a frame-local opcode read its
     /// bytecode from thread-local memory instead of the shared `metaspace`.
     code: Vec<u8>,
+    /// **Si `code_method` ya tiene codigo nativo instalado** (solo lo usa el censo, `JVM_PROFILE`).
+    ///
+    /// Se refresca en [`Exec::sync_code_cache`] como `osr_watch`, pero a diferencia de aquel se
+    /// vuelve a preguntar **mientras sea `false`**: un metodo puede cruzar el umbral y compilarse
+    /// sin que cambie el frame de arriba --por una arista de retroceso-- y ese instante es justo la
+    /// frontera que el censo quiere medir. En cuanto da `true` deja de preguntarse, porque una
+    /// entrada compilada no vuelve a no estarlo. Asi el costo de la pregunta lo paga el
+    /// calentamiento y no el regimen.
+    code_compiled: bool,
     /// The `MethodId` whose bytecode currently lives in `code` (`None` before the first fill).
     code_method: Option<MethodId>,
     /// Floors for exception unwinding: while a `call_java`-driven nested execution runs (a
@@ -372,6 +381,20 @@ impl RunningCtx {
 /// `Mutex` still stands in — is the boundary the split needs.
 struct SharedVm {
     metaspace: MetaspaceService,
+    /// **Referencias que la VM sostiene en estado de Rust** a traves de codigo Java que aloca, y que
+    /// por eso tienen que ser raices del GC (#568/#569). Una variable de Rust no lo es: el colector
+    /// recorre `threads[*].frames` mas lo que `vm_roots` le entregue.
+    ///
+    /// Es una **pila**: se toma un handle con `vm_hold` y se devuelve con `vm_release_to`, que
+    /// descarta todo lo tomado despues --- asi un `?` o un `return` temprano no dejan nada enraizado
+    /// para siempre ---. El valor se relee con `vm_held`, **nunca** de la variable original: es el
+    /// canal, y no la variable, lo que el colector actualiza.
+    ///
+    /// Vive aca y no en `AptContext` por algo que se midio: el driver de APT construye los
+    /// processors **antes** de atar el contexto, asi que un canal que viviera adentro no existiria
+    /// todavia cuando hace falta. Y ademas no es un canal de APT: lo necesita cualquier camino de la
+    /// VM con la misma forma.
+    held: Vec<usize>,
     /// **JVMTI** (hito I): el agente de depuración atacheado, o `None`. Vive en el estado compartido
     /// (los ganchos corren sobre `Exec`); al disparar un evento se destructura `SharedVm` en campos
     /// disjuntos (`agent` ⊥ los del `env`), el mismo truco del borrow sin `unsafe`.
@@ -442,7 +465,14 @@ struct SharedVm {
     ///
     /// Solo el motor **green**: es el unico que pasa cada opcode por `run_one`. Los sustratos de
     /// hilos de SO corren los opcodes frame-local sobre su `RunningCtx` sin tocar `SharedVm`.
-    perfil: Option<std::collections::HashMap<MethodId, u64>>,
+    ///
+    /// El par es `(antes, despues)` de que el metodo tenga codigo nativo instalado, y la division
+    /// existe porque el balde de los que **si** compilan resulto el mas grande del censo --el 49,6%
+    /// del trabajo interpretado de `java/texto/`-- y son dos problemas con arreglos opuestos:
+    /// `antes` es calentamiento, que se arregla con el umbral; `despues` es el interprete retomando
+    /// donde el nativo se rindio, que se arregla atacando los deopts. Un solo contador los suma y
+    /// no se puede decidir entre los dos.
+    perfil: Option<std::collections::HashMap<MethodId, (u64, u64)>>,
     /// #296: el plazo de cada hilo dormido en `Thread.sleep`, en **reloj real** y por indice de
     /// hilo. Va aparte de `GreenThread::sleep_until`, que sigue en pasos para `wait(ms)`,
     /// `join(ms)` y `parkNanos`: el sleep es lo que el codigo compara con `currentTimeMillis`, y
@@ -541,6 +571,7 @@ impl JVM {
             running: RunningCtx { current: 0, frames: vec![entry], ..Default::default() },
             shared: SharedVm {
                 metaspace,
+                held: Vec::new(),
                 agent: None,
                 breakpoints: jvmti::BreakpointTable::default(),
                 field_watches: jvmti::FieldWatchTable::default(),
@@ -717,13 +748,30 @@ impl Exec<'_> {
             let apt = self.shared.apt.as_ref().expect("sym_element_enclosed sin AptContext atado");
             apt.table().members_of(sym)
         };
-        // El `ArrayList` va en **Old**: se sostiene en un local de Rust (no es raíz del GC) a través
-        // de las alocaciones de `element_for`/`add` de abajo, así que no debe moverse bajo un GC.
+        // **La lista se enraiza mientras dura el bucle** (#568/#569). Se sostiene en estado de Rust
+        // a través de las alocaciones de `element_for` y del `add` --- bytecode de la biblioteca,
+        // que aloca ---, y una variable de Rust no es raíz: el colector recorre
+        // `threads[*].frames` y las raíces que la VM le entrega.
+        //
+        // Antes esto se apoyaba en alocar en **Old**, con el argumento de que así no se mueve. Eso
+        // vale para un **minor** y no para una compactación: `gc::compact` mueve el Old entero y
+        // sólo quedan pinchados los espejos y el *string pool*
+        // (`gc::tests::an_ordinary_old_object_does_move_when_the_heap_compacts` lo mide). El
+        // síntoma no habría sido una referencia a basura sino a **otro objeto vivo**, que es como
+        // esta familia contesta mal en silencio.
+        //
+        // **El valor se relee del canal en cada vuelta**, nunca de la variable: es el canal lo que
+        // el colector actualiza.
         let list = self.new_array_list();
+        let marca = self.vm_held_len();
+        let handle = self.vm_hold(list);
         for child in children {
             let element = self.apt_element_for(child);
+            let list = self.vm_held(handle);
             self.call_virtual(list, "add", "(Ljava/lang/Object;)Z", vec![Value::Reference(element)]);
         }
+        let list = self.vm_held(handle);
+        self.vm_release_to(marca);
         list
     }
 
@@ -739,7 +787,17 @@ impl Exec<'_> {
             .metaspace
             .resolve_method(class, "<init>", "()V")
             .expect("java/util/ArrayList.<init>()V");
+        // Mismo motivo que arriba: el `<init>` de `ArrayList` aloca su arreglo de respaldo, así que
+        // puede caer una colecta en el medio y `list` --- un local de Rust --- no es raíz. El objeto
+        // sobrevive, porque va como argumento y el frame del constructor sí es raíz; lo que queda
+        // viejo es **este offset**. Es el mismo agujero que el #288 tapó en `invokevirtual.rs`
+        // estacionando el objeto en la pila de operandos; acá se usa el canal, que no se pelea con
+        // la excepción que `call_java` aparca encima.
+        let marca = self.vm_held_len();
+        let handle = self.vm_hold(list);
         self.call_java(ctor, vec![Value::Reference(list)], &[1]);
+        let list = self.vm_held(handle);
+        self.vm_release_to(marca);
         list
     }
 }
@@ -919,6 +977,11 @@ impl Exec<'_> {
 struct VmRoots {
     condy: Vec<(String, u16)>,
     filer: usize,
+    /// Las claves del cache `reified` de APT, en el orden en que se entregaron sus offsets
+    /// (finding #569). Ver `AptContext::reified_roots`.
+    apt: Vec<(crate::javac::symbol::SymbolId, usize)>,
+    /// Cuantas referencias de **corta vida** entrego la capa APT detras del cache (#568/#569).
+    apt_held: usize,
 }
 
 impl Exec<'_> {
@@ -1019,7 +1082,16 @@ impl Exec<'_> {
         let filer = crate::jvm::interpreter::natives::filer_roots();
         let filer_count = filer.len();
         refs.extend(filer);
-        (VmRoots { condy, filer: filer_count }, refs)
+        // El cache de identidad de APT: offsets que viven en estado de Rust a traves de rondas
+        // enteras, asi que ninguna pila los sostiene (finding #569).
+        let apt: Vec<(crate::javac::symbol::SymbolId, usize)> =
+            self.shared.apt.as_ref().map(|a| a.reified_roots()).unwrap_or_default();
+        refs.extend(apt.iter().map(|&(_, off)| off));
+        // Y las que la VM sostiene en estado de Rust mientras corre codigo Java que aloca
+        // (#568/#569).
+        let apt_held = self.shared.held.len();
+        refs.extend_from_slice(&self.shared.held);
+        (VmRoots { condy, filer: filer_count, apt, apt_held }, refs)
     }
 
     /// Writes the GC-remapped references back where [`Self::vm_roots`] took them from (the
@@ -1029,8 +1101,16 @@ impl Exec<'_> {
         for (key, &offset) in roots.condy.iter().zip(&refs[..split]) {
             self.shared.condy.insert(key.clone(), Value::Reference(offset));
         }
-        debug_assert_eq!(refs.len() - split, roots.filer, "el tramo del Filer no cambia de largo");
-        crate::jvm::interpreter::natives::remap_filer_roots(&refs[split..]);
+        let fin_filer = split + roots.filer;
+        let fin_apt = fin_filer + roots.apt.len();
+        debug_assert_eq!(fin_apt + roots.apt_held, refs.len(), "los tramos tienen que cerrar");
+        crate::jvm::interpreter::natives::remap_filer_roots(&refs[split..fin_filer]);
+        if let Some(apt) = self.shared.apt.as_mut() {
+            apt.remap_reified(&roots.apt, &refs[fin_filer..fin_apt]);
+        }
+        for (slot, &off) in self.shared.held.iter_mut().zip(&refs[fin_apt..]) {
+            *slot = off;
+        }
     }
 
     /// Drop monitors whose lock object is no longer allocated (it was collected), so a
@@ -1221,6 +1301,7 @@ impl Exec<'_> {
         if self.running.code_method != Some(method) {
             self.running.code = self.shared.metaspace.code(method).to_vec();
             self.running.code_method = Some(method);
+            self.running.code_compiled = false;
             // The JIT's back-edge verdict is keyed by the same method, so it is refreshed by the
             // same compare — see `RunningCtx::osr_watch`.
             self.running.osr_watch = self.running.jit.watches_back_edges(method);
@@ -2157,11 +2238,15 @@ impl Exec<'_> {
                     // headers against. Read-only, and `None` for a site that has never run, which
                     // refuses the method exactly as a never-dispatched call site does for inlining.
                     array_store: &|unit, pc| {
-                        array_operations::jit_array_store(metaspace, unit, pc)
-                            .map(|(array_class, element_class)| crate::burst::compile::ArrayStore {
-                                array_class,
-                                element_class,
-                            })
+                        array_operations::jit_array_store(metaspace, unit, pc).map(
+                            |(array_class, element_class, element_is_object)| {
+                                crate::burst::compile::ArrayStore {
+                                    array_class,
+                                    element_class,
+                                    element_is_object,
+                                }
+                            },
+                        )
                     },
                     // `checkcast`/`instanceof`/`ldc Foo.class`: the target class's **pinned**
                     // mirror offset, read-only. `None` for a class the interpreter has never
@@ -3110,8 +3195,20 @@ impl Exec<'_> {
         // opcode se le cobraria al llamador.
         if self.shared.perfil.is_some() {
             let metodo = self.running.code_method;
+            // Mientras no tenga nativo se vuelve a preguntar, porque puede empezar a tenerlo sin
+            // que cambie el frame de arriba; en cuanto lo tiene, no se pregunta mas.
+            if !self.running.code_compiled {
+                if let Some(m) = metodo {
+                    self.running.code_compiled = self.running.jit.tiene_nativo(m);
+                }
+            }
+            let compilado = self.running.code_compiled;
             if let (Some(perfil), Some(metodo)) = (self.shared.perfil.as_mut(), metodo) {
-                *perfil.entry(metodo).or_insert(0) += 1;
+                let celda = perfil.entry(metodo).or_insert((0, 0));
+                match compilado {
+                    false => celda.0 += 1,
+                    true => celda.1 += 1,
+                }
             }
         }
         let pc_before = self.pc();
@@ -4196,6 +4293,27 @@ impl Exec<'_> {
     /// Carga + prepara (mirror) + inicializa (`<clinit>`) la clase `class` y aloca una instancia
     /// *cero-inicializada* de ella (sin correr `<init>`, que el driver invoca aparte con sus args).
     /// `None` si la inicialización de la clase lanzó (queda en `pending_exception`).
+    /// Enraiza `off` y devuelve su handle (#568/#569). Ver `SharedVm::held`.
+    pub(crate) fn vm_hold(&mut self, off: usize) -> usize {
+        self.shared.held.push(off);
+        self.shared.held.len() - 1
+    }
+
+    /// El valor **actual** de un handle: el que el colector dejo si hubo una colecta en el medio.
+    pub(crate) fn vm_held(&self, handle: usize) -> usize {
+        self.shared.held[handle]
+    }
+
+    /// Cuantos handles hay tomados: se guarda antes y se le pasa a [`Self::vm_release_to`].
+    pub(crate) fn vm_held_len(&self) -> usize {
+        self.shared.held.len()
+    }
+
+    /// Devuelve al canal todo lo tomado a partir de `len`.
+    pub(crate) fn vm_release_to(&mut self, len: usize) {
+        self.shared.held.truncate(len);
+    }
+
     pub(super) fn apt_new_instance(&mut self, class: &str) -> Option<usize> {
         class_operations::load_class(&mut self.shared.metaspace, &mut self.shared.heap, class);
         self.ensure_initialized(class);
@@ -4517,19 +4635,71 @@ fn is_branch(opcode: u8) -> bool {
 /// construccion, el rechazo que mas cuesta.
 fn volcar_perfil(shared: &SharedVm, running: &RunningCtx) {
     let Some(perfil) = &shared.perfil else { return };
-    let mut filas: Vec<(u64, MethodId)> = perfil.iter().map(|(&m, &n)| (n, m)).collect();
-    filas.sort_unstable_by(|a, b| b.0.cmp(&a.0).then(a.1.cmp(&b.1)));
+    let mut filas: Vec<(u64, u64, MethodId)> =
+        perfil.iter().map(|(&m, &(antes, despues))| (antes + despues, despues, m)).collect();
+    filas.sort_unstable_by(|a, b| b.0.cmp(&a.0).then(a.2.cmp(&b.2)));
     let total: u64 = filas.iter().map(|f| f.0).sum();
-    eprintln!("[perfil] #metodos	{}	#pasos-interpretados	{total}", filas.len());
-    eprintln!("[perfil] pasos	veredicto	frio	bytes	metodo");
-    for (pasos, m) in filas {
+    let post: u64 = filas.iter().map(|f| f.1).sum();
+    eprintln!(
+        "[perfil] #metodos	{}	#pasos-interpretados	{total}	#con-nativo-ya-instalado	{post}",
+        filas.len()
+    );
+    eprintln!("[perfil] pasos	veredicto	frio	bytes	post	metodo");
+    for (pasos, despues, m) in filas {
         let (veredicto, frio) = running.jit.veredicto(m);
         eprintln!(
-            "[perfil] {pasos}	{veredicto}	{frio}	{}	{}.{}{}",
+            "[perfil] {pasos}	{veredicto}	{frio}	{}	{despues}	{}.{}{}",
             shared.metaspace.code(m).len(),
             shared.metaspace.class_of(m),
             shared.metaspace.name(m),
             shared.metaspace.descriptor(m),
+        );
+    }
+
+    // **Por donde salio el nativo.** Va al final y en su propio prefijo porque contesta otra
+    // pregunta: la tabla de arriba dice cuanto interpreto cada metodo, y esta dice en que
+    // instruccion se rindio su codigo nativo para que lo tuviera que interpretar.
+    let mut salidas: Vec<((usize, u32, bool), u64)> =
+        running.jit.salidas().iter().map(|(&k, &n)| (k, n)).collect();
+    salidas.sort_unstable_by(|a, b| b.1.cmp(&a.1).then(a.0.cmp(&b.0)));
+    eprintln!("[salida] veces{t}clave{t}como{t}que{t}metodo", t = '\t');
+    for ((m, pc, capacidad), veces) in salidas {
+        // **La clave no siempre es un pc.** Para el cuerpo raiz lo es; para un sitio adentro de un
+        // cuerpo inlineado es `MAX_CODE_LEN + indice`, que no nombra ninguna instruccion de este
+        // metodo. Se decodifica solo el caso que si se puede, y el otro se dice en vez de inventarlo.
+        let que = match pc < crate::burst::compile::MAX_CODE_LEN as u32 {
+            false => "(sitio inlineado)".to_string(),
+            true => {
+                let code = shared.metaspace.code(m);
+                match code.get(pc as usize) {
+                    None => "(pc fuera del codigo)".to_string(),
+                    // Un `aastore` se guarda de cinco cosas distintas y las cinco salen por el
+                    // mismo pc, asi que el opcode solo no alcanza: lo que separa la **trampa** de
+                    // un fallo de guarda es si el sitio tenia perfil al compilar. Eso lo contesta
+                    // el mismo perfil que el resolver lee.
+                    Some(0x53) => match shared.metaspace.array_class(m, pc as usize) {
+                        0 => "aastore SIN PERFIL (la trampa)".to_string(),
+                        mir => match shared.metaspace.class_name_at_mirror(mir as usize) {
+                            Some(c) => format!("aastore perfilado como {c} (fallo una guarda)"),
+                            None => "aastore con perfil sin nombre".to_string(),
+                        },
+                    },
+                    Some(op) => format!("opcode 0x{op:02x}"),
+                }
+            }
+        };
+        eprintln!(
+            "[salida] {veces}{t}{pc}{t}{}{t}{que}{t}{}.{}{}",
+            match capacidad {
+                // La unica salida de capacidad que tiene un `aastore` es el log de barrera
+                // lleno; para un `new`/`newarray` son Eden y el log de alocacion.
+                true => "capacidad",
+                false => "guarda",
+            },
+            shared.metaspace.class_of(m),
+            shared.metaspace.name(m),
+            shared.metaspace.descriptor(m),
+            t = '\t',
         );
     }
 }

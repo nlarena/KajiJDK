@@ -1,0 +1,15 @@
+package javax.management;
+
+/** There is already an MBean registered with that ObjectName. */
+public class InstanceAlreadyExistsException extends OperationsException {
+
+    private static final long serialVersionUID = 8893743928912733931L;
+
+    public InstanceAlreadyExistsException() {
+        super();
+    }
+
+    public InstanceAlreadyExistsException(String message) {
+        super(message);
+    }
+}

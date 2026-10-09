@@ -16,11 +16,11 @@ public class BkMegaC {
     }
 
     static int run() {
-        BkOp[] ops = { new BkOpPA(), new BkOpPB(), new BkOpPC(), new BkOpPD() };
         int acc = 0;
         if (NEVER != 0) {
             acc = acc + new int[2][2].length;
         }
+        BkOp[] ops = { new BkOpPA(), new BkOpPB(), new BkOpPC(), new BkOpPD() };
         for (int k = 0; k < 1000; k++) {
             acc = (acc + step(ops, 300)) & 0xFFFFF;
         }

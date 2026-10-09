@@ -1265,6 +1265,56 @@ mod tests {
     /// its mirror. A literal is pinned for its own: the pool is keyed by **content**, so a moved
     /// literal leaves the map naming an address something else now occupies, and identity is the
     /// whole contract of a literal.
+    /// **Estar en Old no pincha un objeto.** La compactacion mueve el Old entero --- es su trabajo:
+    /// empaquetar los vivos contra el piso ---, y lo unico que queda quieto es el conjunto pinchado:
+    /// los espejos de clase y el *string pool*.
+    ///
+    /// Esto existe porque hay codigo que apuesta lo contrario. `sym_element_enclosed`
+    /// (`bytecode_interpreter.rs`) sostiene el offset de un `ArrayList` en una **variable de Rust**
+    /// --- que no es raiz del GC --- mientras corre bytecode que aloca, y su comentario dice que por
+    /// eso lo aloca en Old: *"se sostiene en un local de Rust (no es raiz del GC) [...] asi que no
+    /// debe moverse bajo un GC"*. La premisa es falsa, y este test lo deja medido en vez de
+    /// argumentado.
+    ///
+    /// El orden importa, igual que en el test del literal de aca abajo: el objeto tiene que quedar
+    /// **detras** del hueco para tener a donde moverse. Y tiene que estar **vivo**, o el compactador
+    /// lo descarta en vez de relocalizarlo; se lo mantiene con una raiz `condy`, que es un canal que
+    /// el colector **si** conoce --- justamente el contraste con la variable de Rust, que no ---.
+    #[test]
+    fn an_ordinary_old_object_does_move_when_the_heap_compacts() {
+        use std::path::PathBuf;
+        let mut metaspace =
+            MetaspaceService::new(vec![PathBuf::from("KajiLibrary")], vec![PathBuf::from("java")]);
+        let mut heap = HeapService::new();
+
+        // Un espejo delante, por el mismo motivo que el test del literal: esta pinchado, tapa el
+        // hueco de adelante y deja que lo que venga detras sea lo unico con lugar a donde ir.
+        let _ = crate::jvm::interpreter::strings::intern(&mut metaspace, &mut heap, "antes");
+        let hueco = heap.malloc_old(128);
+        let obj = crate::jvm::interpreter::bytecode_interpreter::objects_operations::allocate_old(
+            &mut metaspace,
+            &mut heap,
+            "java/lang/Object",
+        );
+        heap.free(hueco);
+        assert!(obj > hueco, "el objeto tiene que quedar detras del hueco para tener a donde ir");
+
+        let mut raices = [obj];
+        let report = compact(&metaspace, &mut heap, &mut [], &mut raices);
+
+        assert!(
+            report.relocations.contains_key(&obj),
+            "un objeto comun de Old **se mueve**: si este assert falla, la suposicion de \
+             `sym_element_enclosed` seria cierta y el finding no existe"
+        );
+        assert_ne!(
+            raices[0], obj,
+            "y la raiz que el colector conoce se actualizo a {}: la variable de Rust que sostiene \
+             ese mismo offset en `sym_element_enclosed` no, y ahi queda colgada",
+            raices[0]
+        );
+    }
+
     #[test]
     fn a_pooled_literal_does_not_move_when_the_heap_compacts() {
         use std::path::PathBuf;

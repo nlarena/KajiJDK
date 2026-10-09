@@ -593,7 +593,14 @@ const BENCH_ROWS: &[Row] = &[
     // **Despacho de interfaz monomórfico**. `BkMono` y `BkMega` corren el mismo programa con los
     // mismos cuerpos y devuelven el mismo número; lo único que las separa es cuántas clases ve el
     // sitio de llamada, así que la diferencia entre esas dos filas es despacho y nada más.
-    treatment("bench/BkMono.class", 365_000, 1, "BkMonoC"),
+    // **Dos desde la trampa del `aastore` sin perfilar.** El segundo es `run`, cuyo
+    // `HsOp[] ops = { a, a, a, a }` tiene cuatro `aastore` que corren **antes** de que el bucle
+    // ponga caliente al método, y cuya clase elemento (`BkOp`, una interfaz) no tenía mirror
+    // acuñado al escanear. Antes eso refutaba `run` entero; ahora compila cortado en el primer
+    // store. No cambia lo que la fila mide: `step` sigue siendo el método caliente, `run` se llama
+    // una vez y su compilación sale por el stub enseguida, así que aporta un cruce de frontera y
+    // nada más.
+    treatment("bench/BkMono.class", 365_000, 2, "BkMonoC"),
     control("bench/BkMonoC.class", 365_000),
     // **Despacho de interfaz megamórfico**: cuatro receptores rotando. Es la fila que puede salir
     // negativa, y por eso está.
@@ -605,7 +612,10 @@ const BENCH_ROWS: &[Row] = &[
     // se queda compilado y expande los cuatro cuerpos adentro, así que ninguno de los cuatro llega
     // nunca a las 32 invocaciones interpretadas que lo compilarían. 1 es el mismo número que
     // `BkMono`, que es lo que tiene que ser: son el mismo programa.
-    treatment("bench/BkMega.class", 365_000, 1, "BkMegaC"),
+    //
+    // **Y dos desde la trampa del `aastore`**, por lo mismo que `BkMono` — sigue siendo el mismo
+    // número que su par, que es la propiedad que esta fila necesita.
+    treatment("bench/BkMega.class", 365_000, 2, "BkMegaC"),
     control("bench/BkMegaC.class", 365_000),
 ];
 
@@ -1669,6 +1679,456 @@ fn a_loop_before_a_monitorenter_still_runs_natively() {
 }
 
 // =============================================================================================
+// El diferencial POR OPCODE.
+//
+// Los 51 diferenciales de este archivo son por *fixture*: un `.java` por hito, que ejercita la
+// construccion que ese hito agrego. Eso deja una pregunta sin contestar, y es la que un censo de
+// opcodes hizo visible: de los 198 opcodes que `decode` reconoce, **cuales corrieron alguna vez
+// como codigo nativo y dieron el mismo numero que el interprete**. No es la misma pregunta que
+// "esta en la lista blanca", que es lo unico que el censo contesta.
+//
+// Lo que hace falta para contestarla es sintetizar un metodo por opcode, porque ninguna fixture
+// puede apuntarle a `dup2_x2` o a `lushr` a voluntad -- `javac` emite lo que quiere. De ahi el
+// ensamblador de abajo.
+//
+// # Por que cada cuerpo va envuelto en un lazo
+//
+// El diferencial llama `run()` **una sola vez**, asi que el contador de invocaciones nunca llega al
+// umbral y no se compilaria nada: el test daria verde sin haber probado una instruccion nativa, que
+// es exactamente la forma de falla que este archivo ya conoce (FZ-003 a FZ-007). Envuelto en un
+// lazo, la arista de retroceso cruza el umbral y el metodo entra por OSR -- y de paso el opcode
+// queda probado *adentro* de un lazo compilado, que es donde el JIT importa.
+//
+// El acumulador es lo que hace que un opcode mal emitido cambie el resultado en vez de perderse.
+// =============================================================================================
+
+/// Ensambla una clase de un solo metodo `public static int run()` cuyo `Code` es `cuerpo`.
+///
+/// Se emiten **bytes** y se los pasa por `ClassFile::from_bytes` en vez de construir el `ClassFile`
+/// a mano, y eso no es rodeo: asi el parser de la VM valida lo que el test sintetizo, de modo que un
+/// cuerpo mal armado falla al cargar con un mensaje del parser en vez de dar un numero raro.
+fn clase_de_un_metodo(nombre: &str, cuerpo: &[u8], max_stack: u16, max_locals: u16) -> Vec<u8> {
+    fn u2(v: &mut Vec<u8>, x: u16) {
+        v.extend_from_slice(&x.to_be_bytes());
+    }
+    fn u4(v: &mut Vec<u8>, x: u32) {
+        v.extend_from_slice(&x.to_be_bytes());
+    }
+    fn utf8(v: &mut Vec<u8>, s: &str) {
+        v.push(1);
+        u2(v, s.len() as u16);
+        v.extend_from_slice(s.as_bytes());
+    }
+    let mut c = Vec::new();
+    u4(&mut c, 0xCAFE_BABE);
+    u2(&mut c, 0); // minor
+    u2(&mut c, 52); // major: Java 8, que es lo que el verificador pide para que `jsr` este prohibido
+    u2(&mut c, 8); // constant_pool_count = 7 entradas + 1
+    utf8(&mut c, nombre); // #1
+    c.push(7);
+    u2(&mut c, 1); // #2 Class -> #1
+    utf8(&mut c, "java/lang/Object"); // #3
+    c.push(7);
+    u2(&mut c, 3); // #4 Class -> #3
+    utf8(&mut c, "run"); // #5
+    utf8(&mut c, "()I"); // #6
+    utf8(&mut c, "Code"); // #7
+    u2(&mut c, 0x0021); // ACC_PUBLIC | ACC_SUPER
+    u2(&mut c, 2); // this_class
+    u2(&mut c, 4); // super_class
+    u2(&mut c, 0); // interfaces
+    u2(&mut c, 0); // fields
+    u2(&mut c, 1); // methods
+    u2(&mut c, 0x0009); // ACC_PUBLIC | ACC_STATIC
+    u2(&mut c, 5); // name = "run"
+    u2(&mut c, 6); // descriptor = "()I"
+    u2(&mut c, 1); // attributes
+    u2(&mut c, 7); // "Code"
+    u4(&mut c, (12 + cuerpo.len()) as u32); // max_stack+max_locals+code_len+code+etab+attrs
+    u2(&mut c, max_stack);
+    u2(&mut c, max_locals);
+    u4(&mut c, cuerpo.len() as u32);
+    c.extend_from_slice(cuerpo);
+    u2(&mut c, 0); // exception_table_length
+    u2(&mut c, 0); // attributes_count del Code
+    u2(&mut c, 0); // attributes_count de la clase
+    c
+}
+
+/// Envuelve `cuerpo` -- que tiene que dejar **exactamente un `int`** en la pila -- en un lazo de 61
+/// vueltas que lo mezcla en un acumulador, y devuelve el acumulador. `prologo` corre **una vez**,
+/// antes del lazo.
+///
+/// Los desplazamientos se calculan aca y no se escriben a mano, que es la unica forma de que la
+/// tabla de cuerpos no tenga que saber su propio largo.
+///
+/// # Dos decisiones del envoltorio que, al reves, vuelven vacuas familias enteras
+///
+/// **El acumulador y el contador viven en los locales 10 y 11**, no en 0 y 1. Con el 0 y el 1 un
+/// cuerpo que ejercite `istore_0` --que es un opcode de la lista y hay que probarlo-- pisaria el
+/// acumulador, y el test compararia dos corridas que los dos brazos arruinan igual.
+///
+/// **Y hay prologo** porque lo que se aloca tiene que alocarse **afuera** del lazo. Con un
+/// `newarray` adentro del cuerpo, un trap en esa instruccion --que es lo que pasa si su clase de
+/// arreglo no tiene mirror-- corta el cuerpo con `Flow::Return` y los accesos al arreglo que venian
+/// despues no se compilan nunca: catorce tests verdes sobre instrucciones que no corrieron. Es la
+/// misma razon por la que `bench/hs/HsRefA.java` aloca su arreglo afuera del lazo caliente.
+fn en_un_lazo(prologo: &[u8], cuerpo: &[u8]) -> Vec<u8> {
+    let mut c = Vec::from(prologo);
+    c.extend_from_slice(&[
+        0x03, 0x36, 10, // iconst_0; istore 10  -- el acumulador
+        0x03, 0x36, 11, // iconst_0; istore 11  -- el contador
+    ]);
+    let cabecera = c.len(); // el pc al que vuelve la arista de retroceso
+    c.extend_from_slice(cuerpo);
+    // **El acumulador es un hash, no una suma, y las vueltas son un primo.** Con `acc += v` y 64
+    // vueltas el lazo es lineal y cancela exactamente cualquier error divisible por 2^26: un mutante
+    // que rompio `iushr` en el emisor dio -13 por vuelta donde iba 536870899 --difieren en 2^29-- y
+    // 64 * 2^29 es un multiplo de 2^32, asi que la suma truncada a 32 bits daba el MISMO numero y el
+    // mutante sobrevivio. `acc = acc * 31 + v` con 61 vueltas no tiene esa simetria.
+    c.extend_from_slice(&[
+        0x15, 10, 0x10, 31, 0x68, 0x60, 0x36, 10, // iload 10; bipush 31; imul; iadd; istore 10
+        0x84, 11, 0x01, // iinc 11, 1
+        0x15, 11, 0x10, 61, // iload 11; bipush 61
+    ]);
+    // if_icmplt <cabecera>: el salto es relativo al pc de SU propio opcode.
+    let aqui = c.len();
+    let salto = (cabecera as i32 - aqui as i32) as i16;
+    c.push(0xa1);
+    c.extend_from_slice(&salto.to_be_bytes());
+    c.extend_from_slice(&[0x15, 10, 0xac]); // iload 10; ireturn
+    c
+}
+
+/// Corre `cuerpo` con el JIT apagado y prendido y exige que den lo mismo **y** que algo se haya
+/// compilado: un diferencial que no compilo nada compara el interprete contra si mismo.
+fn diferencial_de_opcode(etiqueta: &str, cuerpo: &[u8], max_stack: u16, max_locals: u16) {
+    diferencial_con_prologo(etiqueta, &[], cuerpo, max_stack, max_locals)
+}
+
+/// [`diferencial_de_opcode`] con un prologo que corre una vez antes del lazo -- ver [`en_un_lazo`].
+fn diferencial_con_prologo(
+    etiqueta: &str,
+    prologo: &[u8],
+    cuerpo: &[u8],
+    max_stack: u16,
+    max_locals: u16,
+) {
+    use crate::jvm::interpreter::bytecode_interpreter::execute_counting_with_jit;
+    let completo = en_un_lazo(prologo, cuerpo);
+    let nombre = format!("Op_{etiqueta}");
+    let bytes = clase_de_un_metodo(&nombre, &completo, max_stack + 4, max_locals.max(12));
+    let correr = |jit: bool| {
+        let class = ClassFile::from_bytes(&bytes)
+            .unwrap_or_else(|e| panic!("{etiqueta}: la clase sintetizada no carga: {e:?}"));
+        let mut metaspace = MetaspaceService::new(boot_class_path(), app_class_path());
+        metaspace.add(nombre.clone(), class);
+        let entry = metaspace.resolve_method(&nombre, "run", "()I").expect("run()");
+        let max_locals = metaspace.max_locals(entry);
+        let frame = Frame::new(entry, max_locals, Vec::new());
+        let (v, _, stats) = execute_counting_with_jit(metaspace, frame, Some(jit));
+        match v {
+            Some(Value::Int(v)) => (v, stats),
+            otro => panic!("{etiqueta}: se esperaba un int, vino {otro:?}"),
+        }
+    };
+    let (sin, sin_stats) = correr(false);
+    let (con, con_stats) = correr(true);
+    assert_eq!(sin_stats, JitStats::default(), "{etiqueta}: con el JIT apagado no se compila nada");
+    assert!(con_stats.compiled > 0, "{etiqueta}: no se compilo nada, asi que no se probo nada");
+    // **Y que se haya ENTRADO**, que es la asercion que faltaba y que volvia vacuo todo el arnes.
+    // `compiled > 0` dice que el metodo se compilo; si nunca se entra a ese codigo, los dos brazos
+    // corren interpretados y coinciden por construccion. Lo encontro un mutante que rompio `iushr`
+    // en el emisor y sobrevivio. Es la misma asercion que `differential` hace cuatro lineas mas
+    // arriba en este archivo, y la omiti.
+    assert!(
+        con_stats.native_calls > 0 || con_stats.osr_entries > 0,
+        "{etiqueta}: compilado y nunca entrado -- el diferencial compara el interprete consigo mismo",
+    );
+    assert_eq!(con, sin, "{etiqueta}: el JIT calcula otra cosa que el interprete");
+}
+
+/// **La aritmetica de `int`, opcode por opcode, adentro de un lazo compilado.**
+#[test]
+fn diferencial_por_opcode_aritmetica_int() {
+    // iconst_3; iconst_2; <op>  -- dos operandos y un resultado.
+    for (op, nombre) in [(0x60u8, "iadd"), (0x64, "isub"), (0x68, "imul"), (0x6c, "idiv"), (0x70, "irem")] {
+        diferencial_de_opcode(nombre, &[0x06, 0x05, op], 2, 2);
+    }
+    diferencial_de_opcode("ineg", &[0x06, 0x74], 1, 2);
+}
+
+/// **Los bits y los corrimientos de `int`.**
+#[test]
+fn diferencial_por_opcode_bits_int() {
+    for (op, nombre) in [
+        (0x78u8, "ishl"), (0x7a, "ishr"), (0x7c, "iushr"),
+        (0x7e, "iand"), (0x80, "ior"), (0x82, "ixor"),
+    ] {
+        // bipush -100; iconst_3; <op> -- negativo a proposito: separa `ishr` de `iushr`.
+        diferencial_de_opcode(nombre, &[0x10, 0x9c, 0x06, op], 2, 2);
+    }
+}
+
+/// Un prologo que deja un arreglo de `atype` con 16 posiciones en el local 6.
+///
+/// Va en el prologo y no en el cuerpo por lo que dice [`en_un_lazo`], y tiene un segundo efecto que
+/// conviene nombrar: el prologo corre **interpretado** siempre --el metodo se compila despues, por
+/// la arista de retroceso-- y las primeras 31 vueltas del lazo tambien, asi que cuando el escaneo
+/// llega, el sitio del `aastore`/`iastore` ya tiene su clase de arreglo perfilada. Sin eso el
+/// acceso seria una trampa y los catorce tests de arreglo no probarian ninguna instruccion.
+fn prologo_arreglo(atype: u8) -> Vec<u8> {
+    vec![0x10, 16, 0xbc, atype, 0x3a, 6] // bipush 16; newarray <atype>; astore 6
+}
+
+/// El sufijo que convierte una **referencia** en un `int`, que es lo unico que un `()I` devuelve:
+/// `ifnull` a dos constantes distintas. Ejercita de paso `ifnull` y `goto`.
+const REF_A_INT: [u8; 9] = [0xc7, 0x00, 0x07, 0x04, 0xa7, 0x00, 0x04, 0x05, 0x00];
+
+/// **Las constantes**: las veintiuna, cada categoria-2 traida de vuelta a `int`.
+#[test]
+fn diferencial_por_opcode_constantes() {
+    diferencial_de_opcode("nop", &[0x00, 0x08], 1, 2); // nop; iconst_5
+    // aconst_null + ifnull + goto en un solo cuerpo: la rama se toma siempre, y la otra existe.
+    diferencial_de_opcode("aconst_null", &[0x01, 0xc7, 0x00, 0x07, 0x04, 0xa7, 0x00, 0x04, 0x05], 2, 2);
+    for (op, n) in (0x02u8..=0x08).zip(-1i32..) {
+        diferencial_de_opcode(&format!("iconst_{n}"), &[op], 1, 2);
+    }
+    for (op, n) in [(0x09u8, 0), (0x0a, 1)] {
+        diferencial_de_opcode(&format!("lconst_{n}"), &[op, 0x88], 2, 2); // <op>; l2i
+    }
+    for (op, n) in [(0x0bu8, 0), (0x0c, 1), (0x0d, 2)] {
+        diferencial_de_opcode(&format!("fconst_{n}"), &[op, 0x8b], 2, 2); // <op>; f2i
+    }
+    for (op, n) in [(0x0eu8, 0), (0x0f, 1)] {
+        diferencial_de_opcode(&format!("dconst_{n}"), &[op, 0x8e], 2, 2); // <op>; d2i
+    }
+    diferencial_de_opcode("bipush", &[0x10, 0x2a], 1, 2);
+    diferencial_de_opcode("sipush", &[0x11, 0x12, 0x34], 1, 2);
+}
+
+/// **Los cincuenta de locales**: las cinco cargas y los cinco guardados, en su forma indexada y en
+/// sus cuatro formas `_0..3`.
+///
+/// Cada cuerpo ejercita el guardado **y** la carga del mismo par, que es lo unico que puede: un
+/// guardado sin su carga no deja nada que comparar. Y es la familia que obligo a mover el
+/// acumulador del envoltorio a los locales altos -- ver [`en_un_lazo`].
+#[test]
+fn diferencial_por_opcode_locales() {
+    // int: bipush 7; istore X; iload X
+    diferencial_de_opcode("istore_iload", &[0x10, 0x07, 0x36, 0x05, 0x15, 0x05], 1, 6);
+    for n in 0u8..4 {
+        diferencial_de_opcode(
+            &format!("istore_{n}_iload_{n}"),
+            &[0x10, 0x07, 0x3b + n, 0x1a + n],
+            1,
+            6,
+        );
+    }
+    // long: lconst_1; lstore X; lload X; l2i
+    diferencial_de_opcode("lstore_lload", &[0x0a, 0x37, 0x05, 0x16, 0x05, 0x88], 2, 8);
+    for n in 0u8..4 {
+        diferencial_de_opcode(
+            &format!("lstore_{n}_lload_{n}"),
+            &[0x0a, 0x3f + n, 0x1e + n, 0x88],
+            2,
+            8,
+        );
+    }
+    // float: fconst_2; fstore X; fload X; f2i
+    diferencial_de_opcode("fstore_fload", &[0x0d, 0x38, 0x05, 0x17, 0x05, 0x8b], 2, 6);
+    for n in 0u8..4 {
+        diferencial_de_opcode(
+            &format!("fstore_{n}_fload_{n}"),
+            &[0x0d, 0x43 + n, 0x22 + n, 0x8b],
+            2,
+            6,
+        );
+    }
+    // double: dconst_1; dstore X; dload X; d2i
+    diferencial_de_opcode("dstore_dload", &[0x0f, 0x39, 0x05, 0x18, 0x05, 0x8e], 2, 8);
+    for n in 0u8..4 {
+        diferencial_de_opcode(
+            &format!("dstore_{n}_dload_{n}"),
+            &[0x0f, 0x47 + n, 0x26 + n, 0x8e],
+            2,
+            8,
+        );
+    }
+    // referencia: el arreglo del prologo entra y sale de un local, y se lo vuelve `int` por `ifnull`.
+    let mut cuerpo = vec![0x19, 6, 0x3a, 0x05, 0x19, 0x05];
+    cuerpo.extend_from_slice(&REF_A_INT[..8]);
+    diferencial_con_prologo("astore_aload", &prologo_arreglo(10), &cuerpo, 2, 8);
+    for n in 0u8..4 {
+        let mut cuerpo = vec![0x19, 6, 0x4b + n, 0x2a + n];
+        cuerpo.extend_from_slice(&REF_A_INT[..8]);
+        diferencial_con_prologo(&format!("astore_{n}_aload_{n}"), &prologo_arreglo(10), &cuerpo, 2, 8);
+    }
+}
+
+/// **Los nueve de pila**, cada uno con suficientes `iadd`/`isub` detras como para que el resultado
+/// dependa del orden exacto en que el opcode deja la pila.
+#[test]
+fn diferencial_por_opcode_pila() {
+    diferencial_de_opcode("pop", &[0x08, 0x06, 0x57], 2, 2);
+    diferencial_de_opcode("pop2", &[0x08, 0x06, 0x04, 0x58], 3, 2);
+    diferencial_de_opcode("dup", &[0x08, 0x59, 0x60], 2, 2);
+    diferencial_de_opcode("dup_x1", &[0x08, 0x06, 0x5a, 0x60, 0x60], 3, 2);
+    diferencial_de_opcode("dup_x2", &[0x04, 0x05, 0x06, 0x5b, 0x60, 0x60, 0x60], 4, 2);
+    diferencial_de_opcode("dup2", &[0x05, 0x06, 0x5c, 0x60, 0x60, 0x60], 4, 2);
+    diferencial_de_opcode("dup2_x1", &[0x04, 0x05, 0x06, 0x5d, 0x60, 0x60, 0x60, 0x60], 5, 2);
+    diferencial_de_opcode(
+        "dup2_x2",
+        &[0x04, 0x05, 0x06, 0x07, 0x5e, 0x60, 0x60, 0x60, 0x60, 0x60],
+        6,
+        2,
+    );
+    diferencial_de_opcode("swap", &[0x08, 0x06, 0x5f, 0x64], 2, 2);
+}
+
+/// **Los diecisiete saltos.**
+///
+/// Los unarios y los binarios de `int` comparan contra `contador % 3`, que cicla por 0, 1 y 2: asi
+/// **las dos ramas se toman** a lo largo de las 61 vueltas, que es lo que distingue un salto emitido
+/// al reves de uno que siempre cae del mismo lado.
+#[test]
+fn diferencial_por_opcode_saltos() {
+    // iload 11; iconst_3; irem; if<cond> -> 11; iconst_1; goto -> 12; iconst_2
+    for (op, nombre) in [
+        (0x99u8, "ifeq"), (0x9a, "ifne"), (0x9b, "iflt"),
+        (0x9c, "ifge"), (0x9d, "ifgt"), (0x9e, "ifle"),
+    ] {
+        let cuerpo = [0x15, 11, 0x06, 0x70, op, 0x00, 0x07, 0x04, 0xa7, 0x00, 0x04, 0x05];
+        diferencial_de_opcode(nombre, &cuerpo, 3, 2);
+    }
+    for (op, nombre) in [
+        (0x9fu8, "if_icmpeq"), (0xa0, "if_icmpne"), (0xa1, "if_icmplt"),
+        (0xa2, "if_icmpge"), (0xa3, "if_icmpgt"), (0xa4, "if_icmple"),
+    ] {
+        let cuerpo = [0x15, 11, 0x06, 0x70, 0x04, op, 0x00, 0x07, 0x04, 0xa7, 0x00, 0x04, 0x05];
+        diferencial_de_opcode(nombre, &cuerpo, 3, 2);
+    }
+    // Las dos comparaciones de referencia, sobre el mismo arreglo: `eq` se toma, `ne` no.
+    for (op, nombre) in [(0xa5u8, "if_acmpeq"), (0xa6, "if_acmpne")] {
+        let cuerpo = [0x19, 6, 0x19, 6, op, 0x00, 0x07, 0x04, 0xa7, 0x00, 0x04, 0x05];
+        diferencial_con_prologo(nombre, &prologo_arreglo(10), &cuerpo, 3, 8);
+    }
+    // `ifnonnull` sobre una referencia que NO es nula, que es su rama interesante.
+    let cuerpo = [0x19, 6, 0xc6, 0x00, 0x07, 0x04, 0xa7, 0x00, 0x04, 0x05];
+    diferencial_con_prologo("ifnonnull", &prologo_arreglo(10), &cuerpo, 2, 8);
+    // Y `ifnull` sobre una que si lo es, para cubrir las dos direcciones del par.
+    diferencial_de_opcode("ifnull", &[0x01, 0xc7, 0x00, 0x07, 0x04, 0xa7, 0x00, 0x04, 0x05], 2, 2);
+}
+
+/// **Las cinco comparaciones de categoria-2**, que dejan un `int` por si mismas.
+#[test]
+fn diferencial_por_opcode_comparaciones() {
+    diferencial_de_opcode("lcmp", &[0x0a, 0x09, 0x94], 4, 2);
+    diferencial_de_opcode("fcmpl", &[0x0d, 0x0c, 0x95], 2, 2);
+    diferencial_de_opcode("fcmpg", &[0x0d, 0x0c, 0x96], 2, 2);
+    diferencial_de_opcode("dcmpl", &[0x0f, 0x0e, 0x97], 4, 2);
+    diferencial_de_opcode("dcmpg", &[0x0f, 0x0e, 0x98], 4, 2);
+}
+
+/// **`iinc`**, que es el unico opcode que lee y escribe un local sin pasar por la pila.
+#[test]
+fn diferencial_por_opcode_iinc() {
+    // bipush 7; istore 5; iinc 5, 3; iload 5
+    diferencial_de_opcode("iinc", &[0x10, 0x07, 0x36, 0x05, 0x84, 0x05, 0x03, 0x15, 0x05], 1, 6);
+}
+
+/// **La aritmetica y los bits de `long`**, cada resultado traido a `int` por `l2i`.
+#[test]
+fn diferencial_por_opcode_long() {
+    for (op, nombre) in [
+        (0x61u8, "ladd"), (0x65, "lsub"), (0x69, "lmul"), (0x6d, "ldiv"), (0x71, "lrem"),
+        (0x7f, "land"), (0x81, "lor"), (0x83, "lxor"),
+    ] {
+        diferencial_de_opcode(nombre, &[0x0a, 0x0a, op, 0x88], 4, 2);
+    }
+    diferencial_de_opcode("lneg", &[0x0a, 0x75, 0x88], 2, 2);
+    // Los tres corrimientos toman (long, int), no (long, long).
+    for (op, nombre) in [(0x79u8, "lshl"), (0x7b, "lshr"), (0x7d, "lushr")] {
+        diferencial_de_opcode(nombre, &[0x0a, 0x06, op, 0x88], 3, 2);
+    }
+}
+
+/// **La aritmetica de `float`**, traida a `int` por `f2i`. `frem` incluido: se compila a un deopt
+/// incondicional, y el diferencial igual aplica -- lo que exige es que el interprete y el nativo
+/// den lo mismo, no que el nativo haga el trabajo.
+#[test]
+fn diferencial_por_opcode_float() {
+    for (op, nombre) in [
+        (0x62u8, "fadd"), (0x66, "fsub"), (0x6a, "fmul"), (0x6e, "fdiv"), (0x72, "frem"),
+    ] {
+        diferencial_de_opcode(nombre, &[0x0d, 0x0c, op, 0x8b], 2, 2);
+    }
+    diferencial_de_opcode("fneg", &[0x0d, 0x76, 0x8b], 2, 2);
+}
+
+/// **La aritmetica de `double`**, traida a `int` por `d2i`. `drem` como `frem`.
+#[test]
+fn diferencial_por_opcode_double() {
+    for (op, nombre) in [
+        (0x63u8, "dadd"), (0x67, "dsub"), (0x6b, "dmul"), (0x6f, "ddiv"), (0x73, "drem"),
+    ] {
+        diferencial_de_opcode(nombre, &[0x0f, 0x0f, op, 0x8e], 4, 2);
+    }
+    diferencial_de_opcode("dneg", &[0x0f, 0x77, 0x8e], 4, 2);
+}
+
+/// **Los catorce accesos a arreglo de primitivo**: los siete guardados y las siete cargas.
+///
+/// `aaload`/`aastore` no estan: su arreglo necesita un `anewarray`, que necesita una entrada de
+/// constant pool, y el sintetizador todavia emite un pool fijo. Los cubren las fixtures de `java/`.
+#[test]
+fn diferencial_por_opcode_arreglos() {
+    // aload 6; iconst_3; <valor>; <store>; aload 6; iconst_3; <load>  [; conversion]
+    // **El valor guardado tiene el bit alto prendido a proposito.** Con un 9 ahi, extender la carga
+    // con signo o sin signo da el mismo numero, y los tres accesos angostos son exactamente el caso
+    // donde esa diferencia es invisible para todo dato chico -- lo dice el emisor en su propio
+    // comentario. Con -3 el `caload` tiene que dar 65533 y el `saload` -3, y confundirlos se ve.
+    for (atype, store, load, nombre) in [
+        (10u8, 0x4fu8, 0x2eu8, "iastore_iaload"),
+        (8, 0x54, 0x33, "bastore_baload"),
+        (5, 0x55, 0x34, "castore_caload"),
+        (9, 0x56, 0x35, "sastore_saload"),
+    ] {
+        // aload 6; iconst_3; sipush -3; <store>; aload 6; iconst_3; <load>
+        let cuerpo = [0x19, 6, 0x06, 0x11, 0xff, 0xfd, store, 0x19, 6, 0x06, load];
+        diferencial_con_prologo(nombre, &prologo_arreglo(atype), &cuerpo, 4, 8);
+    }
+    // Los de categoria-2 y `float`, con su constante y su conversion de vuelta.
+    for (atype, valor, store, load, conv, nombre) in [
+        (11u8, 0x0au8, 0x50u8, 0x2fu8, 0x88u8, "lastore_laload"),
+        (6, 0x0d, 0x51, 0x30, 0x8b, "fastore_faload"),
+        (7, 0x0f, 0x52, 0x31, 0x8e, "dastore_daload"),
+    ] {
+        let cuerpo = [0x19, 6, 0x06, valor, store, 0x19, 6, 0x06, load, conv];
+        diferencial_con_prologo(nombre, &prologo_arreglo(atype), &cuerpo, 5, 8);
+    }
+}
+
+/// **Las conversiones**, cada una llevada de vuelta a `int` para poder devolverla.
+#[test]
+fn diferencial_por_opcode_conversiones() {
+    // Los anchos de `int`: i2b/i2c/i2s sobre un valor que no cabe, que es donde se ven.
+    for (op, nombre) in [(0x91u8, "i2b"), (0x92, "i2c"), (0x93, "i2s")] {
+        diferencial_de_opcode(nombre, &[0x11, 0x12, 0x34, op], 1, 2);
+    }
+    // i2l/l2i, i2f/f2i, i2d/d2i: ida y vuelta, que es lo unico que un `()I` puede devolver.
+    diferencial_de_opcode("i2l_l2i", &[0x10, 0x7b, 0x85, 0x88], 2, 2);
+    diferencial_de_opcode("i2f_f2i", &[0x10, 0x7b, 0x86, 0x8b], 2, 2);
+    diferencial_de_opcode("i2d_d2i", &[0x10, 0x7b, 0x87, 0x8e], 2, 2);
+    diferencial_de_opcode("i2l_l2f_f2i", &[0x10, 0x7b, 0x85, 0x89, 0x8b], 2, 2);
+    diferencial_de_opcode("i2l_l2d_d2i", &[0x10, 0x7b, 0x85, 0x8a, 0x8e], 2, 2);
+    diferencial_de_opcode("i2f_f2d_d2i", &[0x10, 0x7b, 0x86, 0x8d, 0x8e], 2, 2);
+    diferencial_de_opcode("i2d_d2f_f2i", &[0x10, 0x7b, 0x87, 0x90, 0x8b], 2, 2);
+    diferencial_de_opcode("i2l_l2i_f2l", &[0x10, 0x7b, 0x86, 0x8c, 0x88], 2, 2);
+    diferencial_de_opcode("i2d_d2l_l2i", &[0x10, 0x7b, 0x87, 0x8f, 0x88], 2, 2);
+}
+
+// =============================================================================================
 // The coverage census.
 // =============================================================================================
 
@@ -2271,7 +2731,7 @@ fn subset_census() {
                 // same kind of upper bound as the `new` and `newarray` stubs above: it counts the
                 // methods that are inside the subset's *shape*, not the ones a given run would
                 // actually have profiled.
-                array_store: &|_, _| Some(crate::burst::compile::ArrayStore { array_class: 1, element_class: 1 }),
+                array_store: &|_, _| Some(crate::burst::compile::ArrayStore { array_class: 1, element_class: 1, element_is_object: false }),
                 class_mirror: &|unit, index| class_of(&classes, &units, unit).class_name(index).map(|_| 1),
                 // The `ldc "…"` stub, and an upper bound for the same reason: **any
                 // `CONSTANT_String`** resolves, where a running VM would additionally require the
@@ -2574,14 +3034,21 @@ fn bmvirtual_is_the_workload_step_5_took_from_the_controls() {
     // precisely what references bought — so they now compile and the polymorphic call site behind
     // them lands in native code three times out of three. 861237 is what `java BmVirtual` prints.
     let stats = differential("java/BmVirtual.class", 861_237);
-    assert_eq!(stats.compiled, 3, "`BmSq.f`, `BmCir.f`, `BmTri.f` — one per subclass");
-    assert_eq!(stats.rejected, 1, "`run` itself: an `aaload` and an `invokevirtual` per iteration");
+    // **Cuatro desde la trampa del `aastore` sin perfilar, y el cuarto no cambia nada medible.**
+    // `run` era el unico refutado --por los `aastore` de su arreglo de receptores, cuya clase
+    // elemento no tenia mirror acunado al escanear-- y ahora compila cortado en el primer store.
+    // Como ese store esta **antes** del unico bucle de `run`, el corte deja la cabecera del bucle
+    // inalcanzable: la compilacion no tiene punto de entrada on-stack y `run` se llama una sola
+    // vez, asi que nunca se entra a ella. Eso es lo que dicen los dos asertos de abajo al no
+    // haberse movido ni un digito, y es la mitad que importa de este cambio.
+    assert_eq!(stats.compiled, 4, "las tres `f`, y `run` cortado en su primer `aastore`");
+    assert_eq!(stats.rejected, 0, "ya no queda ninguno refutado");
     // 220 000 calls, of which the first 31 per method are interpreted while its counter climbs to
     // the threshold: 220000 - 3 * 31. Pinned to the digit because it is the proof that the
     // *polymorphic* site reaches native code on every one of its three receivers — a number that
     // came out a third of this would mean two of the three overrides were quietly falling back.
     assert_eq!(stats.native_calls, 220_000 - 3 * 31);
-    assert_eq!(stats.deopts, 0, "no receiver is ever null");
+    assert_eq!(stats.deopts, 0, "no receiver is ever null, y a la trampa de `run` no se entra");
     // Slot 0 is `this`, a `Value::Reference`, and it is marshalled — this counter being zero is
     // the whole of step 5 in one assertion. Before it, every one of these calls was refused here.
     assert_eq!(stats.unmarshallable, 0);
@@ -3449,7 +3916,7 @@ fn an_aastore_by_compiled_code_keeps_its_element_alive_across_a_minor() {
                 old_start: heap.old_start() as u32,
             },
             // The two mirrors the VM's own resolver would derive from this site's profile.
-            array_store: &|_, _| Some(ArrayStore { array_class, element_class }),
+            array_store: &|_, _| Some(ArrayStore { array_class, element_class, element_is_object: false }),
             class_mirror: &|_, _| None,
             string_literal: &|_, _| None,
             poll_word: &JIT_GC_POLL as *const _ as usize,

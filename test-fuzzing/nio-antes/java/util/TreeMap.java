@@ -1,0 +1,879 @@
+package java.util;
+
+import java.lang.Cloneable;
+import java.io.Serializable;
+
+// A map kept in **sorted** key order by a red-black tree — where {@link HashMap} scatters
+// keys by hash and can only answer "is this key here?", this one keeps them ordered, so it
+// also answers "what is the smallest key?" and could walk a range. The cost is O(log n) per
+// operation instead of amortized O(1).
+//
+// A red-black tree is a binary search tree that stays balanced by colouring each node red or
+// black and maintaining two invariants: **no red node has a red child**, and **every path
+// from a node down to a leaf passes the same number of black nodes**. Together those bound
+// the longest path at twice the shortest, which is what keeps the depth logarithmic. Every
+// insertion and deletion restores them with a handful of recolourings and rotations — a
+// rotation being the one move that changes the shape without breaking the search order.
+//
+// Ordering comes from the keys' own {@link Comparable}, or from a {@link Comparator} handed
+// to the constructor.
+//
+// It is a complete `NavigableMap`: the navigation (ceiling/floor/higher/lower, the three slices,
+// the descending map) comes entirely out of four primitive searches over the tree, and the slices
+// are **views** -- writing into a `subMap` writes into the map.
+//
+// What still diverges are `values()` and `entrySet()`, which are copies and not views. `keySet()` is
+// a view, and a sorted one: it used to return a HashSet, that is, walking the keys of a **sorted**
+// map came out in hash order. `values()` and `entrySet()` inherited that disorder by being built on
+// it; now they walk the tree.
+public class TreeMap<K, V> extends AbstractMap<K, V> implements NavigableMap<K, V>,
+        TmWalk<K, V>, Serializable, Cloneable {
+
+    private TmNode<K, V> root;
+    private int size;
+    // Null means "use the keys' natural ordering".
+    // `? super K` and not `K`: it is what the constructor accepts, and storing it narrower would
+    // force a cast. A comparator of a supertype of `K` knows how to compare `K`.
+    private final Comparator<? super K> comparator;
+
+    public TreeMap() {
+        this.comparator = null;
+    }
+
+    /**
+     * With a comparator of its own.
+     *
+     * <p>`Comparator<? super K>`, as in the JDK: a comparator of a supertype of `K` knows how to
+     * compare `K`. See the same constructor's note in `TreeSet`.
+     */
+    public TreeMap(Comparator<? super K> comparator) {
+        this.comparator = comparator;
+    }
+
+    // It copies another map's content, sorting it by the keys' natural ordering.
+    public TreeMap(Map<? extends K, ? extends V> m) {
+        this.comparator = null;
+        this.putAll(m);
+    }
+
+    // It copies a map that **already comes sorted**, and keeps its comparator.
+    //
+    // That it inherits the comparator is not a detail: without it, copying a reverse-sorted map would
+    // give a forward-sorted one, with the same keys and a different traversal. With it, the copy is
+    // equivalent to the original in everything.
+    public TreeMap(SortedMap<K, ? extends V> m) {
+        this.comparator = (Comparator<K>) m.comparator();
+        Iterator<K> it = m.keySet().iterator();
+        while (it.hasNext()) {
+            K k = it.next();
+            this.put(k, m.get(k));
+        }
+    }
+
+    public Comparator<? super K> comparator() {
+        return comparator;
+    }
+
+    // Compare two keys, by the comparator if there is one and by natural ordering otherwise.
+    // Both arguments are taken as `Object` on purpose: calling a method on a receiver whose
+    // static type is a *type variable* is silently dropped by our javac (finding #111), so
+    // the natural-ordering path binds the key to a `Comparable` local first.
+    final int compare(Object a, Object b) {
+        int c;
+        if (comparator != null) {
+            c = comparator.compare((K) a, (K) b);
+        } else {
+            Comparable<Object> ca = (Comparable<Object>) a;
+            c = ca.compareTo(b);
+        }
+        return c;
+    }
+
+    // The node holding `key`, or null.
+    private TmNode<K, V> getNode(Object key) {
+        TmNode<K, V> p = root;
+        TmNode<K, V> found = null;
+        while (p != null && found == null) {
+            int c = compare(key, p.key);
+            if (c < 0) {
+                p = p.left;
+            } else if (c > 0) {
+                p = p.right;
+            } else {
+                found = p;
+            }
+        }
+        return found;
+    }
+
+    // --- Map ---
+
+    // The keys, in order and as a **view**: removing from here removes from the map.
+    //
+    // It used to be a copied `HashSet`, and that was a divergence more expensive than it looked:
+    // walking the keys of a **sorted** map came out in hash order. And since `values()` and
+    // `entrySet()` were built on this one, the TreeMap's three views were all unordered.
+    public Set<K> keySet() {
+        return this.navigableKeySet();
+    }
+
+    public void putAll(Map<? extends K, ? extends V> m) {
+        Iterator<? extends K> it = m.keySet().iterator();
+        while (it.hasNext()) {
+            K k = it.next();
+            this.put(k, m.get(k));
+        }
+    }
+
+    public int size() {
+        return size;
+    }
+
+    public boolean isEmpty() {
+        return size == 0;
+    }
+
+    public boolean containsKey(Object key) {
+        return getNode(key) != null;
+    }
+
+    public V get(Object key) {
+        TmNode<K, V> p = getNode(key);
+        V v;
+        if (p == null) {
+            v = null;
+        } else {
+            v = p.value;
+        }
+        return v;
+    }
+
+    public boolean containsValue(Object value) {
+        boolean found = false;
+        TmNode<K, V> p = firstNode();
+        while (p != null) {
+            // `p.value` is a type variable, so it is read into an Object before comparing
+            // (finding #111 again).
+            Object v = p.value;
+            if (value == null) {
+                if (v == null) {
+                    found = true;
+                }
+            } else if (value.equals(v)) {
+                found = true;
+            }
+            p = successor(p);
+        }
+        return found;
+    }
+
+    public V put(K key, V value) {
+        V old = null;
+        if (root == null) {
+            // Compare the key against itself before doing anything with it. On a non-empty map the
+            // descent below does this for free, and the first insertion used to skip it -- so the
+            // very same `put(null, v)` threw on a map with entries and quietly succeeded on an
+            // empty one. A null key with no comparator comes out of here as the JDK's
+            // NullPointerException; a key that does not implement Comparable, as ClassCastException.
+            compare(key, key);
+            root = new TmNode<K, V>(key, value, null);
+            root.red = false;
+            size = 1;
+        } else {
+            // Descend to the insertion point, remembering the parent.
+            TmNode<K, V> p = root;
+            TmNode<K, V> parent = null;
+            int c = 0;
+            boolean replaced = false;
+            while (p != null && !replaced) {
+                parent = p;
+                c = compare(key, p.key);
+                if (c < 0) {
+                    p = p.left;
+                } else if (c > 0) {
+                    p = p.right;
+                } else {
+                    old = p.value;
+                    p.value = value;
+                    replaced = true;
+                }
+            }
+            if (!replaced) {
+                TmNode<K, V> node = new TmNode<K, V>(key, value, parent);
+                if (c < 0) {
+                    parent.left = node;
+                } else {
+                    parent.right = node;
+                }
+                size++;
+                fixAfterInsertion(node);
+            }
+        }
+        return old;
+    }
+
+    public V remove(Object key) {
+        TmNode<K, V> p = getNode(key);
+        V old;
+        if (p == null) {
+            old = null;
+        } else {
+            old = p.value;
+            deleteNode(p);
+        }
+        return old;
+    }
+
+    public void clear() {
+        root = null;
+        size = 0;
+    }
+
+    // --- ordered access ---
+
+    public K firstKey() {
+        TmNode<K, V> p = firstNode();
+        if (p == null) {
+            throw new NoSuchElementException();
+        }
+        return p.key;
+    }
+
+    public K lastKey() {
+        TmNode<K, V> p = lastNode();
+        if (p == null) {
+            throw new NoSuchElementException();
+        }
+        return p.key;
+    }
+
+
+    // --- NavigableMap: the four primitive searches ---
+    //
+    // All the navigation comes out of these four, and the four are the same descent down the tree
+    // with the sign changed. `ceiling` is the smallest node >= the key; `floor`, the largest <=;
+    // `higher` and `lower` are the same with the strict inequality.
+    //
+    // Each costs O(log n) and walks nothing: it descends remembering the best candidate seen. That
+    // candidate is the heart of it -- when the search overshoots, the last node it passed "on the
+    // good side" is exactly the answer.
+
+    TmNode<K, V> getCeilingNode(Object key) {
+        TmNode<K, V> p = this.root;
+        TmNode<K, V> best = null;
+        while (p != null) {
+            int c = this.compare(key, p.key);
+            if (c < 0) {
+                best = p;
+                p = p.left;
+            } else if (c > 0) {
+                p = p.right;
+            } else {
+                best = p;
+                p = null;
+            }
+        }
+        return best;
+    }
+
+    TmNode<K, V> getFloorNode(Object key) {
+        TmNode<K, V> p = this.root;
+        TmNode<K, V> best = null;
+        while (p != null) {
+            int c = this.compare(key, p.key);
+            if (c > 0) {
+                best = p;
+                p = p.right;
+            } else if (c < 0) {
+                p = p.left;
+            } else {
+                best = p;
+                p = null;
+            }
+        }
+        return best;
+    }
+
+    TmNode<K, V> getHigherNode(Object key) {
+        TmNode<K, V> p = this.root;
+        TmNode<K, V> best = null;
+        while (p != null) {
+            if (this.compare(key, p.key) < 0) {
+                best = p;
+                p = p.left;
+            } else {
+                p = p.right;
+            }
+        }
+        return best;
+    }
+
+    TmNode<K, V> getLowerNode(Object key) {
+        TmNode<K, V> p = this.root;
+        TmNode<K, V> best = null;
+        while (p != null) {
+            if (this.compare(key, p.key) > 0) {
+                best = p;
+                p = p.right;
+            } else {
+                p = p.left;
+            }
+        }
+        return best;
+    }
+
+    // It wraps a node as an entry, or null if there is no node.
+    //
+    // The entry that comes out is a **snapshot**: `setValue` on it refuses instead of writing into
+    // the map. It is the same thing the JDK does with the entries navigation returns, and for the
+    // same reason -- they are the result of a query, not a view of the position.
+    static <K, V> Map.Entry<K, V> entryOf(TmNode<K, V> p) {
+        if (p == null) {
+            return null;
+        }
+        return new ViewEntry<K, V>(p.key, p.value);
+    }
+
+    // --- NavigableMap: neighbouring entries and keys ---
+
+    public Map.Entry<K, V> firstEntry() {
+        return entryOf(this.firstNode());
+    }
+
+    public Map.Entry<K, V> lastEntry() {
+        return entryOf(this.lastNode());
+    }
+
+    public Map.Entry<K, V> lowerEntry(K key) {
+        return entryOf(this.getLowerNode(key));
+    }
+
+    public Map.Entry<K, V> floorEntry(K key) {
+        return entryOf(this.getFloorNode(key));
+    }
+
+    public Map.Entry<K, V> ceilingEntry(K key) {
+        return entryOf(this.getCeilingNode(key));
+    }
+
+    public Map.Entry<K, V> higherEntry(K key) {
+        return entryOf(this.getHigherNode(key));
+    }
+
+    static <K, V> K keyOf(TmNode<K, V> p) {
+        if (p == null) {
+            return null;
+        }
+        return p.key;
+    }
+
+    public K lowerKey(K key) {
+        return keyOf(this.getLowerNode(key));
+    }
+
+    public K floorKey(K key) {
+        return keyOf(this.getFloorNode(key));
+    }
+
+    public K ceilingKey(K key) {
+        return keyOf(this.getCeilingNode(key));
+    }
+
+    public K higherKey(K key) {
+        return keyOf(this.getHigherNode(key));
+    }
+
+    // It takes out and returns the first entry, or null if the map is empty. The snapshot is taken
+    // **before** removing, because afterwards the node no longer has its links.
+    public Map.Entry<K, V> pollFirstEntry() {
+        TmNode<K, V> p = this.firstNode();
+        Map.Entry<K, V> e = entryOf(p);
+        if (p != null) {
+            this.remove(p.key);
+        }
+        return e;
+    }
+
+    public Map.Entry<K, V> pollLastEntry() {
+        TmNode<K, V> p = this.lastNode();
+        Map.Entry<K, V> e = entryOf(p);
+        if (p != null) {
+            this.remove(p.key);
+        }
+        return e;
+    }
+
+    // SequencedMap's two that a sorted map **cannot** honour: a key's position is decided by the
+    // order, not by whoever inserts it. The JDK refuses too, and it is the only honest thing --
+    // accepting and putting the key where it belongs would be lying about the "First".
+    public V putFirst(K k, V v) {
+        throw new UnsupportedOperationException();
+    }
+
+    public V putLast(K k, V v) {
+        throw new UnsupportedOperationException();
+    }
+
+    // --- NavigableMap: the views ---
+    //
+    // The five are the same class with different bounds: `TmView` keeps the map, a floor, a ceiling
+    // and a direction. A `headMap` is a TmView with no floor, a `descendingMap` is one with no bounds
+    // and reversed, and a `subMap` has them all.
+
+    public NavigableMap<K, V> descendingMap() {
+        return new TmView<K, V>(this, true, null, false, true, null, false, true);
+    }
+
+    public NavigableMap<K, V> reversed() {
+        return this.descendingMap();
+    }
+
+    public NavigableSet<K> navigableKeySet() {
+        return new TreeSet<K>((NavigableMap) this, true);
+    }
+
+    public NavigableSet<K> descendingKeySet() {
+        return new TreeSet<K>((NavigableMap) this.descendingMap(), true);
+    }
+
+    public NavigableMap<K, V> subMap(K from, boolean fromInclusive, K to, boolean toInclusive) {
+        return new TmView<K, V>(this, false, from, fromInclusive, false, to, toInclusive, false);
+    }
+
+    public NavigableMap<K, V> headMap(K to, boolean inclusive) {
+        return new TmView<K, V>(this, true, null, false, false, to, inclusive, false);
+    }
+
+    public NavigableMap<K, V> tailMap(K from, boolean inclusive) {
+        return new TmView<K, V>(this, false, from, inclusive, true, null, false, false);
+    }
+
+    // SortedMap's three forms, which are the ones above with the inclusivity the specification fixed
+    // twenty-five years ago: the floor is in, the ceiling is not.
+    public SortedMap<K, V> subMap(K from, K to) {
+        return this.subMap(from, true, to, false);
+    }
+
+    public SortedMap<K, V> headMap(K to) {
+        return this.headMap(to, false);
+    }
+
+    public SortedMap<K, V> tailMap(K from) {
+        return this.tailMap(from, true);
+    }
+
+    // --- traversal for the views (TmWalk) ---
+
+    public TmNode<K, V> walkFirst() {
+        return this.firstNode();
+    }
+
+    public TmNode<K, V> walkNext(TmNode<K, V> n) {
+        return this.successor(n);
+    }
+
+    // Package-private from here down: the views and the iterators walk the tree through here.
+    TmNode<K, V> firstNode() {
+        TmNode<K, V> p = root;
+        if (p != null) {
+            while (p.left != null) {
+                p = p.left;
+            }
+        }
+        return p;
+    }
+
+    TmNode<K, V> lastNode() {
+        TmNode<K, V> p = root;
+        if (p != null) {
+            while (p.right != null) {
+                p = p.right;
+            }
+        }
+        return p;
+    }
+
+    // The node with the next key in order: the leftmost of the right subtree, or —
+    // failing that — the first ancestor this node is *not* in the right subtree of.
+    TmNode<K, V> successor(TmNode<K, V> t) {
+        TmNode<K, V> result;
+        if (t == null) {
+            result = null;
+        } else if (t.right != null) {
+            TmNode<K, V> p = t.right;
+            while (p.left != null) {
+                p = p.left;
+            }
+            result = p;
+        } else {
+            TmNode<K, V> p = t.parent;
+            TmNode<K, V> ch = t;
+            while (p != null && ch == p.right) {
+                ch = p;
+                p = p.parent;
+            }
+            result = p;
+        }
+        return result;
+    }
+
+    // The mirror of successor: the node with the previous key in order.
+    TmNode<K, V> predecessor(TmNode<K, V> t) {
+        TmNode<K, V> result;
+        if (t == null) {
+            result = null;
+        } else if (t.left != null) {
+            TmNode<K, V> p = t.left;
+            while (p.right != null) {
+                p = p.right;
+            }
+            result = p;
+        } else {
+            TmNode<K, V> p = t.parent;
+            TmNode<K, V> ch = t;
+            while (p != null && ch == p.left) {
+                ch = p;
+                p = p.parent;
+            }
+            result = p;
+        }
+        return result;
+    }
+
+    // --- red-black machinery ---
+    //
+    // The accessors below are null-tolerant on purpose: in the fix-up loops a nil child is
+    // a legitimate BLACK leaf, so treating null as black (and as having no parent) removes
+    // a swarm of null checks from the algorithms themselves.
+
+    private boolean isRed(TmNode<K, V> p) {
+        boolean red;
+        if (p == null) {
+            red = false;
+        } else {
+            red = p.red;
+        }
+        return red;
+    }
+
+    private void setColor(TmNode<K, V> p, boolean red) {
+        if (p != null) {
+            p.red = red;
+        }
+    }
+
+    private TmNode<K, V> parentOf(TmNode<K, V> p) {
+        TmNode<K, V> n;
+        if (p == null) {
+            n = null;
+        } else {
+            n = p.parent;
+        }
+        return n;
+    }
+
+    private TmNode<K, V> leftOf(TmNode<K, V> p) {
+        TmNode<K, V> n;
+        if (p == null) {
+            n = null;
+        } else {
+            n = p.left;
+        }
+        return n;
+    }
+
+    private TmNode<K, V> rightOf(TmNode<K, V> p) {
+        TmNode<K, V> n;
+        if (p == null) {
+            n = null;
+        } else {
+            n = p.right;
+        }
+        return n;
+    }
+
+    // Pivot `p` down-left: its right child takes its place. Search order is preserved
+    // because everything between them stays between them.
+    private void rotateLeft(TmNode<K, V> p) {
+        if (p != null) {
+            TmNode<K, V> r = p.right;
+            p.right = r.left;
+            if (r.left != null) {
+                r.left.parent = p;
+            }
+            r.parent = p.parent;
+            if (p.parent == null) {
+                root = r;
+            } else if (p.parent.left == p) {
+                p.parent.left = r;
+            } else {
+                p.parent.right = r;
+            }
+            r.left = p;
+            p.parent = r;
+        }
+    }
+
+    private void rotateRight(TmNode<K, V> p) {
+        if (p != null) {
+            TmNode<K, V> l = p.left;
+            p.left = l.right;
+            if (l.right != null) {
+                l.right.parent = p;
+            }
+            l.parent = p.parent;
+            if (p.parent == null) {
+                root = l;
+            } else if (p.parent.right == p) {
+                p.parent.right = l;
+            } else {
+                p.parent.left = l;
+            }
+            l.right = p;
+            p.parent = l;
+        }
+    }
+
+    // A freshly inserted node is red, which can only break the "no red-red" invariant.
+    // Two cases: if the uncle is red, recolour parent/uncle black and grandparent red and
+    // carry the problem two levels up; if it is black, one or two rotations settle it for
+    // good.
+    private void fixAfterInsertion(TmNode<K, V> x) {
+        x.red = true;
+        while (x != null && x != root && isRed(x.parent)) {
+            if (parentOf(x) == leftOf(parentOf(parentOf(x)))) {
+                TmNode<K, V> y = rightOf(parentOf(parentOf(x)));
+                if (isRed(y)) {
+                    setColor(parentOf(x), false);
+                    setColor(y, false);
+                    setColor(parentOf(parentOf(x)), true);
+                    x = parentOf(parentOf(x));
+                } else {
+                    if (x == rightOf(parentOf(x))) {
+                        x = parentOf(x);
+                        rotateLeft(x);
+                    }
+                    setColor(parentOf(x), false);
+                    setColor(parentOf(parentOf(x)), true);
+                    rotateRight(parentOf(parentOf(x)));
+                }
+            } else {
+                TmNode<K, V> y = leftOf(parentOf(parentOf(x)));
+                if (isRed(y)) {
+                    setColor(parentOf(x), false);
+                    setColor(y, false);
+                    setColor(parentOf(parentOf(x)), true);
+                    x = parentOf(parentOf(x));
+                } else {
+                    if (x == leftOf(parentOf(x))) {
+                        x = parentOf(x);
+                        rotateRight(x);
+                    }
+                    setColor(parentOf(x), false);
+                    setColor(parentOf(parentOf(x)), true);
+                    rotateLeft(parentOf(parentOf(x)));
+                }
+            }
+        }
+        root.red = false;
+    }
+
+    // Deleting a node with two children is turned into deleting one with at most one, by
+    // copying the successor's entry over it and removing the successor instead.
+    private void deleteNode(TmNode<K, V> p) {
+        size--;
+        if (p.left != null && p.right != null) {
+            TmNode<K, V> s = successor(p);
+            p.key = s.key;
+            p.value = s.value;
+            p = s;
+        }
+        TmNode<K, V> replacement;
+        if (p.left != null) {
+            replacement = p.left;
+        } else {
+            replacement = p.right;
+        }
+        if (replacement != null) {
+            replacement.parent = p.parent;
+            if (p.parent == null) {
+                root = replacement;
+            } else if (p == p.parent.left) {
+                p.parent.left = replacement;
+            } else {
+                p.parent.right = replacement;
+            }
+            p.left = null;
+            p.right = null;
+            p.parent = null;
+            // Removing a black node shortens every path through it by one black.
+            if (!p.red) {
+                fixAfterDeletion(replacement);
+            }
+        } else if (p.parent == null) {
+            root = null;
+        } else {
+            // A black leaf: rebalance *before* unlinking, while it still has a parent.
+            if (!p.red) {
+                fixAfterDeletion(p);
+            }
+            if (p.parent != null) {
+                if (p == p.parent.left) {
+                    p.parent.left = null;
+                } else if (p == p.parent.right) {
+                    p.parent.right = null;
+                }
+                p.parent = null;
+            }
+        }
+    }
+
+    // `x` carries one "extra black" that has to be discharged: either by borrowing a red
+    // from a sibling (rotations), or by pushing the deficit up to the parent and repeating.
+    private void fixAfterDeletion(TmNode<K, V> x) {
+        while (x != root && !isRed(x)) {
+            if (x == leftOf(parentOf(x))) {
+                TmNode<K, V> sib = rightOf(parentOf(x));
+                if (isRed(sib)) {
+                    setColor(sib, false);
+                    setColor(parentOf(x), true);
+                    rotateLeft(parentOf(x));
+                    sib = rightOf(parentOf(x));
+                }
+                if (!isRed(leftOf(sib)) && !isRed(rightOf(sib))) {
+                    setColor(sib, true);
+                    x = parentOf(x);
+                } else {
+                    if (!isRed(rightOf(sib))) {
+                        setColor(leftOf(sib), false);
+                        setColor(sib, true);
+                        rotateRight(sib);
+                        sib = rightOf(parentOf(x));
+                    }
+                    setColor(sib, isRed(parentOf(x)));
+                    setColor(parentOf(x), false);
+                    setColor(rightOf(sib), false);
+                    rotateLeft(parentOf(x));
+                    x = root;
+                }
+            } else {
+                TmNode<K, V> sib = leftOf(parentOf(x));
+                if (isRed(sib)) {
+                    setColor(sib, false);
+                    setColor(parentOf(x), true);
+                    rotateRight(parentOf(x));
+                    sib = leftOf(parentOf(x));
+                }
+                if (!isRed(rightOf(sib)) && !isRed(leftOf(sib))) {
+                    setColor(sib, true);
+                    x = parentOf(x);
+                } else {
+                    if (!isRed(leftOf(sib))) {
+                        setColor(rightOf(sib), false);
+                        setColor(sib, true);
+                        rotateLeft(sib);
+                        sib = leftOf(parentOf(x));
+                    }
+                    setColor(sib, isRed(parentOf(x)));
+                    setColor(parentOf(x), false);
+                    setColor(leftOf(sib), false);
+                    rotateRight(parentOf(x));
+                    x = root;
+                }
+            }
+        }
+        setColor(x, false);
+    }
+
+    // --- test seam ---
+
+    // The tree's black-height as seen from the root, or -1 if the red-black invariants are
+    // broken. Package-private: it exists so a test can assert the tree really is balanced,
+    // which is the only way to tell a working red-black tree from a plain BST that happens
+    // to answer the same queries.
+    int checkInvariants() {
+        int height;
+        if (isRed(root)) {
+            height = -1;                       // the root must be black
+        } else {
+            height = blackHeight(root);
+        }
+        return height;
+    }
+
+    private int blackHeight(TmNode<K, V> p) {
+        int height;
+        if (p == null) {
+            height = 1;                        // a nil leaf counts as one black
+        } else if (isRed(p) && (isRed(p.left) || isRed(p.right))) {
+            height = -1;                       // red node with a red child
+        } else {
+            int left = blackHeight(p.left);
+            int right = blackHeight(p.right);
+            if (left < 0 || right < 0 || left != right) {
+                height = -1;                   // unequal black paths
+            } else if (isRed(p)) {
+                height = left;
+            } else {
+                height = left + 1;
+            }
+        }
+        return height;
+    }
+
+    /**
+     * This map's values.
+     *
+     * <p>**A deliberate divergence**: the JDK's is a *view* backed by the map; this one is a copy
+     * taken at the moment of asking. `keySet()` used to have the same divergence and no longer does.
+     * And unlike `keySet()` this is a `Collection` and not a `Set`, because values **can** repeat.
+     */
+    public java.util.Collection<V> values() {
+        java.util.ArrayList<V> out = new java.util.ArrayList<V>();
+        TmNode<K, V> p = this.firstNode();
+        while (p != null) {
+            out.add(p.value);
+            p = this.successor(p);
+        }
+        return out;
+    }
+
+    /**
+     * This map's entries.
+     *
+     * <p>The same divergence as `values()`: a copy, not a view. The entries it returns are immutable,
+     * so `setValue` on one of them throws instead of writing into the map — which is what is
+     * consistent with it being a copy: writing into an entry nobody looks at would be worse than
+     * refusing.
+     */
+    public java.util.Set<java.util.Map.Entry<K, V>> entrySet() {
+        java.util.LinkedHashSet<java.util.Map.Entry<K, V>> out =
+            new java.util.LinkedHashSet<java.util.Map.Entry<K, V>>();
+        TmNode<K, V> p = this.firstNode();
+        while (p != null) {
+            out.add(new ViewEntry<K, V>(p.key, p.value));
+            p = this.successor(p);
+        }
+        return out;
+    }
+}
+
+// One tree node: its entry, its three links and its colour. Top-level package-private
+// rather than nested, since a nested class inside a *generic* class is miscompiled
+// (finding #13).
+final class TmNode<K, V> {
+
+    K key;
+    V value;
+    TmNode<K, V> left;
+    TmNode<K, V> right;
+    TmNode<K, V> parent;
+    // A new node always starts red; the fix-up decides what it ends up as.
+    boolean red = true;
+
+    TmNode(K key, V value, TmNode<K, V> parent) {
+        this.key = key;
+        this.value = value;
+        this.parent = parent;
+    }
+}

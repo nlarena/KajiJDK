@@ -18,13 +18,13 @@ public class BkRefAC {
     }
 
     static int run() {
-        Object[] arr = new Object[256];
-        Object x = new Object();
-        Object y = new Object();
         int acc = 0;
         if (NEVER != 0) {
             acc = acc + new int[2][2].length;
         }
+        Object[] arr = new Object[256];
+        Object x = new Object();
+        Object y = new Object();
         for (int k = 0; k < 1000; k++) {
             acc = (acc + step(arr, x, y, 300)) & 0xFFFFF;
         }

@@ -419,7 +419,7 @@ pub fn jit_array_store(
     metaspace: &MetaspaceService,
     method: crate::jvm::interpreter::metaspace::MethodId,
     pc: usize,
-) -> Option<(u32, u32)> {
+) -> Option<(u32, u32, bool)> {
     let array_mirror = metaspace.array_class(method, pc);
     if array_mirror == 0 {
         return None; // never executed: there is nothing to speculate on
@@ -437,7 +437,10 @@ pub fn jit_array_store(
     };
     let element_uuid = metaspace.class_id_read(element)?;
     let element_mirror = u32::try_from(metaspace.class_object(element_uuid)?).ok()?;
-    Some((array_mirror, element_mirror))
+    // El tercer dato es si el tipo elemento es exactamente `Object`: con eso el emisor no emite la
+    // guarda de tipo del valor, porque JVMS 6.5 la hace siempre verdadera. Ver
+    // `burst::compile::ArrayStore::element_is_object`.
+    Some((array_mirror, element_mirror, element == "java/lang/Object"))
 }
 
 /// `arraylength` (0xbe): pop an array reference, push its `length`. A null array is

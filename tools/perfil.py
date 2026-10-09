@@ -44,7 +44,7 @@ import sys
 RAIZ = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 # `[perfil] <pasos>\t<veredicto>\t<frio>\t<bytes>\t<metodo>`
-FILA = re.compile(r"^\[perfil\] (\d+)\t(\w+)\t(\d+)\t(\d+)\t(.+)$")
+FILA = re.compile(r"^\[perfil\] (\d+)\t(\w+)\t(\d+)\t(\d+)\t(\d+)\t(.+)$")
 # `[jit] rechaza <Motivo> { ... } [<clase>] <metodo>`. El ultimo token es siempre el metodo; lo
 # del medio es la carga del motivo, que para `Opcode` trae el byte y para los `Unresolved*` trae
 # el nombre que la VM resolvio del constant pool.
@@ -111,8 +111,8 @@ def una_corrida(vm, clase):
     for linea in (p.stderr or "").splitlines():
         m = FILA.match(linea)
         if m:
-            pasos, veredicto, frio, bytes_, metodo = m.groups()
-            filas.append((int(pasos), veredicto, int(frio), int(bytes_), metodo))
+            pasos, veredicto, frio, bytes_, post, metodo = m.groups()
+            filas.append((int(pasos), veredicto, int(frio), int(bytes_), int(post), metodo))
             continue
         m = RECHAZO.match(linea)
         if m:
@@ -142,6 +142,9 @@ def main():
         sys.exit(f"sin programas en {args.corpus}")
 
     pasos = collections.Counter()          # metodo -> opcodes interpretados
+    # metodo -> cuantos de esos opcodes corrieron **con el nativo ya instalado**. No son
+    # calentamiento: son el interprete retomando donde el codigo nativo se rindio, o sea deopts.
+    post_nativo = collections.Counter()
     veredicto = {}                         # metodo -> compila/rechaza/frio
     motivo = {}                            # metodo -> motivo del rechazo
     tam = {}                               # metodo -> bytes de cuerpo
@@ -152,8 +155,9 @@ def main():
         if error:
             saltados.append((clase, error))
             continue
-        for p, v, _frio, b, m in filas:
+        for p, v, _frio, b, post, m in filas:
             pasos[m] += p
+            post_nativo[m] += post
             tam[m] = b
             # `rechaza` gana sobre `frio`: en un programa el metodo puede no haber llegado al
             # umbral y en otro si, y lo que interesa es que pasa **cuando** llega.
@@ -173,10 +177,22 @@ def main():
     print()
     print(f"=== {total:,} opcodes interpretados en {len(pasos)} metodos "
           f"({len(programas) - len(saltados)} programas) ===")
+    post_total = sum(post_nativo.values())
     print()
     print("por veredicto del JIT:")
     for v, p in por_veredicto.most_common():
         print(f"  {v:<10} {p:>12,}  {100.0 * p / total:5.1f}%")
+
+    # **El balde de «compila», partido.** Es el mas grande del censo y es dos problemas con
+    # arreglos opuestos: lo de antes de la instalacion es calentamiento --umbral-- y lo de despues
+    # es el interprete retomando donde el nativo se rindio --deopts--. Sumados no se puede elegir.
+    compila = por_veredicto["compila"] or 1
+    print()
+    print("el balde de «compila», partido:")
+    print(f"  {'calentamiento (sin nativo todavia)':<38} {compila - post_total:>12,} "
+          f"{100.0 * (compila - post_total) / compila:5.1f}%")
+    print(f"  {'con el nativo YA instalado (deopts)':<38} {post_total:>12,} "
+          f"{100.0 * post_total / compila:5.1f}%")
 
     # El cuadro que decide donde trabajar: motivos de rechazo ordenados por **tiempo**, no por
     # cantidad de metodos. Las dos columnas juntas porque la diferencia entre ellas es el
@@ -222,6 +238,8 @@ def main():
     for m, p in pasos.most_common(args.top):
         v = veredicto.get(m, "?")
         razon = motivo.get(m, ("", "", ""))[2] if v == "rechaza" else ""
+        if v == "compila" and pasos[m]:
+            razon = f"post={100.0 * post_nativo[m] / pasos[m]:.0f}%"
         print(f"  {p:>10,} {100.0 * p / total:>4.1f}%  {v:<9} {tam.get(m, 0):>6}  "
               f"{razon + ' ' if razon else ''}{m}")
 

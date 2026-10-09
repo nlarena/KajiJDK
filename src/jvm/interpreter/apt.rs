@@ -137,7 +137,12 @@ pub fn run_processors(processors: &[String], boot: Vec<PathBuf>, app: Vec<PathBu
     let mut jvm = JVM::new(metaspace, Frame::new(entry, max_locals, Vec::new()));
 
     // --- Instanciación (una vez por processor) --------------------------------------------------
-    // `[(fqn, receiver)]`: cada processor construido + inicializado, listo para recibir rondas.
+    // `[(fqn, handle)]`: cada processor construido + inicializado, listo para recibir rondas.
+    //
+    // **Se guarda el handle del canal de raices, no el offset** (#568/#569). Estas referencias viven
+    // en estado de Rust a traves de **todas** las rondas, y cada ronda corre bytecode que aloca: un
+    // offset guardado aca envejece en la primera colecta que mueva el objeto. Es el mismo motivo por
+    // el que el Filer tiene su canal.
     let mut instances: Vec<(String, usize)> = Vec::new();
     for fqn in processors {
         // 1. `new Processor()` + `<init>()V`.
@@ -159,7 +164,7 @@ pub fn run_processors(processors: &[String], boot: Vec<PathBuf>, app: Vec<PathBu
             outcome.console = console(&mut jvm);
             return outcome;
         }
-        instances.push((fqn.clone(), obj));
+        instances.push((fqn.clone(), jvm.exec().vm_hold(obj)));
     }
 
     // --- El bucle de rondas ---------------------------------------------------------------------
@@ -240,6 +245,7 @@ pub fn run_processors(processors: &[String], boot: Vec<PathBuf>, app: Vec<PathBu
 /// (`(nombre, texto)`, en orden de creación). Corta apenas una llamada deja una excepción pendiente.
 fn run_round(
     jvm: &mut JVM,
+    // `[(fqn, handle)]` --- **handles** del canal de raices, no offsets: ver donde se arman.
     instances: &[(String, usize)],
     over: bool,
     outcome: &mut AptOutcome,
@@ -251,19 +257,29 @@ fn run_round(
     // El `RoundEnvironment` y el `Set` de anotaciones se comparten entre todos los processors de la
     // ronda (mismo contrato de JSR 269): se construyen una vez por ronda.
     let flag = Value::Int(over as i32);
+    let marca = jvm.exec().vm_held_len();
     let Some(round_env) = new_instance(jvm, ROUND_ENV_IMPL, "(Z)V", vec![flag]) else {
         outcome.error = take_error(jvm).or(Some("no se pudo reificar el roundEnv".into()));
         drain_filer();
         return Vec::new();
     };
+    let h_round_env = jvm.exec().vm_hold(round_env);
     let Some(annotations) = new_instance(jvm, HASH_SET, "()V", Vec::new()) else {
         outcome.error = take_error(jvm).or(Some("no se pudo crear el set de anotaciones".into()));
+        jvm.exec().vm_release_to(marca);
         drain_filer();
         return Vec::new();
     };
-    for (_fqn, obj) in instances {
-        let args = vec![Value::Reference(annotations), Value::Reference(round_env)];
-        jvm.exec().call_virtual(*obj, "process", PROCESS_DESC, args);
+    let h_annotations = jvm.exec().vm_hold(annotations);
+    for (_fqn, handle) in instances {
+        // Los tres se releen del canal **en cada vuelta**: el `process` de la vuelta anterior corrio
+        // bytecode que aloca, asi que cualquiera de ellos pudo moverse.
+        let obj = jvm.exec().vm_held(*handle);
+        let args = vec![
+            Value::Reference(jvm.exec().vm_held(h_annotations)),
+            Value::Reference(jvm.exec().vm_held(h_round_env)),
+        ];
+        jvm.exec().call_virtual(obj, "process", PROCESS_DESC, args);
         outcome.process_calls += 1;
         if let Some(err) = take_error(jvm) {
             outcome.error = Some(err);
@@ -323,7 +339,15 @@ fn new_instance(jvm: &mut JVM, class: &str, ctor_desc: &str, ctor_args: Vec<Valu
     let mut operands = vec![Value::Reference(obj)];
     let widths: Vec<usize> = std::iter::once(1).chain(ctor_args.iter().map(|_| 1)).collect();
     operands.extend(ctor_args);
+    // **El objeto se enraiza mientras corre su `<init>`** (#568/#569). El constructor es código
+    // real que aloca, así que puede caer una colecta: el objeto sobrevive --- va como argumento y
+    // el frame del constructor sí es raíz --- pero `obj`, que es un local de Rust, se queda con la
+    // dirección vieja. Es el mismo agujero que el #288 tapó en `invokevirtual.rs`.
+    let marca = jvm.exec().vm_held_len();
+    let handle = jvm.exec().vm_hold(obj);
     call(jvm, ctor, operands, &widths);
+    let obj = jvm.exec().vm_held(handle);
+    jvm.exec().vm_release_to(marca);
     Some(obj)
 }
 
@@ -374,6 +398,28 @@ impl AptContext {
     /// releen `Symbol.name`, `members_of`, etc.
     pub fn table(&self) -> &SymbolTable {
         &self.table
+    }
+
+    /// Los offsets del cache `reified`, con su clave, **como raices del GC** (finding #569).
+    ///
+    /// El cache sobrevive a los frames que crearon cada elemento --- es una cache de **identidad**,
+    /// vive toda la corrida de APT ---, asi que ninguna pila los mantiene al dia. Alocarlos en `Old`
+    /// los deja quietos ante un **minor**, que es lo que el comentario de `element_for` dice y es
+    /// cierto; pero `gc::compact` mueve el Old entero (solo estan pinchados los espejos y el *string
+    /// pool*), y entonces cada offset de aca apunta a donde el elemento **solia** estar. Es el mismo
+    /// canal que ya tiene el Filer (`natives::filer_roots`), por el mismo motivo.
+    ///
+    /// Se entrega `(clave, offset)` y no solo el offset porque un `HashMap` no promete orden entre
+    /// dos recorridas: la clave es lo que permite devolver cada valor a su lugar.
+    pub fn reified_roots(&self) -> Vec<(SymbolId, usize)> {
+        self.reified.iter().map(|(&k, &v)| (k, v)).filter(|&(_, v)| v != 0).collect()
+    }
+
+    /// Reescribe los offsets que el GC remapeo, por clave.
+    pub fn remap_reified(&mut self, roots: &[(SymbolId, usize)], refs: &[usize]) {
+        for (&(key, _), &offset) in roots.iter().zip(refs) {
+            self.reified.insert(key, offset);
+        }
     }
 
     /// El `SymElement` del heap que reifica `sym`, construyéndolo **una sola vez** (caché de
@@ -480,6 +526,118 @@ public class HelloProcessor extends AbstractProcessor {
     /// El "hola mundo" de la reificación (fase 3): compilar `class Foo {}`, reificar su
     /// `TypeElement`, y que `getSimpleName()` devuelva `"Foo"` — leyendo la tabla viva de `javac`
     /// desde un `native` de la JVM, en el mismo proceso.
+    /// #568/#569 --- una referencia tomada con `vm_hold` **sigue al objeto** cuando el heap compacta,
+    /// y la variable de Rust de la que salio **no**.
+    ///
+    /// Es el contraste entero en un solo test: el mismo offset, guardado en los dos lados. El canal
+    /// (`SharedVm::held`) es raiz y el colector lo reescribe; el local de Rust no es raiz y nadie lo
+    /// toca. Por eso la regla, escrita en los seis sitios que lo usan, es **releer del canal y nunca
+    /// de la variable**.
+    ///
+    /// Se arma con la misma coreografia que el test de aca abajo: un primer elemento para que los
+    /// espejos --- pinchados --- queden delante, despues el hueco, y detras el objeto que se mide.
+    #[test]
+    fn a_held_reference_follows_its_object_and_the_rust_local_does_not() {
+        let (_unit, table, _errors) =
+            crate::javac::analyze("class Foo {} class Bar {}").expect("analyze");
+        let table = Arc::new(table);
+        let bar = table.class("Bar").expect("simbolo de Bar");
+
+        let mut metaspace = MetaspaceService::new(vec![PathBuf::from("KajiLibrary")], vec![]);
+        let park = metaspace
+            .resolve_method("java/lang/Object", "hashCode", "()I")
+            .expect("un metodo donde estacionar el frame de entrada");
+        let max_locals = metaspace.max_locals(park);
+        let mut jvm = JVM::new(metaspace, Frame::new(park, max_locals, Vec::new()));
+        jvm.set_apt(AptContext::new(Arc::clone(&table)));
+
+        let _antes = jvm.exec().apt_element_for(bar);
+        let basura: Vec<usize> = (0..8)
+            .map(|_| jvm.exec().apt_new_instance("java/lang/Object").expect("relleno"))
+            .collect();
+        let objeto = jvm.exec().apt_new_instance("java/lang/Object").expect("el que se mide");
+        assert!(objeto > basura[0], "tiene que quedar detras del hueco");
+
+        let marca = jvm.exec().vm_held_len();
+        let handle = jvm.exec().vm_hold(objeto);
+
+        let report = jvm.exec().gc_compact();
+        let destino = match report.relocations.get(&objeto) {
+            Some(&d) => d,
+            None => panic!("el objeto no se movio: el test no esta midiendo nada"),
+        };
+
+        assert_eq!(
+            jvm.exec().vm_held(handle),
+            destino,
+            "el canal tiene que traer el offset nuevo"
+        );
+        assert_ne!(
+            objeto, destino,
+            "y el local de Rust se quedo con el viejo --- que es todo el finding"
+        );
+        jvm.exec().vm_release_to(marca);
+        assert_eq!(jvm.exec().vm_held_len(), marca, "y el canal se devuelve entero");
+    }
+
+    /// #569 --- el cache de identidad de `AptContext` tiene que **seguir al objeto** cuando el heap
+    /// compacta.
+    ///
+    /// `reified` guarda offsets del heap en estado de Rust, y vive toda la corrida de APT: ninguna
+    /// pila lo sostiene. El comentario de `element_for` dice que por eso aloca en `Old`, *"asi que no
+    /// debe moverse"* --- y eso solo vale para un **minor**: `gc::compact` mueve el Old entero, con los
+    /// espejos y el *string pool* como unico conjunto pinchado. Sin registrar el cache como raiz, cada
+    /// offset queda apuntando a donde el elemento **solia** estar, y la cache de identidad --- que es
+    /// todo el contrato de `element_for` --- empieza a contestar sobre memoria reciclada.
+    ///
+    /// **El hueco es parte del test.** El elemento tiene que quedar **detras** de un bloque muerto de
+    /// `Old` para tener a donde moverse; si no se mueve, el test no mide nada y lo dice.
+    #[test]
+    fn the_identity_cache_follows_its_element_across_a_compaction() {
+        let (_unit, table, _errors) =
+            crate::javac::analyze("class Foo {} class Bar {}").expect("analyze");
+        let table = Arc::new(table);
+        let foo = table.class("Foo").expect("simbolo de Foo");
+        let bar = table.class("Bar").expect("simbolo de Bar");
+
+        let mut metaspace = MetaspaceService::new(vec![PathBuf::from("KajiLibrary")], vec![]);
+        let park = metaspace
+            .resolve_method("java/lang/Object", "hashCode", "()I")
+            .expect("un metodo donde estacionar el frame de entrada");
+        let max_locals = metaspace.max_locals(park);
+        let mut jvm = JVM::new(metaspace, Frame::new(park, max_locals, Vec::new()));
+        jvm.set_apt(AptContext::new(Arc::clone(&table)));
+
+        // **El orden es el test.** Primero se reifica OTRO simbolo, solo para que la carga de
+        // `SymElement` y sus espejos --- que estan **pinchados** --- ocurra ahora y quede delante:
+        // un pinchado en el medio no se mueve, y lo que venga detras no tiene a donde bajar. Recien
+        // despues va el hueco, y detras el elemento que se mide.
+        let _antes = jvm.exec().apt_element_for(bar);
+        let basura: Vec<usize> = (0..8)
+            .map(|_| jvm.exec().apt_new_instance("java/lang/Object").expect("relleno"))
+            .collect();
+        let element = jvm.exec().apt_element_for(foo);
+        assert!(
+            element > basura[0],
+            "el elemento tiene que quedar detras del hueco"
+        );
+
+        let report = jvm.exec().gc_compact();
+        let destino = match report.relocations.get(&element) {
+            Some(&d) => d,
+            None => panic!(
+                "el elemento no se movio, asi que este test no esta midiendo nada: \
+                 revisar el hueco antes de creerle"
+            ),
+        };
+
+        assert_eq!(
+            jvm.exec().apt_element_for(foo),
+            destino,
+            "la cache tiene que devolver el offset nuevo ({destino}), no el viejo ({element})"
+        );
+    }
+
     #[test]
     fn get_simple_name_reifies_a_root_type() {
         // Pasada 1 de javac: `class Foo {}` → la tabla de símbolos, compartida por `Arc`.

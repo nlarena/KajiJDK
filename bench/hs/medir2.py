@@ -30,9 +30,18 @@ maquina (+-12%). Lo que cambia son cuatro cosas, y cada una tapa un agujero dist
 4. **Las corridas van intercaladas** entre brazos, alternando el orden: la maquina deriva y medir un
    brazo entero y despues el otro le regala la deriva al segundo.
 
-Uso:  python bench/hs/medir2.py [iteraciones] [objetivo_ic_%]
+**Que VM se mide.** Por defecto el `bin/run-headless.exe` **congelado**, igual que `tools/suite.py` y
+`tools/texto.py`. Un arreglo de la VM que todavia no se congelo **no se ve** con el default: hay que
+pasarselo con `--vm target/release/run-headless.exe` (o por `KAJI_RUN`). Esto falto desde el primer
+dia y costo una tanda entera: las cinco dimensiones se midieron contra el congelado despues de tres
+cambios del JIT, salieron todas planas, y la explicacion que se escribio para ese resultado --que los
+workloads no tocan la biblioteca-- era plausible y no era la causa. La causa era que el binario
+medido no tenia los cambios. Un arnes que no puede nombrar lo que mide invita exactamente a eso.
+
+Uso:  python bench/hs/medir2.py [clase] [iteraciones] [objetivo_ic_%] [--vm RUTA]
 """
 import math
+import os
 import re
 import statistics
 import subprocess
@@ -46,6 +55,10 @@ REPO = Path(__file__).resolve().parents[2]
 JAVA = Path(r"C:\Program Files\Java\jdk-25\bin\java.exe")
 CLASES = REPO / "bench" / "hs"
 CLASE = "HsBench"      # lo pisa el argumento 1; ver `main`
+# **Que VM se mide**, con la misma convencion que `tools/texto.py`: `KAJI_RUN` manda, `--vm` la pisa,
+# y el default es el congelado. Se imprime en el encabezado de cada corrida, que es la mitad que
+# importa: una medicion que no dice que binario midio no se puede leer dos dias despues.
+VM = Path(os.environ.get("KAJI_RUN") or (REPO / "bin" / "run-headless.exe"))
 
 ITER_INTERNAS = 300   # el lazo de `step`, fijo en la fuente
 MS_POR_ITER = 25        # cuanto queremos que dure UNA iteracion, al calibrar
@@ -78,9 +91,7 @@ def corrida(brazo, iters, reps):
         cmd = [str(JAVA), "-cp", str(CLASES), CLASE, str(iters), str(reps)]
         env = None
     else:
-        cmd = [str(REPO / "bin" / "run-headless.exe"),
-               str(CLASES / f"{CLASE}.class"), "bench", str(iters), str(reps)]
-        import os
+        cmd = [str(VM), str(CLASES / f"{CLASE}.class"), "bench", str(iters), str(reps)]
         env = dict(os.environ, JVM_JIT="0") if brazo == "nuestro-sin-jit" else None
     r = subprocess.run(cmd, capture_output=True, cwd=REPO, env=env)
     # Nuestra VM escribe `System.out` a **stderr** e intercala lineas `[gc]`, asi que se leen los dos
@@ -323,13 +334,19 @@ def anova_y_tukey(grupos):
 def main():
     # `medir2.py [clase] [iteraciones] [objetivo_ic_%]`. La clase es cualquiera de las de `bench/hs/`:
     # cada una aisla una dimension distinta y todas tienen la misma forma `bench(iters, reps)`.
-    global CLASE
+    global CLASE, VM
     args = sys.argv[1:]
+    # `--vm RUTA` se saca antes del parseo posicional, que es por posicion y no sabe de banderas.
+    if "--vm" in args:
+        i = args.index("--vm")
+        VM = Path(args[i + 1]).resolve()
+        del args[i:i + 2]
     if args and not args[0].replace(".", "").isdigit():
         CLASE = args.pop(0)
     iters = int(args[0]) if len(args) > 0 else 200
     objetivo = float(args[1]) if len(args) > 1 else 2.0
     print(f"### dimension: {CLASE} ###")
+    print(f"### vm: {VM} ###")
 
     print(f"=== calibracion: una iteracion ~{MS_POR_ITER} ms, {iters} iteraciones por corrida ===")
     reps = {}

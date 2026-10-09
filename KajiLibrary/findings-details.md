@@ -17774,3 +17774,223 @@ porque no estan caracterizadas; queda el sintoma exacto para quien las agarre.
 
 Y las dos divergencias **numericas** que el cruce ve, que no son rechazos: `AwtSystemColorTest` (-1
 contra 35) y `KajiBeansHumoR` (2 contra -1).
+
+## Tanda 2026-10-08: el #288 ya estaba cerrado, y lo que quedaba abierto no tenia numero
+
+**El indice decia `#288` abierto y su ficha decia `⬜→✅` desde el 2026-09-19.** Es la trampa que el
+encabezado de `COMPILER_FINDINGS.md` describe, pero en la direccion que todavia no habiamos pisado: no
+una ficha sin marcador ni un *"No arreglado"* contado como arreglado, sino **el indice atrasado respecto
+de la ficha**. Un barrido por marcador sobre el indice lo da abierto; leer la ficha lo da cerrado. Lo
+unico que lo resuelve es correr el reproductor.
+
+**Corrido.** `repros/finding_288` da **130022208** --- el valor del JDK 25 --- en **48 de 48**
+configuraciones: los ocho tamanios de eden donde fallaba (104, 112, 120, 184, 200, 392, 400, 432) por
+survivor 32/64/128 por JIT on/off. El barrido importa porque el defecto era **sensible al tamanio**:
+medirlo en la configuracion por defecto y nada mas no dice casi nada.
+
+> **Y el primer barrido dio 48 fallas, que eran mias.** Sacaba el valor con `tail -1`, y con un eden
+> chico la ultima linea es un `[gc] minor: ...`, no el resultado. Es exactamente lo que la nota
+> `atribuir-divergencias` dice: el veredicto se saca **del valor observado**, no de una posicion ni de
+> un patron sobre el texto. Con el valor bien extraido, 48/48.
+
+### #568 ⬜ -- la referencia stale de os-parallel, que es OTRA cosa que el #288
+
+La ficha del #288 lo deja escrito: *"No confundir con el heisenbug de os-parallel [...] es otro
+mecanismo, con hilos, y sigue abierto"*. Ese es el que esta abierto de verdad, y hasta hoy **no tenia
+numero**: vivia solo en una nota de memoria, que es como se consigue que algo no exista.
+
+**Por que ningun reproductor dispara, que es lo que faltaba explicar.** No es misterio: `JVM_THREADS=os`
+selecciona `ThreadMode::OsParallel`, pero ese modo **todavia comparte el motor de `os-gil`** --- un
+candado global por opcode --- segun su propia documentacion en `bytecode_interpreter.rs`: *"Today it
+still shares the `os-gil` engine [...] so it runs and is oracle-correct but is **not yet actually
+parallel**"*. La carrera necesita un paralelismo que hoy no esta activado. **No esta curado: esta
+dormido**, y vuelve a estar en alcance cuando el Hito H3 achique ese candado --- que es justamente el
+plan, achicarlo por pasos para que el modo quede validado en cada uno.
+
+**Medido el 2026-10-08, en modo `os`:** `BxDbgF`, `BxDbgT` y `BxDbgY` **0/12 con panico** cada uno, y
+`GcRace` limpio 6 de 6. Igual que el 2026-10-03 y por el mismo motivo.
+
+El `had_local_frames` guard sigue puesto (`bytecode_interpreter.rs`), que es el arreglo que cerro el
+Caso B de esta familia; el segundo mecanismo es el que queda.
+
+**Que hace falta para cerrarlo**, y conviene decirlo ahora que se entiende por que no dispara: no mas
+corridas del reproductor en el modo actual --- eso solo confirma que el candado esta puesto ---, sino
+**volver a medirlo cuando H3 saque o achique el candado**.
+
+> **Correccion del 2026-10-09: ThreadSanitizer no es el camino, y no hay nada que instalar.**
+>
+> La recomendacion anterior (TSan sobre Linux/WSL) estaba mal por dos motivos. El primero es que **no
+> habria ayudado igual**: TSan --- y Miri --- reportan carreras sobre accesos que de verdad ocurren
+> **sin sincronizar**, y bajo el candado global por opcode esos accesos estan sincronizados. Desde WSL
+> tampoco se veria nada. El segundo es que la herramienta que hace falta **ya esta instalada y ya se
+> usa en este repo**: `miri` esta en el toolchain `nightly`, corre sobre este crate en Windows con
+> `MIRIFLAGS=-Zmiri-disable-isolation` --- sin eso tropieza con el shim de `SystemTime::now` ---, y
+> `eden_arena::tests::miri_os_parallel_heap` ya modela el heap os-parallel para el detector de
+> carreras de Miri. En esta maquina corre en 20 s.
+>
+> Para el registro, por si alguna vez se quiere TSan igual: `x86_64-unknown-linux-gnu` si lo soporta
+> (verificado con `rustc --print target-spec-json`), asi que serian WSL2 mas un toolchain adentro. No
+> hace falta para lo de abajo.
+
+**Lo que el modelo que ya existia NO podia decir.** `miri_os_parallel_heap` es fiel, pero **todas** sus
+referencias viven en el arreglo de raices --- que es exactamente lo que el colector recorre y remapea
+---. Por eso pasa, y por eso no dice nada del #568: el defecto no es que el remapeo este mal, es que
+hay referencias **afuera** de lo remapeable.
+
+**Lo que si quedo medido** (`eden_arena::tests::miri_una_referencia_que_el_colector_no_conoce_queda_aliasada`,
+2026-10-09; corre nativo y bajo Miri en 14 s). El mutador aloca dos objetos: uno lo publica en las
+raices, el otro se lo guarda en un local de Rust. Cae una colecta --- evacua lo rooteado a Old, remapea
+las raices, **recicla Eden** ---, y la ronda siguiente vuelve a alocar: Eden entrega **el mismo
+offset**.
+
+| | despues de la colecta |
+|---|---|
+| la referencia **publicada** | remapeada a Old, con su tag intacto |
+| la referencia que el colector **no conoce** | apunta al objeto de la ronda siguiente |
+
+Y esa es la parte que hace al #568 caro: el resultado **no** es una referencia a basura, que se notaria.
+Es una referencia a **otro objeto, vivo y bien formado**. Por eso cada tag del modelo es unico por
+`(hilo, ronda, slot)` --- es lo unico que distingue "mi objeto" del que ocupo su lugar --- y por eso el
+sintoma de esta familia es un numero mal sin aviso.
+
+**Es deterministico**: no hace falta que la carrera se manifieste. Lo que el candado de hoy impide no es
+el aliasing, es que *otro hilo* lo provoque; el mecanismo se puede medir sin esperar a H3.
+
+**El sentido de la asercion es a proposito.** Afirma que el peligro **esta**, igual que
+`gc::tests::an_ordinary_old_object_does_move_when_the_heap_compacts` mide que la premisa del #569 es
+falsa. Cuando el #568 se cierre --- porque lo que la VM sostiene en estado de Rust pase a ser raiz, o
+porque Eden deje de reciclar offsets --- **ese test va a fallar**, y eso es lo que tiene que pasar: se
+da vuelta y queda como regresion.
+
+**Y el arreglo se parece al del #569**, que es lo que los emparenta: un canal de raices que el colector
+recorra y reescriba. `vm_roots`/`restore_vm_roots` ya existe, el Filer ya lo usa, y el cache de APT se
+engancho ahi el 2026-10-08. Cuanto mas estado de Rust se mude a ese canal antes de H3, menos superficie
+tiene esto cuando despierte.
+
+### #569 ⬜ -- la capa APT sostiene offsets del heap en estado de Rust, y alocar en Old solo la cubre de los minors
+
+**Severidad: alta.** Contesta mal **en silencio**: el comentario de `apt_new_instance` ya describe el
+sintoma de la mitad que se arreglo --- *"el driver seguia despachando sobre el offset viejo: la segunda
+ronda no corria, en silencio"* ---, y la otra mitad sigue.
+
+**Como salio.** Buscando el #568 (la carrera de os-parallel) se hizo la auditoria que el #288 habia
+hecho sobre otros caminos: **todo offset del heap sostenido en una variable de Rust a traves de un
+punto que pueda GC-ar**. Una variable de Rust no es raiz: el colector recorre `threads[*].frames`, las
+raices condy y poco mas. Se revisaron **los 12 sitios de produccion** que llaman a `call_java` --- hay
+14 en total, dos son tests ---:
+
+| sitio | veredicto |
+|---|---|
+| `apt.rs:332` `new_instance` | **sostiene y usa despues** |
+| `bytecode_interpreter.rs:758` `new_array_list` / `sym_element_enclosed` | **sostiene y usa despues** |
+| `invokedynamic.rs:432` constructor de la lambda | sano --- **estacionado**, es el arreglo del #288/#311 |
+| `invokevirtual.rs:616` constructor de un `MethodHandle` | sano --- estacionado (#288) |
+| `reflective_call.rs:305` `Constructor.newInstance` | sano --- estacionado |
+| `bytecode_interpreter.rs:4120` `<clinit>` | sano --- el throwable queda aparcado, y por eso enraizado |
+| `invokedynamic.rs:345` concat | sano --- nada sobrevive a la llamada |
+| `invokedynamic.rs:660` condy | sano --- los offsets solo entran, no se reusan despues |
+| `invokevirtual.rs:429` handle de layout | sano |
+| `reflective_call.rs:196` `Method.invoke` | sano, pero **por poco**: el `rebox` de despues solo corre para un retorno primitivo, asi que el `Value` que cruza nunca es una referencia |
+| `reflective_call.rs:504` `rebox` | sano por lo mismo |
+| `bytecode_interpreter.rs:4338` llamada iniciada por la VM | sano |
+
+**La premisa que falla.** Los dos sitios malos **no son descuidos**: los dos alocan en **Old** a
+proposito, y lo explican. `apt_new_instance` es preciso --- *"Alocar en Old los deja quietos ante un
+**minor**"* ---, y eso es cierto. `sym_element_enclosed` lo redondea de mas y ahi se rompe:
+
+> *"El `ArrayList` va en **Old**: se sostiene en un local de Rust (no es raiz del GC) [...] asi que no
+> debe moverse bajo un GC."*
+
+**`gc::compact` mueve el Old entero.** Es su trabajo --- empaquetar los vivos contra el piso del Old ---
+y lo unico pinchado son los espejos de clase y el *string pool*. Medido, no argumentado:
+`gc::tests::an_ordinary_old_object_does_move_when_the_heap_compacts` aloca un objeto comun en Old
+detras de un hueco, lo mantiene vivo con una raiz **condy** --- un canal que el colector si conoce ---,
+compacta, y comprueba que el objeto se movio y que esa raiz se actualizo. La variable de Rust que
+sostiene el mismo offset no se actualiza.
+
+**Los dos no se arreglan igual, y eso es lo que lo hace mas que un parche:**
+
+- `new_array_list` / `sym_element_enclosed` **si** se arregla con el truco del #288: el offset se usa
+  inmediatamente despues, asi que estacionarlo en la pila de operandos alcanza. Son pocas lineas.
+- El **driver de APT** no: sus referencias viven en estado de Rust **a traves de rondas enteras** --- el
+  `Vec` de processors, el `roundEnv`, el cache `reified` ---, y no hay pila de operandos que dure
+  tanto. Eso pide una **raiz de verdad**: una tabla de handles que el colector recorra y reescriba,
+  como ya hace con `condy_roots`.
+
+**Lo que esta medido y lo que no.** Esta medido que la premisa es falsa (el test de arriba) y que el
+patron es el mismo que el #288 arreglo tres archivos mas alla. **No** esta reproducido de punta a
+punta: haria falta manejar la capa APT y forzar una compactacion en el momento justo. Se levanta igual
+porque el sintoma de esta familia es un numero mal sin aviso, y el #288 ya mostro que se puede estar
+meses sin que aparezca.
+
+**No es el #568.** Este es de un solo hilo, en verde, y no necesita paralelismo ninguno.
+
+## Tanda 2026-10-09: el canal de raices de la VM
+
+> **Cierra el #569 y el #568.** Los dos eran la misma forma --- un offset del heap sostenido en estado
+> de **Rust** a traves de codigo Java que aloca --- vista desde dos lados: el #569 con un solo hilo y
+> una compactacion, el #568 con otro hilo colectando. El arreglo es uno solo.
+
+### El canal
+
+`SharedVm::held`: una **pila de handles**. Se toma uno con `vm_hold`, se relee con `vm_held` y se
+devuelve con `vm_release_to`, que descarta todo lo tomado despues --- asi un `?` o un `return`
+temprano no dejan nada enraizado para siempre ---. Entra en `vm_roots`/`restore_vm_roots` junto a las
+raices condy, el Filer y el cache `reified` de APT.
+
+**La regla, escrita en los seis sitios:** el valor se **relee del canal**, nunca de la variable. Es el
+canal, y no la variable, lo que el colector actualiza.
+
+**Vive en `SharedVm` y no en `AptContext`, y eso se descubrio rompiendolo.** La primera version lo
+puso adentro del contexto de APT y los tests de APT reventaron con *"sin AptContext atado"*: el driver
+construye los processors **antes** de atar el contexto. Ademas no es un canal de APT --- lo necesita
+cualquier camino de la VM con esta forma ---, asi que quedo donde corresponde.
+
+### Las seis referencias
+
+De la auditoria de los 12 sitios de produccion que llaman a `call_java` (ver el #569), dos sostenian un
+offset a traves de la llamada y lo usaban despues; a esos se sumaron los cuatro locales del driver:
+
+| | |
+|---|---|
+| `new_array_list` | el `list`, a traves del `<init>` de `ArrayList` |
+| `sym_element_enclosed` | el `list`, a traves de **todo** el bucle, releido en cada vuelta |
+| `apt::new_instance` | el objeto, mientras corre su constructor --- cubre los cuatro sitios del driver de una vez |
+| `instances` | pasa a guardar **handles** en vez de offsets: viven a traves de todas las rondas |
+| `round_env`, `annotations` | handle por ronda |
+
+Lo que los dos primeros tenian antes era una mitigacion **correcta pero incompleta**: alocar en `Old`,
+que los protege de un **minor** y no de una compactacion. El comentario de `apt_new_instance` lo decia
+bien (*"los deja quietos ante un minor"*); el de `sym_element_enclosed` lo redondeaba de mas
+(*"no debe moverse bajo un GC"*), y eso era lo falso.
+
+### Medido
+
+- `apt::tests::a_held_reference_follows_its_object_and_the_rust_local_does_not` --- el contraste entero
+  en un test: el **mismo** offset guardado en el canal y en un local de Rust, una compactacion, y el
+  canal trae el nuevo mientras el local se queda con el viejo. Control negativo: con el cableado
+  apagado, falla.
+- `apt::tests::the_identity_cache_follows_its_element_across_a_compaction` --- el cache `reified`.
+- `gc::tests::an_ordinary_old_object_does_move_when_the_heap_compacts` --- la premisa falsa, medida.
+- `eden_arena::tests::miri_una_referencia_que_el_colector_no_conoce_queda_aliasada` --- el mecanismo en
+  el modelo de Miri, que es la unica forma de ver el lado paralelo mientras el candado este puesto.
+- `jvm::interpreter::apt::` **11 passed, 0 failed**. La suite entera en modo `os` **con el verificador
+  post-GC** (`JVM_GC_VERIFY=1`): **231 invocaciones, 0 referencias colgadas, 0 panicos**; la unica rota
+  es `StatTest`, y es **lentitud y no correccion** --- 10 s en verde sin verificador, mas de 120 s con
+  cualquiera de los dos interruptores ---.
+
+### Que clase de cierre es este, porque no es el de siempre
+
+No es "se reprodujo y se arreglo": el #568 **no se puede reproducir hoy** --- `JVM_THREADS=os` todavia
+corre con el candado global por opcode, asi que la carrera no puede pasar ---. Es un cierre por
+**eliminacion de superficie**: de las referencias que la VM sostenia en estado de Rust a traves de un
+punto que puede colectar, no queda ninguna sin enraizar, y el mecanismo quedo medido en los cuatro
+tests de arriba.
+
+**Lo que eso deja afuera, y conviene que quede escrito:** cuando el Hito H3 achique el candado, el
+limite deja de ser "entre opcodes" y pasa a ser **cada alocacion**. Eso es superficie **nueva** --- una
+auditoria distinta, mucho mas ancha --- y no esta ficha. Lo que si queda listo es el canal: cuanto mas
+estado de Rust se mude ahi, menos hay que auditar entonces.
+
+**Y las dos fallas de `heap::tests` que aparecieron midiendo esto no son de aca**: `classifies_allocations_into_generations_by_region`
+y `malloc_bumps_eden_then_overflows_to_old` fallan **identico** con el canal apagado.

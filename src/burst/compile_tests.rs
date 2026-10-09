@@ -2063,7 +2063,11 @@ fn compile_astore(code: &[u8], max_locals: usize, descriptor: &str, heap: Heap) 
             intrinsic: &|_, _| None,
             heap,
             array_store: &|_, _| {
-                Some(super::compile::ArrayStore { array_class: ARRAY_CLASS, element_class: ELEMENT_CLASS })
+                Some(super::compile::ArrayStore {
+                    array_class: ARRAY_CLASS,
+                    element_class: ELEMENT_CLASS,
+                    element_is_object: false,
+                })
             },
             class_mirror: &|_, _| None,
             string_literal: &|_, _| None,
@@ -2138,6 +2142,96 @@ fn aastore_stores_the_exact_type_records_the_barrier_and_deopts_for_everything_e
     assert_eq!(call_at(&compiled, &[2000, i32::MIN, 100], 0).0, Outcome::Deopt(3), "and the extreme");
 }
 
+/// [`compile_astore`] con el tipo elemento declarado **`Object`**, que es lo que la VM contesta para
+/// todo arreglo cuyo descriptor es `[Ljava/lang/Object;` — o sea para el respaldo de cualquier
+/// coleccion generica de la biblioteca.
+fn compile_astore_object(code: &[u8], max_locals: usize, descriptor: &str, heap: Heap) -> Result<CompiledCode, Ineligible> {
+    super::compile::compile(
+        &Method { unit: 0, code, max_locals, descriptor, is_static: true, has_handlers: false },
+        &Environment {
+            int_const: &|_, _| None,
+            long_const: &|_, _| None,
+            float_const: &|_, _| None,
+            double_const: &|_, _| None,
+            static_field: &|_, _| None,
+            field: &|_, _, _| None,
+            instance: &|_, _| None,
+            array: &|_, _| None,
+            invoke: &|_, _, _| None,
+            intrinsic: &|_, _| None,
+            heap,
+            array_store: &|_, _| {
+                Some(super::compile::ArrayStore {
+                    array_class: ARRAY_CLASS,
+                    element_class: ELEMENT_CLASS,
+                    element_is_object: true,
+                })
+            },
+            class_mirror: &|_, _| None,
+            string_literal: &|_, _| None,
+            poll_word: &POLL as *const _ as usize,
+        },
+    )
+}
+
+/// **Un `aastore` sobre un `Object[]` no lleva guarda de tipo del valor**, y las otras cuatro siguen.
+///
+/// No es una optimizacion con una heuristica atras, es JVMS §6.5 leido: el store es legal si el tipo
+/// del valor es asignable al tipo componente del arreglo, y **todo** tipo de referencia es asignable
+/// a `Object`. Con la guarda de la clase del arreglo ya pasada —que es la que prueba que el
+/// componente es `Object`— no queda nada que comprobar sobre el valor.
+///
+/// Lo que lo hizo valer la pena esta medido: la salida mas frecuente de una corrida del censo
+/// —4467 veces, la fila de arriba de la tabla de salidas— era esta guarda fallando en
+/// `Vector.addUnlocked`, cuyo `elementData` es un `Object[]` que guarda objetos heterogeneos. La
+/// guarda compara la clase **exacta** contra `Object`, asi que no era solo innecesaria: era casi
+/// siempre falsa.
+///
+/// El test se lee **contra** `aastore_stores_the_exact_type_...`, que es el mismo programa con el
+/// elemento declarado distinto de `Object`: ahi el valor de clase ajena deopta, y aca se guarda. Y
+/// la segunda mitad es la que importa igual: que no se haya llevado las otras cuatro guardas.
+#[test]
+fn un_aastore_sobre_object_no_lleva_guarda_de_tipo() {
+    let mut heap = FakeHeap::new();
+    heap.array(2000, &[0, 0, 0]); // un arreglo en Old...
+    heap.write(2000, ARRAY_CLASS as i32); // ...de la clase perfilada
+    heap.array(2100, &[0]); // y otro de una clase distinta
+    heap.write(2100, 0x0999);
+    heap.write(120, 0x0777); // un valor joven de una clase que NO es la del elemento
+
+    let code = [ALOAD_0, ILOAD_1, ALOAD_2, AASTORE, RETURN];
+    let d = "([Ljava/lang/Object;ILjava/lang/Object;)V";
+    let compiled = compile_astore_object(&code, 3, d, heap.bases()).unwrap();
+
+    // Lo que cambia: el valor de clase ajena **se guarda**, y se registra en la barrera.
+    let (outcome, buffer) = call_at(&compiled, &[2000, 1, 120], 0);
+    assert_eq!(outcome, Outcome::Returned(0), "sobre un `Object[]` cualquier referencia es legal");
+    assert_eq!(heap.read(2000 + 12 + 4), 120, "y quedo en la ranura");
+    assert_eq!(barrier_log(&compiled, &buffer), vec![(2000, 120)], "la barrera sigue registrando");
+
+    // Y `null` sigue andando, que es el caso que la guarda vieja atendia por separado.
+    assert_eq!(call_at(&compiled, &[2000, 2, 0], 0).0, Outcome::Returned(0));
+    assert_eq!(heap.read(2000 + 12 + 8), 0);
+
+    // **Lo que NO cambia**, que es la mitad que un cambio asi puede romper en silencio: las otras
+    // cuatro guardas siguen puestas. Si la elision se hubiera llevado el brazo entero, estas cuatro
+    // devolverian `Returned` y el emisor estaria escribiendo fuera de un arreglo.
+    let antes = heap.read(2000 + 12);
+    assert_eq!(call_at(&compiled, &[2100, 0, 120], 0).0, Outcome::Deopt(3), "clase de arreglo ajena");
+    assert_eq!(call_at(&compiled, &[0, 0, 120], 0).0, Outcome::Deopt(3), "arreglo nulo");
+    assert_eq!(call_at(&compiled, &[2000, 3, 120], 0).0, Outcome::Deopt(3), "una pasada del final");
+    assert_eq!(call_at(&compiled, &[2000, -1, 120], 0).0, Outcome::Deopt(3), "antes del principio");
+    assert_eq!(heap.read(2000 + 12), antes, "y ninguna de las cuatro escribio nada");
+
+    // El contraste explicito con el mismo programa y el elemento declarado distinto de `Object`.
+    let estricto = compile_astore(&code, 3, d, heap.bases()).unwrap();
+    assert_eq!(
+        call_at(&estricto, &[2000, 1, 120], 0).0,
+        Outcome::Deopt(3),
+        "con el elemento declarado distinto de `Object`, el mismo valor deopta",
+    );
+}
+
 #[test]
 fn an_aastores_full_barrier_log_is_a_capacity_exit_and_its_type_guard_is_still_a_deopt() {
     // **The two exits of one `aastore`, at one pc, asserted against each other** — which is the
@@ -2204,15 +2298,39 @@ fn an_aastores_full_barrier_log_is_a_capacity_exit_and_its_type_guard_is_still_a
 }
 
 #[test]
-fn an_aastore_with_no_profile_refuses_its_method() {
+fn un_aastore_sin_perfil_corta_la_rama_y_no_el_metodo() {
     // The resolver's `None` — a site the interpreter has never executed, so there is no array class
-    // to build a guard from. Refusing the whole method is the same answer a never-dispatched call
-    // site gives inlining, and for the same reason: this tier speculates on what was observed, and
-    // inventing an observation is not a speculation.
+    // to build a guard from; o una cuya clase elemento no tiene mirror acuñado, que es el otro
+    // motivo y el que aparece en la práctica.
+    //
+    // **Corta el método en ese pc**, igual que un `new` sin resolver y que un `invoke` que la VM no
+    // puede ligar. Es la tercera cara de la misma enfermedad y la última que quedaba: lo que falta
+    // no es una instrucción sino una **observación**, y una observación que no se hizo es una
+    // propiedad del estado de la VM, no del programa. Este tier especula sobre lo que vio, e
+    // inventar una observación no es especular — pero rechazar el método entero tampoco era la
+    // respuesta: el censo por tiempo midió que esto era el 48% de lo que todavía se rechazaba.
+    //
+    // Lo que se comprueba es que compila y que la salida está en el pc del `aastore`, o sea antes
+    // de escribir nada — que es lo que deja al intérprete hacer el store, acuñar el mirror que
+    // falte y correr la barrera de escritura por su camino de siempre.
+    // **El camino bueno va DESPUES de la trampa**, y no es cosmetica: con la trampa al final del
+    // metodo el test pasa sin que el emisor emita nada en ese pc, porque el control cae de largo
+    // justo arriba del stub y da la respuesta correcta por accidente de layout. Lo encontro un
+    // mutante que saco el salto y sobrevivio, en la trampa del invoke. Asi, caer de largo devuelve
+    // 42 donde tiene que deoptar.
+    //
+    //  0  iload_1
+    //  1  ifge  -> 11
+    //  4  aload_0 / iload_1 / aload_2
+    //  7  aastore           <- sin perfilar: la trampa
+    //  8  jsr               <- fuera del subconjunto para siempre, e inalcanzable
+    // 11  bipush 42         <- alcanzable, y emitido DESPUES de la trampa
+    // 13  ireturn
     let heap = FakeHeap::new();
-    let code = [ALOAD_0, ILOAD_1, ALOAD_2, AASTORE, RETURN];
-    let d = "([Ljava/lang/Object;ILjava/lang/Object;)V";
-    let err = super::compile::compile(
+    let code = [ILOAD_1, 0x9c, 0x00, 0x0a, ALOAD_0, ILOAD_1, ALOAD_2, AASTORE,
+                0xa8, 0x00, 0x02, 0x10, 42, IRETURN];
+    let d = "([Ljava/lang/Object;ILjava/lang/Object;)I";
+    let trampa = super::compile::compile(
         &Method { unit: 0, code: &code, max_locals: 3, descriptor: d, is_static: true, has_handlers: false },
         &Environment {
             int_const: &|_, _| None,
@@ -2232,8 +2350,25 @@ fn an_aastore_with_no_profile_refuses_its_method() {
             poll_word: &POLL as *const _ as usize,
         },
     )
-    .unwrap_err();
-    assert_eq!(err, Ineligible::UnprofiledArrayStore { pc: 3 });
+    .expect("un sitio sin perfilar corta el método, no lo rechaza");
+
+    // El camino bueno, nativo de punta a punta: con un indice no negativo no se llega al store.
+    assert_eq!(call_at(&trampa, &[0, 5, 0], 0).0, Outcome::Returned(42), "el camino bueno no sale");
+
+    // La rama mala sale en el pc del `aastore`, con los tres operandos intactos. Un `Returned(42)`
+    // acá es el emisor cayendo de largo sobre el código de la otra rama.
+    let (salida, buffer) = call_at(&trampa, &[7, -1, 9], 0);
+    assert!(
+        matches!(salida, Outcome::Deopt(7) | Outcome::AllocFailed(7)),
+        "sale en el pc del `aastore`, no de largo ni después: {salida:?}",
+    );
+    let pila = trampa.stack_base as usize;
+    assert_eq!(
+        (buffer[pila], buffer[pila + 1], buffer[pila + 2]),
+        (7, -1, 9),
+        "los tres operandos que el store no consumió vuelven a la pila del intérprete, en orden",
+    );
+    assert_eq!(trampa.resume_sites.len(), 1, "y es la única salida del método");
 }
 
 #[test]

@@ -374,6 +374,148 @@ mod tests {
         assert_eq!(sum, (0..N as u64).sum());
     }
 
+    /// **La forma que al modelo de abajo le falta** (finding #568): una referencia que el colector
+    /// **no conoce** --- el equivalente de un offset guardado en una variable de Rust ---, sostenida
+    /// a traves de una colecta y usada despues.
+    ///
+    /// `miri_os_parallel_heap` modela el heap os-parallel con fidelidad, pero **todas** sus
+    /// referencias viven en el arreglo de raices, que es justo lo que el colector recorre y remapea.
+    /// Por eso pasa, y por eso no dice nada sobre el #568: el defecto no es que el remapeo este mal,
+    /// es que hay referencias **fuera** de lo remapeable.
+    ///
+    /// Lo que mide esto, y es deterministico --- no hace falta que la carrera se manifieste:
+    ///
+    /// 1. el mutador aloca dos objetos: uno lo **publica** en las raices, el otro se lo guarda en un
+    ///    local de Rust y no lo publica;
+    /// 2. cae una colecta: evacua lo rooteado a Old, remapea las raices, y **recicla Eden**;
+    /// 3. la ronda siguiente vuelve a alocar, y Eden entrega **los mismos offsets**.
+    ///
+    /// El resultado no es "una referencia que apunta a basura", que seria lo facil de notar: es una
+    /// referencia que apunta a **otro objeto, vivo y bien formado**. Por eso el sintoma de esta
+    /// familia es un numero mal sin aviso, y por eso cada tag es unico por `(hilo, ronda, slot)` ---
+    /// es lo unico que distingue "mi objeto" de "el que ocupo su lugar".
+    ///
+    /// **El sentido de la asercion es a proposito.** Afirma que el peligro **esta**, no que este
+    /// arreglado: es el equivalente de
+    /// `gc::tests::an_ordinary_old_object_does_move_when_the_heap_compacts`, que mide que la premisa
+    /// del #569 es falsa. Cuando el #568 se cierre --- porque las referencias que la VM sostiene en
+    /// estado de Rust pasen a ser raices, o porque Eden deje de reciclar offsets --- **este test va a
+    /// fallar**, y eso es lo que tiene que pasar: hay que darlo vuelta y dejarlo como regresion.
+    ///
+    /// Corre bajo Miri: `MIRIFLAGS=-Zmiri-disable-isolation cargo +nightly miri test miri_una_referencia`.
+    #[test]
+    fn miri_una_referencia_que_el_colector_no_conoce_queda_aliasada() {
+        use std::sync::atomic::{AtomicU32, Ordering};
+        use std::sync::{Arc, Barrier, RwLock};
+
+        const BLOCK: usize = 16;
+        const NULL: u32 = 0;
+        // Como en el modelo de abajo: el bit de generacion mantiene el offset 0 de Eden
+        // distinguible de NULL --- sin el, el primer objeto de Eden *es* NULL.
+        const EDEN_BIT: u32 = 0x4000_0000;
+        const OLD_BIT: u32 = 0x8000_0000;
+        const OFF_MASK: u32 = 0x3FFF_FFFF;
+
+        struct Heap {
+            eden: EdenArena,
+            old: Vec<u8>,
+            old_cursor: usize,
+        }
+
+        // Dos objetos por ronda: el publicado y el escondido.
+        let heap = Arc::new(RwLock::new(Heap {
+            eden: EdenArena::new(2 * BLOCK),
+            old: vec![0u8; 4 * BLOCK],
+            old_cursor: 0,
+        }));
+        let raiz = Arc::new(AtomicU32::new(NULL));
+        let gate = Arc::new(Barrier::new(2));
+
+        let tag_de = |ronda: u32, cual: u32| -> u32 { 0x0100_0000 | (ronda << 8) | cual };
+
+        let mutador = {
+            let heap = Arc::clone(&heap);
+            let raiz = Arc::clone(&raiz);
+            let gate = Arc::clone(&gate);
+            std::thread::spawn(move || {
+                // --- Ronda 0: uno publicado, uno escondido en un local de Rust.
+                let escondida = {
+                    let h = heap.read().unwrap();
+                    // **El escondido va primero, y eso es parte del test**: Eden entrega los
+                    // offsets en orden, asi que al reciclarse el primero que vuelve a salir es
+                    // justo este. Al reves, el aliasing caeria en la segunda alocacion de la ronda
+                    // siguiente y el test mediria lo mismo con mas ruido.
+                    let escondida = h.eden.alloc(BLOCK).expect("eden");
+                    unsafe { h.eden.write_u32(escondida, tag_de(0, 1)) };
+                    // **No se publica.** Es el offset que vive en estado de Rust.
+
+                    let publicado = h.eden.alloc(BLOCK).expect("eden");
+                    unsafe { h.eden.write_u32(publicado, tag_de(0, 0)) };
+                    raiz.store(EDEN_BIT | publicado as u32, Ordering::Release);
+                    escondida
+                };
+
+                gate.wait(); // safepoint: el coordinador colecta
+                gate.wait(); // colecta hecha, Eden reciclado
+
+                // --- Ronda 1: se vuelve a alocar, y Eden devuelve los mismos offsets.
+                let h = heap.read().unwrap();
+                let nuevo = h.eden.alloc(BLOCK).expect("eden");
+                unsafe { h.eden.write_u32(nuevo, tag_de(1, 0)) };
+
+                let leido = unsafe { h.eden.read_u32(escondida) };
+                (escondida, nuevo, leido)
+            })
+        };
+
+        // --- Coordinador: una colecta stop-the-world.
+        gate.wait();
+        {
+            let mut h = heap.write().unwrap();
+            let rf = raiz.load(Ordering::Acquire);
+            assert_ne!(rf, NULL, "la raiz publicada tiene que estar");
+            let desde = (rf & OFF_MASK) as usize;
+            let destino = h.old_cursor;
+            h.old_cursor += BLOCK;
+            for k in 0..BLOCK {
+                let b = unsafe { h.eden.read_u8(desde + k) };
+                h.old[destino + k] = b;
+            }
+            raiz.store(OLD_BIT | destino as u32, Ordering::Release);
+            h.eden.reset(); // Eden se recicla: los offsets vuelven a salir
+        }
+        gate.wait();
+
+        let (escondida, nuevo, leido) = mutador.join().unwrap();
+
+        // El control: lo **publicado** sobrevivio intacto, porque el colector lo conocia.
+        let h = heap.read().unwrap();
+        let rf = raiz.load(Ordering::Acquire);
+        let off = (rf & OFF_MASK) as usize;
+        let b = &h.old[off..off + 4];
+        assert_eq!(
+            u32::from_le_bytes([b[0], b[1], b[2], b[3]]),
+            tag_de(0, 0),
+            "la raiz publicada se remapeo y conserva su tag: si esto falla, el modelo esta roto y \
+             el resto del test no dice nada"
+        );
+
+        // Y el peligro: el offset escondido volvio a salir de Eden para **otro** objeto.
+        assert_eq!(
+            escondida, nuevo,
+            "Eden recicla offsets: el escondido tiene que volver a salir en la ronda siguiente"
+        );
+        assert_eq!(
+            leido,
+            tag_de(1, 0),
+            "la referencia que el colector no conoce quedo apuntando al objeto de la ronda 1 \
+             ({:#010x}), no al suyo ({:#010x}) --- y el objeto nuevo esta vivo y bien formado, que \
+             es lo que hace que esto conteste mal en silencio",
+            tag_de(1, 0),
+            tag_de(0, 1)
+        );
+    }
+
     /// **Miri harness for the rare os-parallel stale-reference bug** —
     /// `cargo +nightly miri test miri_os_parallel_heap`.
     ///

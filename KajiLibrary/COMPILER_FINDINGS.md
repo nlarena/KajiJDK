@@ -17,19 +17,25 @@ file reached 17 thousand lines. Nothing is in both.
 
 ---
 
-## Status (2026-10-07)
+## Status (2026-10-09)
 
-**286 findings, #1-#567. Open: only #288, which has no working reproducer.**
+**288 findings, #1-#569. Open: none.**
 
-| # | where | what | how it is checked |
-|---|---|---|---|
-| **#288** | VM/GC | a stale reference reaching the GC in green mode | no reproducer fires today (see the `os-parallel` note); stays open until somebody looks at it with ThreadSanitizer |
+Both #568 and #569 were closed on 2026-10-09 by the same change --- the VM's root channel (`SharedVm::held`). They were one shape seen from two sides: a heap offset held in **Rust state** across Java code that allocates, single-threaded with a compaction (#569) or with another thread collecting (#568). #568's is a closure by **surface elimination**, not by reproduce-and-fix: it cannot be reproduced while the per-opcode lock stands. What H3 opens when it shrinks that lock is new surface, not this entry.
+
+No open entry has a row here for the first time since the index exists; the batch below is the
+history of how it got there.
 
 **#566** and **#567** were both raised on 2026-10-06 by the `bin/` refresh, and neither was a
 regression: regenerating the versioned `.class` replaced two files that had been making the compiler
 *look* right, and the defects underneath came into view. Both were fixed within a day, and #567's fix
-also closed the gap **#402** had left documented --- without which it could not land. **#288** was last
-reproduced on 2026-10-03.
+also closed the gap **#402** had left documented --- without which it could not land.
+
+**#288 is closed and the index was the thing that was wrong.** Its entry has said `closed` since
+2026-09-19; the index row still said open. Re-run on 2026-10-08, the reproducer gives the JDK's value
+in **48 of 48** configurations --- the eight eden sizes where it used to fail, by survivor 32/64/128,
+by JIT on/off. What stays open is **#568**, which that entry already warned was a *different*
+mechanism and which until now had no number of its own.
 
 > **The frozen `bin/` predates all three fixes** (#566, #567 and #402's gap), so the frozen `javac`
 > still carries them. Six versioned `.class` cannot be regenerated until the next refresh ---
@@ -227,7 +233,7 @@ that were reproduced that day --- about the rest, all that is known is what the 
 | #285 | ✅ | una llamada generica anidada como argumento no resuelve si el destino es un generico parametr… | Tanda 2026-08-24 (l) -- `Class` y `ClassLoa… |
 | #286 | ✅ | un lambda en linea no liga su parametro si el destino es `X<? super E>` con E del receptor | Tanda 2026-08-24 (l) -- `Class` y `ClassLoa… |
 | #287 | ✅ | una llamada estatica calificada, hecha desde una interfaz con un homonimo, ignora el calificador | Tanda 2026-08-24 (l) -- `Class` y `ClassLoa… |
-| #288 | ⬜? | referencia stale que llega al GC en modo verde: `young_info` sin la clave | Tanda 2026-08-24 (l) -- `Class` y `ClassLoa… |
+| #288 | ✅ | referencia stale que llega al GC en modo verde: `young_info` sin la clave | Tanda 2026-08-24 (l) -- `Class` y `ClassLoa… |
 | #289 | ✅ | falta el autoboxing en un inicializador de arreglo de tipo referencia | Tanda 2026-08-24 (l) -- `Class` y `ClassLoa… |
 | #290 | ✅ | un arreglo de primitivos se consideraba convertible a `T[]` | Tanda 2026-08-24 (l) -- `Class` y `ClassLoa… |
 | #291 | ✅ | (biblioteca) `java.lang.Iterable` no tenia `forEach` | Tanda 2026-08-29 (m) -- `Collections` compl… |
@@ -394,6 +400,8 @@ that were reproduced that day --- about the rest, all that is known is what the 
 | #565 | ✅ | `invokespecial` no tiraba `NullPointerException` con el receptor en null | Tanda 2026-10-04: los dos que arrastraba… ·cerrado 2026-10-06 |
 | #566 | ✅ | el `throws` de una variable de tipo leido de un `.class` | Tanda 2026-10-06: lo que destapo el refresco… ·cerrado 2026-10-06 |
 | #567 | ✅ | una anonima sobre una interfaz leida de un `.class` sale con la interfaz como `super_class` | Tanda 2026-10-06: lo que destapo el refresco… ·cerrado 2026-10-07 |
+| #568 | ✅ | la referencia stale de os-parallel, que es OTRA cosa que el #288 | Tanda 2026-10-09: el canal de raices de la VM ·cerrado 2026-10-09 |
+| #569 | ✅ | la capa APT sostiene offsets del heap en estado de Rust, y Old solo la cubre de los minors | Tanda 2026-10-09: el canal de raices de la VM ·cerrado 2026-10-09 |
 
 ## Index by section
 
@@ -487,6 +495,8 @@ in: the method notes (*lo que esta tanda deja*) belong to the batch, not to the 
 - Tanda 2026-10-04: los dos que arrastraba `bin/FROZEN.md` desde siempre (y, al cierre del #564 el
   2026-10-06, el #565 que ese cierre destapo)
 - Tanda 2026-10-06: lo que destapo el refresco de `bin/` (#566, #567, y las tres sin ficha)
+- Tanda 2026-10-08: el #288 ya estaba cerrado, y lo que quedaba abierto no tenia numero (#568, #569)
+- Tanda 2026-10-09: el canal de raices de la VM (cierra #568 y #569)
 
 ## The method rules the record leaves behind
 

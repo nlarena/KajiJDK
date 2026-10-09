@@ -1,0 +1,26 @@
+package java.lang.classfile.attribute;
+
+import java.lang.classfile.Annotation;
+import java.lang.classfile.Attribute;
+import java.lang.classfile.MethodElement;
+import java.util.List;
+import jdk.internal.classfile.impl.TypedAttributes;
+
+// `RuntimeVisibleParameterAnnotations` (JVMS §4.7.18/§4.7.19): the visible annotations of each formal
+// parameter.
+//
+// This attribute's classic trap: the number of lists need NOT match the number of parameters in the
+// descriptor. An inner class's or an enum's constructor carries synthetic parameters `javac`
+// sometimes counts and sometimes does not, so pairing the list with the descriptor by index from the
+// start can throw everything out of line.
+public interface RuntimeVisibleParameterAnnotationsAttribute
+        extends Attribute<RuntimeVisibleParameterAnnotationsAttribute>, MethodElement {
+
+    /** One list of annotations per parameter, in order. */
+    List<List<Annotation>> parameterAnnotations();
+
+    /** The attribute with these lists. */
+    public static RuntimeVisibleParameterAnnotationsAttribute of(List<List<Annotation>> parameterAnnotations) {
+        return TypedAttributes.runtimeVisibleParameterAnnotations(parameterAnnotations);
+    }
+}

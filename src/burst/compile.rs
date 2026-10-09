@@ -9,30 +9,48 @@
 //!
 //! Only methods whose **entire** body lies in this whitelist are compiled:
 //!
+//! **The authoritative enumeration is not this table, it is
+//! `tests::solo_dos_opcodes_de_la_jvms_quedan_afuera_del_subconjunto`**, which walks all 202
+//! opcodes the JVMS defines through [`decode`] and asserts which ones it does not know. The table
+//! below is orientation; it duplicates what the code already says and it *did* go stale in four
+//! places at once before that test existed — see the test's own docs for the four. Update both in
+//! the same change.
+//!
+//! One thing the table cannot show and the test makes explicit: **"recognised" is not "compiles".**
+//! `multianewarray` is recognised and refused *every* time, and five opcodes are recognised and
+//! compiled to an unconditional deopt.
+//!
 //! | group | opcodes |
 //! |---|---|
 //! | constants | `iconst_m1`…`iconst_5`, `bipush`, `sipush`, `lconst_0/1`, `fconst_0/1/2`, `dconst_0/1`, `ldc`/`ldc_w` **of an `Integer` or a `Float`**, `ldc2_w` **of a `Long` or a `Double`**, `aconst_null` |
 //! | locals | `iload`/`lload`/`fload`/`dload`/`aload`, their `_0..3` forms, the five matching stores and *their* `_0..3` forms, `iinc`, and all eleven under `wide` |
 //! | arithmetic | `iadd`, `isub`, `imul`, `idiv`, `irem`, `ineg`; the same six for `long`; `fadd`, `fsub`, `fmul`, `fdiv`, `fneg` and the same five for `double` |
 //! | bits & shifts | `iand`, `ior`, `ixor`, `ishl`, `ishr`, `iushr`; `land`, `lor`, `lxor`, `lshl`, `lshr`, `lushr` |
-//! | conversions & compares | `i2l`, `l2i`, `i2f`, `i2d`, `l2f`, `l2d`, `f2d`, `d2f`; `lcmp`, `fcmpl`, `fcmpg`, `dcmpl`, `dcmpg` |
+//! | conversions & compares | `i2l`, `l2i`, `i2f`, `i2d`, `l2f`, `l2d`, `f2d`, `d2f`; `i2b`, `i2c`, `i2s`; **`f2i`, `f2l`, `d2i`, `d2l`** — one `cvtt*2si`, keeping x86's *integer indefinite value* so the interpreter applies the JLS §5.1.3 saturation; `lcmp`, `fcmpl`, `fcmpg`, `dcmpl`, `dcmpg` |
 //! | give-up-and-resume | `frem`, `drem` — compiled to an unconditional deopt, since SSE has no scalar remainder; `athrow`, `monitorenter`, `monitorexit` — the same shape, for the reasons in "Group 5" below |
 //! | control flow | `if_icmp<cond>`, `if<cond>`, `if_acmpeq`, `if_acmpne`, `ifnull`, `ifnonnull`, `goto`, `tableswitch`, `lookupswitch` |
 //! | stack | `nop`, `pop`, `pop2`, `dup`, `dup_x1`, `dup_x2`, `dup2`, `dup2_x1`, `dup2_x2`, `swap` — **category-1 operands only**, except `pop2`, which also drops one category-2 value |
-//! | heap (read) | `getstatic` **of any primitive or reference, in an already-initialised class**; `getfield` **of any primitive or reference**, `volatile` included; `arraylength`; `iaload`; `aaload` |
+//! | heap (read) | `getstatic` **of any primitive or reference, in an already-initialised class**; `getfield` **of any primitive or reference**, `volatile` included; `arraylength`; and **every array load at every width** — `iaload`, `aaload`, `baload`, `caload`, `saload`, `laload`, `faload`, `daload`, the narrow three extending as their element type requires (`byte`/`short` signed, `char` **un**signed) |
 //! | heap (write) | `putstatic` and `putfield` under the same conditions as their reading twins, **references included** — a reference `putfield` carries the deferred write barrier ([`CompiledCode::barrier_base`]), a reference `putstatic` owes none; `iastore`; `aastore` **of a site whose array class the interpreter has profiled**, guarded on exact classes ([`ArrayStore`]) |
 //! | type checks | `checkcast` and `instanceof` — **exact class or deopt**, and `null` never deopts |
 //! | allocation | `new` **of an already-initialised class**; `newarray` of any primitive and `anewarray` **of a class whose array mirror exists** — all three on Eden's fast path only, and arrays only up to [`MAX_INLINE_ARRAY_BYTES`] |
+//! | calls | `invokestatic`, `invokespecial`, `invokevirtual`, `invokeinterface`, `invokedynamic` — **expanded in place** when the VM offers a target this tier can bind (step 8; a *dispatched* site binds speculatively on its profiled receiver class, [`Guard::ExactClass`]), **made as a real call** into the callee's own compiled code when it cannot be expanded (group 4, at most [`MAX_NATIVE_SITES`] of them per compilation), and **compiled to an unconditional deopt** when the VM offers no target at all — which is what a site that has never executed answers. Plus the two `String` natives the emitter writes in line, [`Intrinsic`] |
 //! | exits | `ireturn`, `areturn`, `lreturn`, `freturn`, `dreturn`, `return` — i.e. all of them |
 //!
 //! Anything else — one single byte — makes the method permanently ineligible. Until step 6 the
 //! safety argument was one sentence: such a method **writes nothing observable**, so an abandoned
 //! attempt could simply be re-run from the start. The three write opcodes are what that sentence
 //! cost, and step 6 pays for them with a **deopt that resumes at a pc instead of restarting** — see
-//! below. What is still true, and still load-bearing, is that compiled code **calls nothing**: that
-//! is what keeps a garbage collection from ever observing a compiled frame — and step 7's `new`,
-//! below, is what makes "allocates nothing" stop being the *other* half of that sentence without
-//! weakening it.
+//! below.
+//!
+//! > **The sentence that used to be here is false and its replacement is not written.** It said
+//! > that compiled code **calls nothing**, and that *this* is what keeps a garbage collection from
+//! > ever observing a compiled frame. Group 4 makes real calls ([`MAX_NATIVE_SITES`] of them) and
+//! > step 7 allocates, so both halves of that argument are gone. The invariant is presumably still
+//! > true — a collection happens at an interpreter safepoint, and native code leaves at its poll
+//! > before the interpreter reaches one — but **that is a guess, it is stated nowhere else in the
+//! > tree** (grep found this line and nothing more), and a safety argument reconstructed from a
+//! > guess is worth less than an admission. Whoever restates it owns it.
 //!
 //! # Step 7: `return`, and an allocation that cannot collect
 //!
@@ -1621,6 +1639,24 @@ pub struct ArrayStore {
     /// subclass is assignable and still deopts, because proving that is a walk this tier does not
     /// do.
     pub element_class: u32,
+    /// **Si el tipo elemento del arreglo perfilado es exactamente `java.lang.Object`**, y entonces
+    /// la comprobacion de arriba **no hace falta en absoluto**.
+    ///
+    /// No es una optimizacion con una heuristica atras, es JVMS §6.5 leido: un `aastore` es legal
+    /// si el tipo de `value` es asignable al tipo componente del arreglo, y **todo** tipo de
+    /// referencia es asignable a `Object`. Asi que con la guarda (2) ya pasada --que es la que
+    /// prueba que el arreglo es el de la clase perfilada-- no queda nada que comprobar sobre el
+    /// valor.
+    ///
+    /// Que esto importe no es una conjetura: la salida mas frecuente de una corrida del censo
+    /// --4467 veces, la fila de arriba de la tabla-- era esta guarda fallando en
+    /// `Vector.addUnlocked`, cuyo `elementData` es un `Object[]` que guarda objetos heterogeneos.
+    /// La guarda compara la clase **exacta** contra `Object`, asi que no era solo innecesaria: era
+    /// casi siempre falsa. Y toda coleccion generica de la biblioteca tiene esa forma.
+    ///
+    /// Lo dice la VM y no `burst`, que no sabe lo que es un nombre de clase — igual que para todo
+    /// lo demas de este `struct`.
+    pub element_is_object: bool,
 }
 
 /// **Which array a `newarray`/`anewarray` is asking about**, in the operand's own terms — the
@@ -2881,7 +2917,7 @@ pub struct CompiledCode {
 /// The largest method this tier compiles, in bytes of bytecode. A first-tier JIT exists for hot
 /// *loops*, which are small; the bound keeps compile time and code size bounded by construction
 /// and makes the `Vec`s the scan allocates (one entry per code byte) trivially cheap.
-const MAX_CODE_LEN: usize = 4096;
+pub const MAX_CODE_LEN: usize = 4096;
 
 /// The deepest operand stack this tier maps to frame slots. `javac` emits single digits for the
 /// arithmetic this subset covers; the bound just stops a pathological class file from asking for
@@ -4509,7 +4545,23 @@ fn decode(
         // See the emitter for the order the five guards go in and why it is not the JVMS's.
         0x53 => {
             reachable_heap()?;
-            (env.array_store)(method.unit, pc).ok_or(Ineligible::UnprofiledArrayStore { pc })?;
+            // **Un sitio sin perfilar corta el método ací**, no lo rechaza — la misma trampa que un
+            // `new` sin resolver y que un `invoke` que la VM no puede ligar, y por el mismo motivo:
+            // lo que falta no es una instrucción sino una **observación**. Un `aastore` que nunca
+            // se ejecutó no tiene clase de arreglo contra la que comparar, y eso es una propiedad
+            // del estado de la VM, no del programa.
+            //
+            // Es la tercera y última de las tres que el censo por tiempo encontró, y la que quedó
+            // para el final porque era la más chica: el 48% del 8% que todavía se rechazaba en
+            // `java/texto/` después de las otras dos.
+            //
+            // Se mantienen los `pops` reales (3) en vez de ponerlos en cero: así la transferencia de
+            // tipos sigue comprobando que abajo haya un arreglo, un `int` y una referencia, y un
+            // `aastore` mal formado sigue siendo un [`Ineligible::WrongType`] en vez de volverse una
+            // trampa en silencio. Lo único que cambia es que el control no sigue.
+            if (env.array_store)(method.unit, pc).is_none() {
+                return Ok((Insn { len: 1, pops: 3, pushes: 0, flow: Flow::Return }, None));
+            }
             simple(1, 3, 0)
         }
 
@@ -7139,7 +7191,13 @@ fn emit_body(
             // by a guard, so reading it again is a `mov` and always the value the instruction was
             // entered with.
             0x53 => {
-                let store = (env.array_store)(unit, pc).ok_or(Ineligible::UnprofiledArrayStore { pc })?;
+                // Sitio sin perfilar: ni una de las cinco guardas ni el store, sólo el salto al
+                // stub — ver el brazo de `decode`. El stub de este pc ya existía, porque un
+                // `aastore` deopta de todos modos por sus otras cuatro salidas.
+                let Some(store) = (env.array_store)(unit, pc) else {
+                    a.jmp(deopt);
+                    continue;
+                };
                 let (value_ok, skip) = (a.new_label(), a.new_label());
 
                 // (1) A null array.
@@ -7167,16 +7225,28 @@ fn emit_body(
 
                 // (4) The value's class is the array's element class — unless the value is null,
                 // which stores into any reference array without a dereference.
-                read_home(a, T1, home(d - 1));
-                a.cmp_ri(T1, 0);
-                a.jcc(Cond::E, value_ok);
-                a.mov_rr(T2, T1);
-                heap_address(a, env.heap, T2, T1);
-                a.mov_rm32(T1, Mem::at(T2, 0)); // the value's class_id
-                a.mov_ri(T2, i64::from(store.element_class));
-                a.cmp_rr(T1, T2);
-                a.jcc(Cond::Ne, deopt);
-                a.bind(value_ok);
+                //
+                // **Y no se emite nada cuando el tipo elemento es `Object`**: con (2) ya pasada el
+                // arreglo es el de la clase perfilada, y si el componente de esa clase es `Object`
+                // entonces JVMS §6.5 se cumple para todo valor. Ver
+                // [`ArrayStore::element_is_object`] para por que esto es la diferencia mas grande
+                // que el censo de salidas encontro, y no una micro-optimizacion.
+                if !store.element_is_object {
+                    read_home(a, T1, home(d - 1));
+                    a.cmp_ri(T1, 0);
+                    a.jcc(Cond::E, value_ok);
+                    a.mov_rr(T2, T1);
+                    heap_address(a, env.heap, T2, T1);
+                    a.mov_rm32(T1, Mem::at(T2, 0)); // the value's class_id
+                    a.mov_ri(T2, i64::from(store.element_class));
+                    a.cmp_rr(T1, T2);
+                    a.jcc(Cond::Ne, deopt);
+                    a.bind(value_ok);
+                } else {
+                    // La etiqueta se creo arriba junto con `skip`; si no se la ata, el ensamblador
+                    // se queda con una referencia sin resolver.
+                    a.bind(value_ok);
+                }
 
                 // (5) The write barrier: the same three-compare filter and the same capacity guard
                 // the `putfield` arm uses, with the **array** as the holder — which is exactly what
@@ -8956,6 +9026,101 @@ mod tests {
         assert!(!c.code.is_empty());
         assert_eq!(c.stack_slots, 1);
         assert!(c.touched_locals.is_empty());
+    }
+
+    /// **Los 202 opcodes que define la JVMS, uno por uno, y que contesta `decode` de cada uno.**
+    ///
+    /// Existe porque la tabla de grupos del encabezado de este modulo es el contrato del tier y
+    /// quedo atras del codigo en cuatro lugares a la vez, sin que nada avisara: no tenia fila para
+    /// los cinco `invoke` (adentro desde el paso 8), su fila de lectura de heap listaba solo
+    /// `iaload`/`aaload` cuando los angostos y los anchos tambien estan, omitia `f2i`/`f2l`/`d2i`/
+    /// `d2l`, y el parrafo de abajo seguia diciendo que el codigo compilado **no llama a nada**
+    /// cuando `MAX_NATIVE_SITES` dice que llama hasta 32 veces. Ninguna de las cuatro es un error
+    /// de codigo; las cuatro son el contrato mintiendo, que es peor, porque es lo que se lee para
+    /// decidir donde trabajar.
+    ///
+    /// # Tres respuestas, no dos, y la del medio es la que confunde
+    ///
+    ///  - [`Ineligible::Opcode`] es el **unico** veredicto que dice "este byte no esta en el
+    ///    subconjunto". Resulta que son **dos** en toda la JVMS, y es el numero que sorprende.
+    ///  - **Cualquier otro error** — un `UnresolvedClass`, un `HeapOutOfReach`, un `WrongType`,
+    ///    un `MultiDimensional` — significa que el opcode **si** esta reconocido y que lo que
+    ///    falto fue el estado de la VM, o los tipos, o que el opcode sea expresable. "Reconocido"
+    ///    no es "compila": `multianewarray` se reconoce y se rechaza **siempre**, y `frem`/`drem`/
+    ///    `athrow`/los monitores se reconocen y se compilan como un deopt incondicional.
+    ///  - Y un `Ok` es que esta y se acepto con este entorno.
+    ///
+    /// El entorno es el mas pobre posible y el heap es **inalcanzable a proposito**: asi los
+    /// opcodes de heap contestan `HeapOutOfReach` en vez de `Ok`, que para esta pregunta es la
+    /// misma respuesta, y el test no necesita un heap de verdad para enumerar la lista. Eso es
+    /// tambien lo que hace que el reparto entre el primer balde y el tercero dependa del entorno y
+    /// no se pueda leer como "esto compila siempre"; lo que **no** depende del entorno, y es lo
+    /// que el test fija, es el balde de los que no estan.
+    ///
+    /// Si falla, actualizar el literal **y la tabla del encabezado en el mismo cambio**.
+    #[test]
+    fn solo_dos_opcodes_de_la_jvms_quedan_afuera_del_subconjunto() {
+        /// Los unicos dos que `decode` no conoce, y los dos por la misma razon: el verificador
+        /// prohibe las subrutinas en class files de version 50.0 o mayor (JVMS 4.9.1), asi que
+        /// `javac` no puede emitirlos y nunca van a entrar. Todo lo demas de la JVMS esta
+        /// reconocido — que no es lo mismo que compilado, ver arriba.
+        const AFUERA: &[u8] = &[0xa8, 0xa9];
+        /// Las formas anchas de salto y los reservados, que la JVMS define arriba de `jsr_w` y
+        /// `javac` tampoco emite: `goto_w`, `jsr_w`, `breakpoint`. Van aparte de [`AFUERA`] porque
+        /// no son una decision de este tier sino opcodes que no aparecen en bytecode real.
+        const NI_SE_INTENTA: &[u8] = &[0xc8, 0xc9, 0xca];
+
+        let veredicto = |op: u8| {
+            // Cinco bytes de relleno alcanzan para el operando mas largo que `decode` lee de
+            // corrido (`invokeinterface`, 5); lo que necesite mas contesta `OutOfRange`, que para
+            // esta pregunta cuenta como reconocido.
+            let code = [op, 0x15, 0x00, 0x00, 0x00, 0x00];
+            let method = Method {
+                unit: 0,
+                code: &code,
+                max_locals: 4,
+                descriptor: "()I",
+                is_static: true,
+                has_handlers: false,
+            };
+            let env = Environment {
+                int_const: &|_, _| None,
+                long_const: &|_, _| None,
+                float_const: &|_, _| None,
+                double_const: &|_, _| None,
+                static_field: &|_, _| None,
+                field: &|_, _, _| None,
+                instance: &|_, _| None,
+                array: &|_, _| None,
+                invoke: &|_, _, _| None,
+                intrinsic: &|_, _| None,
+                heap: Heap::default(),
+                array_store: &|_, _| None,
+                class_mirror: &|_, _| None,
+                string_literal: &|_, _| None,
+                poll_word: &TEST_POLL as *const _ as usize,
+            };
+            matches!(decode(&code, 0, &method, &env), Err(Ineligible::Opcode { .. }))
+        };
+
+        let afuera: Vec<u8> = (0x00u8..=0xca).filter(|&op| veredicto(op)).collect();
+        let esperado: Vec<u8> = AFUERA.iter().chain(NI_SE_INTENTA).copied().collect();
+        assert_eq!(
+            afuera.iter().map(|o| format!("0x{o:02x}")).collect::<Vec<_>>(),
+            esperado.iter().map(|o| format!("0x{o:02x}")).collect::<Vec<_>>(),
+            "cambio que opcodes estan afuera del subconjunto; la tabla del encabezado de este \
+             modulo hay que actualizarla en el mismo cambio",
+        );
+
+        // Y lo que separa "reconocido" de "compilable", que es la trampa de leer la lista de
+        // arriba como si fuera la de lo que compila: estos estan reconocidos y no compilan nunca.
+        assert!(
+            !veredicto(0xc5),
+            "`multianewarray` esta reconocido — se rechaza con `MultiDimensional`, no como opcode              ajeno — y aun asi ningun metodo que lo contenga compila",
+        );
+        for op in [0x72u8, 0x73, 0xbf, 0xc2, 0xc3] {
+            assert!(!veredicto(op), "0x{op:02x} se reconoce y se compila como un deopt incondicional");
+        }
     }
 
     #[test]

@@ -563,6 +563,16 @@ pub struct JitCache {
     /// The **safepoint poll word** — see [`JitCache::poll_word`] for why it is shaped like this.
     poll: Arc<AtomicU64>,
     stats: JitStats,
+    /// Ver [`JitCache::salidas`]. Siempre presente y casi siempre vacio: el `if` que lo llena mira
+    /// `registra_salidas`, que se lee del entorno una vez.
+    /// La clave lleva un `bool` al final: si la salida fue por **capacidad** (`Status::ALLOC`) en vez
+    /// de por una guarda (`DEOPT`). Las dos salen por el mismo pc, asi que sin ese bit un `aastore`
+    /// que se queda sin log de barrera y uno que falla una guarda son la misma fila -- y los dos
+    /// arreglos no se parecen en nada.
+    salidas: std::collections::HashMap<(usize, u32, bool), u64>,
+    /// Si hay que llenar [`salidas`][JitCache::salidas]. Del entorno y una sola vez, porque esto se
+    /// consulta en el camino de salida de cada excursion.
+    registra_salidas: bool,
 }
 
 impl Default for JitCache {
@@ -645,6 +655,8 @@ impl JitCache {
             scratch: Vec::new(),
             poll: Arc::new(AtomicU64::new(0)),
             stats: JitStats::default(),
+            salidas: std::collections::HashMap::new(),
+            registra_salidas: std::env::var_os("JVM_PROFILE").is_some(),
         }
     }
 
@@ -715,6 +727,31 @@ impl JitCache {
     /// This cache's counters.
     pub fn stats(&self) -> JitStats {
         self.stats
+    }
+
+    /// **Por donde salio el codigo nativo, por `(metodo, pc)`** — vacio salvo que el censo lo pida.
+    ///
+    /// `stats.deopts` es un total sin direccion, y la pregunta que importa no es cuantas veces se
+    /// rindio el nativo sino **en que instruccion**: un deopt en una guarda de nulo dice una cosa y
+    /// uno en una trampa dice otra, y el arreglo no se parece. Lo pide el mismo `JVM_PROFILE` que
+    /// el resto del censo, porque las dos mitades se leen juntas.
+    pub fn salidas(&self) -> &std::collections::HashMap<(usize, u32, bool), u64> {
+        &self.salidas
+    }
+
+    /// **Si `key` ya tiene codigo nativo instalado**, que es lo que parte el balde de «compila» del
+    /// censo por tiempo en sus dos mitades.
+    ///
+    /// Un metodo que compila igual deja opcodes interpretados, y son dos cosas con arreglos
+    /// opuestos: los de **antes** de la instalacion son calentamiento --el metodo todavia no cruzo
+    /// el umbral-- y los de **despues** son el intérprete retomando donde el codigo nativo se
+    /// rindio, o sea deopts. Bajar el umbral arregla lo primero y no lo segundo.
+    ///
+    /// La transicion es de ida sola: una entrada `Compiled` no vuelve. Eso es lo que deja al
+    /// llamador dejar de preguntar en cuanto da `true` --ver `RunningCtx::code_compiled`-- y por
+    /// eso la pregunta es un `bool` y no el veredicto completo.
+    pub fn tiene_nativo(&self, key: usize) -> bool {
+        matches!(self.entries.get(&key), Some(Entry::Compiled { .. }))
     }
 
     /// **Lo que este cache decidio sobre `key`**, para un perfil que tiene que decir no solo
@@ -1284,6 +1321,9 @@ impl JitCache {
             Outcome::Safepoint(pc) => Some(OsrResult::Safepoint(self.resumed(key, pc))),
             Outcome::Deopt(pc) => {
                 self.stats.deopts += 1;
+                if self.registra_salidas {
+                    *self.salidas.entry((key, pc, false)).or_insert(0) += 1;
+                }
                 // A deopt out of an on-stack entry closes OSR for this method for good — see
                 // `Entry::Compiled::osr_open`. Keyed off *how* it was entered, not off the pc: a
                 // loop header can perfectly well be pc 0.
@@ -1303,6 +1343,12 @@ impl JitCache {
             // filling Eden" are different facts, and a measurement that conflates them is worse than
             // one that omits them.
             Outcome::AllocFailed(pc) => {
+                // Una salida de alocacion **no** es un deopt y no se cuenta como tal (ver
+                // `Status::ALLOC`), pero para el censo es una salida igual: las trampas de `new`,
+                // `newarray` y `aastore` reportan por aca, y son justo las que hay que poder ver.
+                if self.registra_salidas {
+                    *self.salidas.entry((key, pc, true)).or_insert(0) += 1;
+                }
                 self.stats.alloc_exits += 1;
                 Some(OsrResult::Deopt(self.resumed(key, pc)))
             }
@@ -1954,7 +2000,13 @@ mod tests {
                 intrinsic: &|_, _| None,
                 heap: heap.heap(),
                 array_store: &|_, _| {
-                    Some(ArrayStore { array_class: TEST_ARRAY_CLASS, element_class: TEST_ELEMENT_CLASS })
+                    Some(ArrayStore {
+                        array_class: TEST_ARRAY_CLASS,
+                        element_class: TEST_ELEMENT_CLASS,
+                        // `false`: este test comprueba la guarda de tipo del valor, y con el
+                        // elemento declarado `Object` el emisor no la emitiria.
+                        element_is_object: false,
+                    })
                 },
                 class_mirror: &|_, _| None,
                 string_literal: &|_, _| None,
