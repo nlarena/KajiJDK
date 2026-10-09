@@ -1492,6 +1492,23 @@ def regression_kind(ref_v, frozen_v, cur_v):
         return MOVED
     return MOVED
 
+
+# How much of an observed value a record keeps. Comparison always uses the whole thing; this is
+# only what travels to the output file. 4000 characters is far more than any reproducer needs
+# and bounds a campaign's output no matter what a case returns.
+STORE_CAP = 4000
+_capped = [0, 0]          # [times it bit, largest value seen]
+
+
+def for_record(v):
+    t = str(v)
+    if len(t) > _capped[1]:
+        _capped[1] = len(t)
+    if len(t) <= STORE_CAP:
+        return v
+    _capped[0] += 1
+    return t[:STORE_CAP] + ("...<%d characters cut>" % (len(t) - STORE_CAP))
+
 def blame(ref, ours, ops):
     """Which statement the divergence belongs to, and the operation that produced it.
 
@@ -2664,6 +2681,7 @@ def main():
 
     def save(state):
         stats["total_s"] = round(time.time() - t0, 1)
+        stats["values_capped"], stats["largest_value"] = _capped[0], _capped[1]
         io.open(str(out), "w", encoding="utf-8", newline="").write(json.dumps({
             "state": state, "meta": meta,
             "stats": {k: (round(v, 1) if isinstance(v, float) else v)
@@ -2870,7 +2888,8 @@ def main():
                          "scheduled": o["cls"] + "." + o["name"],
                          "blamed": culprit, "statement": where, "declared_gap": gap,
                          "changed": moved,
-                         "vars": cases[k], "java": text, "ref": ref[k], "ours": ours.get(k)})
+                         "vars": cases[k], "java": for_record(text),
+                         "ref": for_record(ref[k]), "ours": for_record(ours.get(k))})
         print("batch %d: %d cases, %d divergences, cursor at %d/%d"
               % (bi, len(info["live"]), stats["diverge"], at % len(ordered), len(ordered)),
               flush=True)
@@ -2989,6 +3008,10 @@ def main():
         for x in regressions[:10]:
             print("  REGRESSION  snapshot=%-40s now=%s"
                   % (str(x["frozen"])[:40], str(x["ours"])[:40]))
+    if _capped[0]:
+        print("")
+        print("stored values capped: %d, largest observed value %d characters"
+              % (_capped[0], _capped[1]))
     print("")
     print("operations blamed most often (charged to the statement that diverged):")
     for k, v in sorted(stats["by_operation"].items(), key=lambda kv: -kv[1])[:15]:
