@@ -794,6 +794,137 @@ def skeleton(vars_):
     return tuple(NUMS.sub("#", e) for _, e in vars_)
 
 
+
+# The contracts, with how many values of the type each one needs. `BROKEN` in a result is what
+# makes a case a finding; the marker is a word rather than a flag because the result travels
+# through the harness as the case's observed value, exactly like any other.
+VIOLATION = "BROKEN"
+THIRD = 1.0 / 3.0
+
+RELATIONS = {
+    "eq-refl":     (1, "relEqRefl(%s)"),
+    "eq-null":     (1, "relEqNull(%s)"),
+    "eq-sym":      (2, "relEqSym(%s, %s)"),
+    "eq-hash":     (2, "relEqHash(%s, %s)"),
+    "hash-stable": (1, "relHashStable(%s)"),
+    "cmp-refl":    (1, "relCmpRefl(%s)"),
+    "cmp-anti":    (2, "relCmpAnti(%s, %s)"),
+    "str-total":   (1, "relToString(%s)"),
+}
+
+
+
+STRING_ENC = re.compile(r"S\[([-\d,\s]*)\]")
+
+
+def relation_text(observed):
+    """The observed value with its encoded strings turned back into text.
+
+    Needed because an observed String is carried as its code points (see the note at the top of
+    this file), so the verdict a relation returns is `S[101,113,45,...]` and not `eq-hash ok`.
+    """
+    def one(m):
+        body = m.group(1).strip()
+        if not body:
+            return ""
+        try:
+            return "".join(chr(int(c)) for c in body.split(",") if c.strip())
+        except (ValueError, OverflowError):
+            return m.group(0)
+    return STRING_ENC.sub(one, str(observed))
+
+
+def relation_verdict(text):
+    """Which of the four outcomes a relation case produced, from its DECODED value.
+
+    Counting these is not bookkeeping. "0 violations" means nothing without them: a case whose
+    operand came out null, or whose type is not Comparable, returns `n/a` and checks no
+    contract at all, so a run that is all `n/a` looks exactly like a run where every contract
+    held. It is also what caught the decoding bug above -- 100% "no verdict" is a broken reader,
+    and no amount of staring at "0 violations" would have said so.
+    """
+    if VIOLATION in text:
+        return "BROKEN"
+    if "n/a" in text:
+        return "not applicable"
+    if "threw" in text:
+        return "threw (contract silent)"
+    if "ok" in text:
+        return "held"
+    return "no verdict"
+
+def relation_targets(pool):
+    """One pseudo-operation per (buildable type, contract).
+
+    The ordinary walk is over operations and reaches whatever has a reference counterpart. This
+    one is over TYPES, and it reaches every type the generator can build -- 875 of them against
+    the 295 classes a campaign exercises today -- because a contract does not need a counterpart
+    to be checked.
+    """
+    out = []
+    for t in sorted(x for x in COST if x.startswith("L")):
+        cls = java_name(t)
+        if cls not in pool.usable_classes:
+            continue
+        for name in sorted(RELATIONS):
+            # The same shape a real operation has, so every consumer that reads one -- the
+            # cursor, the bandit, the unreachable log -- works without a special case. The
+            # first version left `desc` out and the campaign died on the first target it could
+            # not build, after printing the target count and nothing else.
+            out.append({"cls": cls, "name": "<" + name + ">", "args": [], "static": True,
+                        "ctor": False, "abstract": False, "ret": "Ljava/lang/String;",
+                        "desc": "()Ljava/lang/String;",
+                        "relation": name, "rel_type": t})
+    return out
+
+
+def make_relation_case(r, pool, target):
+    """`arity` values of one type, then the contract over them.
+
+    The second operand is drawn three ways on purpose, because the obvious two both fail to
+    test anything:
+
+    * the same variable -- one object, so symmetry and the equals/hashCode agreement hold by
+      construction and the case is worth almost nothing;
+    * two independently built values -- almost never equal, and `eq-hash` says nothing at all
+      about a pair that is not equal;
+    * **the same expression evaluated twice** -- two distinct objects that are usually equal,
+      which is the only one of the three where the equals/hashCode contract can actually break.
+
+    The first version left this to `argument`, which prefers a variable already in scope, so
+    nearly every two-operand case compared an object with itself.
+    """
+    arity, call = RELATIONS[target["relation"]]
+    t = target["rel_type"]
+    vars_ = []
+    del STATEMENT_OPS[:]
+    names = []
+    # Drawn with an empty scope so what comes back is a self-contained expression rather than a
+    # reference to something already declared.
+    first = argument(t, r, pool, [], 2)
+    if first is None:
+        return []
+    vars_.append((t, first))
+    STATEMENT_OPS.append(target["cls"] + ".<operand>")
+    names.append("v0")
+    if arity == 2:
+        x = r.random()
+        if x < THIRD:
+            second = "v0"                      # the same object; satisfies everything trivially
+        elif x < 2 * THIRD:
+            second = first                     # the SAME EXPRESSION again: distinct, and equal
+        else:
+            second = argument(t, r, pool, [], 2)
+            if second is None:
+                return []
+        vars_.append((t, second))
+        STATEMENT_OPS.append(target["cls"] + ".<operand>")
+        names.append("v1")
+    vars_.append(("Ljava/lang/String;",
+                  escape(target["relation"] + " ") + " + " + (call % tuple(names))))
+    STATEMENT_OPS.append(target["cls"] + ".<" + target["relation"] + ">")
+    return vars_
+
 def make_case(r, pool, length, target):
     """A sequence of declarations ending in `target`.
 
@@ -913,6 +1044,78 @@ def call_on(o, receiver, r, pool, vars_):
 # the program both sides run
 # =============================================================================================
 HELPERS = r"""
+  // --- metamorphic contracts -------------------------------------------------------------
+  // Each returns "ok", "n/a" when the contract does not apply to this value, "threw ..." when
+  // the call failed in a way the contract does not forbid, or a string starting with BROKEN.
+  // They are total on purpose: a relation that threw out of the case would be scored as an
+  // ordinary exception divergence and lose the one thing that makes it interesting.
+  static String relEqRefl(Object x) {
+    if (x == null) { return "n/a"; }
+    try { return x.equals(x) ? "ok" : "BROKEN equals(self) is false"; }
+    catch (Throwable t) { return "BROKEN equals(self) threw " + t.getClass().getName(); }
+  }
+
+  static String relEqNull(Object x) {
+    if (x == null) { return "n/a"; }
+    // The javadoc is explicit: for any non-null x, x.equals(null) returns false. Throwing is
+    // a violation, not an alternative.
+    try { return x.equals(null) ? "BROKEN equals(null) is true" : "ok"; }
+    catch (Throwable t) { return "BROKEN equals(null) threw " + t.getClass().getName(); }
+  }
+
+  static String relEqSym(Object x, Object y) {
+    if (x == null || y == null) { return "n/a"; }
+    try {
+      boolean a = x.equals(y);
+      boolean b = y.equals(x);
+      return a == b ? (a ? "ok equal" : "ok") : "BROKEN " + a + " one way, " + b + " the other";
+    } catch (Throwable t) { return "threw " + t.getClass().getName(); }
+  }
+
+  static String relEqHash(Object x, Object y) {
+    if (x == null || y == null) { return "n/a"; }
+    try {
+      if (!x.equals(y)) { return "ok"; }
+      return x.hashCode() == y.hashCode() ? "ok equal"
+          : "BROKEN equal but hashCode " + x.hashCode() + " vs " + y.hashCode();
+    } catch (Throwable t) { return "threw " + t.getClass().getName(); }
+  }
+
+  static String relHashStable(Object x) {
+    if (x == null) { return "n/a"; }
+    try {
+      int a = x.hashCode();
+      int b = x.hashCode();
+      return a == b ? "ok" : "BROKEN hashCode " + a + " then " + b;
+    } catch (Throwable t) { return "threw " + t.getClass().getName(); }
+  }
+
+  static String relCmpRefl(Object x) {
+    if (!(x instanceof Comparable)) { return "n/a"; }
+    try {
+      int a = ((Comparable) x).compareTo(x);
+      return a == 0 ? "ok" : "BROKEN compareTo(self) is " + a;
+    } catch (Throwable t) { return "threw " + t.getClass().getName(); }
+  }
+
+  static String relCmpAnti(Object x, Object y) {
+    if (!(x instanceof Comparable) || !(y instanceof Comparable)) { return "n/a"; }
+    try {
+      int a = ((Comparable) x).compareTo(y);
+      int b = ((Comparable) y).compareTo(x);
+      return Integer.signum(a) == -Integer.signum(b) ? "ok"
+          : "BROKEN compareTo " + a + " one way, " + b + " the other";
+    } catch (Throwable t) { return "threw " + t.getClass().getName(); }
+  }
+
+  static String relToString(Object x) {
+    if (x == null) { return "n/a"; }
+    try {
+      String v = x.toString();
+      return v == null ? "BROKEN toString is null" : "ok";
+    } catch (Throwable t) { return "BROKEN toString threw " + t.getClass().getName(); }
+  }
+
   static String s(int... c) {
     StringBuilder b = new StringBuilder();
     for (int i = 0; i < c.length; i++) { b.append((char) c[i]); }
@@ -2249,6 +2452,12 @@ def main():
     ap.add_argument("--min-split", type=int, default=4)
     ap.add_argument("--max-splits", type=int, default=6)
     ap.add_argument("--boot", default=None, help="library our VM runs against")
+    ap.add_argument("--relations", action="store_true",
+                    help="walk TYPES and check the contracts of Object and Comparable on them "
+                         "instead of walking operations against the reference. A violation is "
+                         "a defect on its own terms, so this reaches the types that have no "
+                         "reference counterpart -- 875 of them against the 295 classes a "
+                         "differential campaign exercises")
     ap.add_argument("--regress", default=None, metavar="FROZEN_DIR",
                     help="also run the frozen snapshot in that directory as a third side, and "
                          "classify every change between it and the tree under test as a "
@@ -2367,6 +2576,15 @@ def main():
     unbuildable = [o for o in ordered if not buildable(o)]
     print("walk: %d operations, %d of them predicted unbuildable (kept, so they get counted)"
           % (len(ordered), len(unbuildable)))
+    if a.relations:
+        ordered = relation_targets(pool)
+        print("relations: %d targets over %d types, %d contracts"
+              % (len(ordered), len(ordered) // max(len(RELATIONS), 1), len(RELATIONS)))
+        if a.amplify > 0:
+            # Amplification looks for an operation's siblings in the same class. A relation
+            # target is a type, not an operation, so there is nothing to be a sibling of.
+            print("relations: --amplify ignored (it amplifies operations, not types)")
+            a.amplify = 0.0
     if a.only:
         # Exact class or a package prefix, never a bare startswith: `java.lang.String` would
         # otherwise also select `StringBuffer` and `StringBuilder`, which is how a run meant to
@@ -2420,11 +2638,12 @@ def main():
              "ended_with_value": 0, "threw_at_first": 0, "threw_later": 0, "unstable": 0,
              "amp_cases": 0, "amp_diverge": 0, "amp_queue": 0, "causes": 0,
              "by_kind": {}, "by_operation": {}, "by_gap": {}, "op_declared": {},
-             "by_change": {}, "prev_silent": 0, "prev_s": 0.0,
+             "by_change": {}, "prev_silent": 0, "prev_s": 0.0, "by_contract": {}, "by_verdict": {}, "prev_s": 0.0,
              "declared": 0,
              "ref_s": 0.0, "ours_s": 0.0}
     batches, divs, reduced = [], [], []
     regressions = []
+    violations = []
     seen = set()
     t0 = time.time()
 
@@ -2438,6 +2657,7 @@ def main():
             "unstable_sample": unstable_sample,
             "divergences": [{k: v for k, v in d.items() if k != "vars"} for d in divs],
             "regressions": regressions,
+            "contract_violations": violations,
             "reduced": reduced}, ensure_ascii=False, indent=2) + "\n")
 
     def bump(table, key):
@@ -2502,7 +2722,8 @@ def main():
             for attempt in range(3):
                 FOCUS = tuple(EDGE_TEXT[(len(cases) + attempt) % len(EDGE_TEXT)])
                 del USED[:]
-                case = make_case(r, pool, max(a.length, depth_for + 1), o)
+                case = (make_relation_case(r, pool, o) if "relation" in o
+                        else make_case(r, pool, max(a.length, depth_for + 1), o))
                 if case and any(pool.observable(t) for t, _ in case):
                     built, built_ops = case, list(STATEMENT_OPS)
                     break
@@ -2530,6 +2751,9 @@ def main():
             continue
         stats["ref_s"] += info["ref_s"]
         stats["ours_s"] += info["ours_s"]
+        # What the snapshot leg costs. Without it a regression pass cannot say whether the
+        # third execution is worth its wall clock, which is the first question anyone asks.
+        stats["prev_s"] += info.get("prev_s", 0.0)
         # What the snapshot leg costs. Without it a regression pass cannot say whether the
         # third execution is worth its wall clock, which is the first question anyone asks.
         stats["prev_s"] += info.get("prev_s", 0.0)
@@ -2580,6 +2804,26 @@ def main():
                     regressions.append({"batch": bi, "k": k, "java": text,
                                         "ref": ref[k], "frozen": info["prev"].get(k),
                                         "ours": ours.get(k)})
+            # A contract violation is read off OUR side alone -- that is the whole point of
+            # the relation oracle. The reference is consulted only to decide confidence: when
+            # it breaks the same contract on the same type, the contract does not hold for that
+            # type (BigDecimal's equals against compareTo is the textbook case) and what we have
+            # is a property of the specification, not a defect of ours.
+            if "relation" in o:
+                ours_text = relation_text(ours.get(k))
+                bump(stats["by_verdict"], relation_verdict(ours_text))
+            else:
+                ours_text = ""
+            if VIOLATION in ours_text:
+                also = VIOLATION in relation_text(ref[k])
+                bump(stats["by_contract"], (o.get("relation") or "?")
+                     + ("  (reference too)" if also else ""))
+                if not also:
+                    violations.append({"batch": bi, "k": k, "type": o["cls"],
+                                       "relation": o.get("relation"), "java": text,
+                                       "ref": ref[k], "ours": ours.get(k),
+                                       "verdict": ours_text,
+                                       "reference_verdict": relation_text(ref[k])})
             kind = classify(ref[k], ours.get(k))
             where, culprit = (None, None)
             gap = None
@@ -2699,6 +2943,23 @@ def main():
               % (bandit.pulls, bandit.novel,
                  100.0 * bandit.novel / max(bandit.pulls, 1),
                  len(bandit.retired), len(bandit.global_sig)))
+    if stats["by_contract"] or a.relations:
+        print("")
+        print("contract violations: %d, of which %d are ours alone"
+              % (sum(stats["by_contract"].values()), len(violations)))
+        for k, v in sorted(stats["by_contract"].items(), key=lambda kv: -kv[1]):
+            print("  %-34s %5d" % (k, v))
+        if not stats["by_contract"]:
+            print("  (none reported)")
+        # What the cases actually evaluated. Printed always: without it a run that checked
+        # nothing is indistinguishable from one where every contract held.
+        tot = sum(stats["by_verdict"].values())
+        print("  what the %d relation cases evaluated:" % tot)
+        for k, v in sorted(stats["by_verdict"].items(), key=lambda kv: -kv[1]):
+            print("    %-28s %5d  (%.0f%%)" % (k, v, 100.0 * v / max(tot, 1)))
+        for x in violations[:12]:
+            print("  %-46s %s" % (x["type"] + "  " + str(x["relation"]),
+                                  x["verdict"][:90]))
     if stats["by_change"] or a.regress:
         print("")
         print("against the frozen snapshot: %d cases changed behaviour"
