@@ -2420,7 +2420,7 @@ def main():
              "ended_with_value": 0, "threw_at_first": 0, "threw_later": 0, "unstable": 0,
              "amp_cases": 0, "amp_diverge": 0, "amp_queue": 0, "causes": 0,
              "by_kind": {}, "by_operation": {}, "by_gap": {}, "op_declared": {},
-             "by_change": {}, "prev_silent": 0,
+             "by_change": {}, "prev_silent": 0, "prev_s": 0.0,
              "declared": 0,
              "ref_s": 0.0, "ours_s": 0.0}
     batches, divs, reduced = [], [], []
@@ -2530,6 +2530,9 @@ def main():
             continue
         stats["ref_s"] += info["ref_s"]
         stats["ours_s"] += info["ours_s"]
+        # What the snapshot leg costs. Without it a regression pass cannot say whether the
+        # third execution is worth its wall clock, which is the first question anyone asks.
+        stats["prev_s"] += info.get("prev_s", 0.0)
         batches.append({"batch": bi, "exit": info["exit"], "stderr": info["stderr"],
                         "ref_s": round(info["ref_s"], 2), "ours_s": round(info["ours_s"], 2)})
         unstable = set(info.get("unstable", ()))
