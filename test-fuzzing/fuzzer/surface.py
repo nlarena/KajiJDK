@@ -178,9 +178,37 @@ def discover(javap, packages, include_nested, batch, report=print):
     return cands, ours, theirs
 
 
+
+def effective(side, name, cache):
+    """Every public member `name` can answer on `side`: declared, plus inherited.
+
+    The comparison used to be `declared_ours & declared_reference`, and the two libraries do
+    not declare at the same places. We declare `LinkedHashSet.add`, `TreeSet.getFirst` and
+    `Stream.unordered`; the JDK inherits them from `HashSet`, `SortedSet` and `BaseStream`. So
+    251 members that compile with the reference javac and return the SAME value on both sides
+    were filed as ours alone and kept out of the pool -- checked by hand on nine of them before
+    this was written.
+
+    A supertype the javap pass did not read contributes nothing, which keeps the result a lower
+    bound: it can only admit a member it can prove is reachable. Constructors are dropped when
+    crossing into a supertype because they are not inherited.
+    """
+    if name in cache:
+        return cache[name]
+    cache[name] = set()                 # also guards a cycle in the recorded hierarchy
+    info = side.get(name)
+    if info is None:
+        return cache[name]
+    out = {k for k, v in info["members"].items() if "public" in v}
+    for sup in info.get("supers", ()):
+        out |= {m for m in effective(side, sup, cache) if m[0] != "<init>"}
+    cache[name] = out
+    return out
+
 def build(cands, ours, theirs):
     """Intersect the two sides. Returns the per-class records plus a library-wide tally."""
     classes, tally = {}, {"only_ours": [], "missing_reference": []}
+    eff_ours, eff_theirs = {}, {}
     for name, _ in cands:
         a, b = ours.get(name), theirs.get(name)
         if a is None:
@@ -190,7 +218,15 @@ def build(cands, ours, theirs):
             continue
         pub_a = {k for k, v in a["members"].items() if "public" in v}
         pub_b = {k for k, v in b["members"].items() if "public" in v}
-        common = pub_a & pub_b
+        # `ops` still comes from what WE declare -- the generator needs our modifiers, and
+        # `a["members"]` is where they are -- intersected with what the reference can answer
+        # however it answers it. `only_reference` is the mirror of that and was overcounting
+        # the gap for the same reason.
+        can_b = effective(theirs, name, eff_theirs)
+        can_a = effective(ours, name, eff_ours)
+        common = pub_a & can_b
+        only_ours_set = pub_a - can_b
+        only_reference_set = pub_b - can_a
         # Constants have to agree on both sides too: one that only we declare is not something
         # a differential campaign can use, and one only the reference declares is a gap to
         # report rather than an argument to generate.
@@ -215,8 +251,8 @@ def build(cands, ours, theirs):
         classes[name] = {
             "kind": a["kind"], "abstract": a["abstract"],
             "public_ours": len(pub_a), "public_reference": len(pub_b), "common": len(common),
-            "only_ours": sorted(n + d for n, d in (pub_a - pub_b)),
-            "only_reference": sorted(n + d for n, d in (pub_b - pub_a)),
+            "only_ours": sorted(n + d for n, d in only_ours_set),
+            "only_reference": sorted(n + d for n, d in only_reference_set),
             "declares_toString": ("toString", "()Ljava/lang/String;") in common,
             "ops": ops,
             "constants": [{"name": n, "desc": d} for n, d in shared_fields],
